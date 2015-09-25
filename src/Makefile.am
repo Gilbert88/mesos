@@ -249,6 +249,13 @@ STATE_PROTOS = messages/state.pb.cc messages/state.pb.h
 BUILT_SOURCES += $(STATE_PROTOS)
 CLEANFILES += $(STATE_PROTOS)
 
+DOCKER_PROVISIONER_PROTOS =                                             \
+  slave/containerizer/provisioner/docker/message.pb.cc			\
+  slave/containerizer/provisioner/docker/message.pb.h
+
+BUILT_SOURCES += $(DOCKER_PROVISIONER_PROTOS)
+CLEANFILES += $(DOCKER_PROVISIONER_PROTOS)
+
 REGISTRY_PROTOS = master/registry.pb.cc master/registry.pb.h
 
 BUILT_SOURCES += $(REGISTRY_PROTOS)
@@ -435,6 +442,7 @@ nodist_libmesos_no_3rdparty_la_SOURCES =				\
   $(CXX_PROTOS)								\
   $(FLAGS_PROTOS)							\
   $(MESSAGES_PROTOS)							\
+  $(DOCKER_PROVISIONER_PROTOS)		                                \
   $(REGISTRY_PROTOS)
 
 # TODO(tillt): Remove authentication/cram_md5/* which will enable us to
@@ -520,7 +528,13 @@ libmesos_no_3rdparty_la_SOURCES =					\
 	slave/containerizer/provisioner/appc/store.cpp			\
 	slave/containerizer/provisioner/backend.cpp			\
 	slave/containerizer/provisioner/backends/copy.cpp		\
+	slave/containerizer/provisioner/docker/local_puller.cpp		\
+	slave/containerizer/provisioner/docker/message.proto		\
+	slave/containerizer/provisioner/docker/metadata_manager.cpp	\
+	slave/containerizer/provisioner/docker/paths.cpp		\
+	slave/containerizer/provisioner/docker/puller.cpp		\
 	slave/containerizer/provisioner/docker/registry_client.cpp	\
+	slave/containerizer/provisioner/docker/store.cpp		\
 	slave/containerizer/provisioner/docker/token_manager.cpp	\
 	slave/resource_estimators/noop.cpp				\
 	usage/usage.cpp							\
@@ -815,7 +829,13 @@ libmesos_no_3rdparty_la_SOURCES +=					\
 	slave/containerizer/provisioner/backend.hpp			\
 	slave/containerizer/provisioner/backends/bind.hpp		\
 	slave/containerizer/provisioner/backends/copy.hpp		\
+	slave/containerizer/provisioner/docker/local_puller.hpp		\
+	slave/containerizer/provisioner/docker/message.hpp		\
+	slave/containerizer/provisioner/docker/metadata_manager.hpp	\
+	slave/containerizer/provisioner/docker/paths.hpp		\
+	slave/containerizer/provisioner/docker/puller.hpp		\
 	slave/containerizer/provisioner/docker/registry_client.hpp	\
+	slave/containerizer/provisioner/docker/store.hpp		\
 	slave/containerizer/provisioner/docker/token_manager.hpp	\
 	slave/containerizer/isolators/posix.hpp				\
 	slave/containerizer/isolators/posix/disk.hpp			\

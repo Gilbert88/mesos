@@ -53,6 +53,10 @@ public:
   std::string image_provisioner_backend;
   std::string appc_store_dir;
 
+  std::string docker_local_archives_dir;
+  std::string docker_puller;
+  std::string docker_store_dir;
+
   std::string default_role;
   Option<std::string> attributes;
   Bytes fetcher_cache_size;

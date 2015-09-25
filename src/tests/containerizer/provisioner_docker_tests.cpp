@@ -21,6 +21,12 @@
 
 #include <stout/duration.hpp>
 
+#include <stout/gtest.hpp>
+#include <stout/json.hpp>
+#include <stout/os.hpp>
+#include <stout/path.hpp>
+#include <stout/stringify.hpp>
+
 #include <process/address.hpp>
 #include <process/clock.hpp>
 #include <process/future.hpp>
@@ -31,16 +37,19 @@
 
 #include <process/ssl/gtest.hpp>
 
+#include "slave/containerizer/provisioner/docker/metadata_manager.hpp"
+#include "slave/containerizer/provisioner/docker/paths.hpp"
 #include "slave/containerizer/provisioner/docker/registry_client.hpp"
+#include "slave/containerizer/provisioner/docker/store.hpp"
 #include "slave/containerizer/provisioner/docker/token_manager.hpp"
 
 #include "tests/mesos.hpp"
+#include "tests/utils.hpp"
 
+using std::list;
 using std::map;
 using std::string;
 using std::vector;
-
-using namespace mesos::internal::slave::docker::registry;
 
 using process::Clock;
 using process::Future;
@@ -48,12 +57,17 @@ using process::Owned;
 
 using process::network::Socket;
 
+using namespace process;
+using namespace mesos::internal::slave;
+using namespace mesos::internal::slave::docker;
+using namespace mesos::internal::slave::docker::paths;
+using namespace mesos::internal::slave::docker::registry;
+
 using ManifestResponse = RegistryClient::ManifestResponse;
 
 namespace mesos {
 namespace internal {
 namespace tests {
-
 
 /**
  * Provides token operations and defaults.
@@ -681,7 +695,165 @@ TEST_F(RegistryClientTest, BadRequest)
   ASSERT_TRUE(strings::contains(resultFuture.failure(), "Error2"));
 }
 
+
 #endif // USE_SSL_SOCKET
+
+
+class ProvisionerDockerLocalStoreTest : public TemporaryDirectoryTest
+{
+public:
+  void verifyLocalDockerImage(
+      const slave::Flags& flags,
+      const vector<string>& layers)
+  {
+    string layersPath = path::join(flags.docker_store_dir, "layers");
+
+    // Verify contents of the image in store directory.
+    string layerPath1 = getImageLayerRootfsPath(flags.docker_store_dir, "123");
+    string layerPath2 = getImageLayerRootfsPath(flags.docker_store_dir, "456");
+    EXPECT_TRUE(os::exists(layerPath1));
+    EXPECT_TRUE(os::exists(layerPath2));
+    EXPECT_SOME_EQ(
+        "foo 123",
+        os::read(path::join(layerPath1 , "temp")));
+    EXPECT_SOME_EQ(
+        "bar 456",
+        os::read(path::join(layerPath2, "temp")));
+
+    // Verify the Docker Image provided.
+    vector<string> expectedLayers;
+    expectedLayers.push_back(layerPath1);
+    expectedLayers.push_back(layerPath2);
+    EXPECT_EQ(expectedLayers, layers);
+  }
+
+protected:
+  virtual void SetUp()
+  {
+    TemporaryDirectoryTest::SetUp();
+
+    string imageDir = path::join(os::getcwd(), "images");
+    string image = path::join(imageDir, "abc:latest");
+    ASSERT_SOME(os::mkdir(imageDir));
+    ASSERT_SOME(os::mkdir(image));
+
+    JSON::Value repositories = JSON::parse(
+        "{"
+        "  \"abc\": {"
+        "    \"latest\": \"456\""
+        "  }"
+        "}").get();
+    ASSERT_SOME(
+        os::write(path::join(image, "repositories"), stringify(repositories)));
+
+    ASSERT_SOME(os::mkdir(path::join(image, "123")));
+    JSON::Value manifest123 = JSON::parse(
+        "{"
+        "  \"parent\": \"\""
+        "}").get();
+    ASSERT_SOME(os::write(
+        path::join(image, "123", "json"), stringify(manifest123)));
+    ASSERT_SOME(os::mkdir(path::join(image, "123", "layer")));
+    ASSERT_SOME(
+        os::write(path::join(image, "123", "layer", "temp"), "foo 123"));
+
+    // Must change directory to avoid carrying over /path/to/archive during tar.
+    const string cwd = os::getcwd();
+    ASSERT_SOME(os::chdir(path::join(image, "123", "layer")));
+    ASSERT_SOME(os::tar(".", "../layer.tar"));
+    ASSERT_SOME(os::chdir(cwd));
+    ASSERT_SOME(os::rmdir(path::join(image, "123", "layer")));
+
+    ASSERT_SOME(os::mkdir(path::join(image, "456")));
+    JSON::Value manifest456 = JSON::parse(
+        "{"
+        "  \"parent\": \"123\""
+        "}").get();
+    ASSERT_SOME(
+        os::write(path::join(image, "456", "json"), stringify(manifest456)));
+    ASSERT_SOME(os::mkdir(path::join(image, "456", "layer")));
+    ASSERT_SOME(
+        os::write(path::join(image, "456", "layer", "temp"), "bar 456"));
+
+    ASSERT_SOME(os::chdir(path::join(image, "456", "layer")));
+    ASSERT_SOME(os::tar(".", "../layer.tar"));
+    ASSERT_SOME(os::chdir(cwd));
+    ASSERT_SOME(os::rmdir(path::join(image, "456", "layer")));
+
+    ASSERT_SOME(os::chdir(image));
+    ASSERT_SOME(os::tar(".", "../abc:latest.tar"));
+    ASSERT_SOME(os::chdir(cwd));
+    ASSERT_SOME(os::rmdir(image));
+  }
+};
+
+
+// This test verifies that a locally stored Docker image in the form of a
+// tar achive created from a 'docker save' command can be unpacked and
+// stored in the proper locations accessible to the Docker provisioner.
+TEST_F(ProvisionerDockerLocalStoreTest, LocalStoreTestWithTar)
+{
+  string imageDir = path::join(os::getcwd(), "images");
+  string image = path::join(imageDir, "abc:latest");
+  ASSERT_SOME(os::mkdir(imageDir));
+  ASSERT_SOME(os::mkdir(image));
+
+  slave::Flags flags;
+  flags.docker_puller = "local";
+  flags.docker_store_dir = path::join(os::getcwd(), "store");
+  flags.docker_local_archives_dir = imageDir;
+
+  Try<Owned<slave::Store>> store = slave::docker::Store::create(flags);
+  ASSERT_SOME(store);
+
+  string sandbox = path::join(os::getcwd(), "sandbox");
+  ASSERT_SOME(os::mkdir(sandbox));
+
+  Image mesosImage;
+  mesosImage.set_type(Image::DOCKER);
+  mesosImage.mutable_docker()->set_name("abc");
+
+  Future<vector<string>> layers = store.get()->get(mesosImage);
+  AWAIT_READY(layers);
+
+  verifyLocalDockerImage(flags, layers.get());
+}
+
+
+// This tests the ability of the metadata manger to recover the images it has
+// already stored on disk when it is initialized.
+TEST_F(ProvisionerDockerLocalStoreTest, MetadataManagerInitialization)
+{
+  slave::Flags flags;
+  flags.docker_puller = "local";
+  flags.docker_store_dir = path::join(os::getcwd(), "store");
+  flags.docker_local_archives_dir = path::join(os::getcwd(), "images");
+
+  Try<Owned<slave::Store>> store = slave::docker::Store::create(flags);
+  ASSERT_SOME(store);
+
+  string sandbox = path::join(os::getcwd(), "sandbox");
+  ASSERT_SOME(os::mkdir(sandbox));
+
+  Image image;
+  image.set_type(Image::DOCKER);
+  image.mutable_docker()->set_name("abc");
+
+  Future<vector<string>> layers = store.get()->get(image);
+  AWAIT_READY(layers);
+
+  // Store is deleted and recreated. Metadata Manager is initialized upon
+  // creation of the store.
+  store.get().reset();
+  store = slave::docker::Store::create(flags);
+  ASSERT_SOME(store);
+  Future<Nothing> recover = store.get()->recover();
+  AWAIT_READY(recover);
+
+  layers = store.get()->get(image);
+  AWAIT_READY(layers);
+  verifyLocalDockerImage(flags, layers.get());
+}
 
 } // namespace tests {
 } // namespace internal {
