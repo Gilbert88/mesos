@@ -866,6 +866,15 @@ file:///path/to/file (where file contains one of the above)</code></pre>
   </tr>
   <tr>
     <td>
+      --systemd_runtime_directory=VALUE
+    </td>
+    <td>
+      The path to the systemd system run time directory
+      (default: /run/systemd/system)
+    </td>
+  </tr>
+  <tr>
+    <td>
       --container_disk_watch_interval=VALUE
     </td>
     <td>
@@ -1186,10 +1195,30 @@ file:///path/to/file (where file contains one of the above)</code></pre>
   </tr>
   <tr>
     <td>
+      --launcher=VALUE
+    </td>
+    <td>
+      The launcher to be used for Mesos containerizer. It could either be
+      'linux' or 'posix'. The Linux launcher is required for cgroups
+      isolation and for any isolators that require Linux namespaces such as
+      network, pid, etc. If unspecified, the slave will choose the Linux
+      launcher if it's running as root on Linux.
+    </td>
+  </tr>
+  <tr>
+    <td>
       --launcher_dir=VALUE
     </td>
     <td>
       Directory path of Mesos binaries (default: /usr/local/lib/mesos)
+    </td>
+  </tr>
+  <tr>
+    <td>
+      --image_providers=VALUE
+    </td>
+    <td>
+      Comma separated list of supported image providers, e.g., 'APPC,DOCKER'.
     </td>
   </tr>
   <tr>

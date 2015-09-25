@@ -61,6 +61,11 @@ bool operator==(
 bool operator==(const SlaveInfo& left, const SlaveInfo& right);
 bool operator==(const Volume& left, const Volume& right);
 
+bool operator==(const Label& left, const Label& right);
+bool operator==(const Labels& left, const Labels& right);
+
+bool operator==(const DiscoveryInfo& left, const DiscoveryInfo& right);
+
 bool operator==(const URL& left, const URL& right);
 
 bool operator==(const TaskStatus& left, const TaskStatus& right);
@@ -348,21 +353,6 @@ inline std::ostream& operator<<(std::ostream& stream, const TaskState& state)
 }
 
 
-inline std::ostream& operator<<(std::ostream& stream,
-                                const scheduler::Call::Type& type)
-{
-  return stream << scheduler::Call_Type_Name(type);
-}
-
-
-inline std::ostream& operator<<(
-    std::ostream& stream,
-    const scheduler::Event::Type& type)
-{
-  return stream << scheduler::Event_Type_Name(type);
-}
-
-
 inline std::ostream& operator<<(
     std::ostream& stream,
     const std::vector<TaskID>& taskIds)
@@ -409,12 +399,6 @@ inline std::ostream& operator<<(
   }
   stream << " ]";
   return stream;
-}
-
-
-inline std::ostream& operator<<(std::ostream& stream, const Modules& modules)
-{
-  return stream << modules.DebugString();
 }
 
 
@@ -597,11 +581,11 @@ struct hash<mesos::TaskStatus_Reason>
 
 
 template <>
-struct hash<mesos::Image_Type>
+struct hash<mesos::Image::Type>
 {
   typedef size_t result_type;
 
-  typedef mesos::Image_Type argument_type;
+  typedef mesos::Image::Type argument_type;
 
   result_type operator()(const argument_type& imageType) const
   {
@@ -616,7 +600,8 @@ struct hash<std::pair<mesos::FrameworkID, mesos::ExecutorID>>
 {
   typedef size_t result_type;
 
-  typedef std::pair<mesos::FrameworkID, mesos::ExecutorID> argument_type;
+  typedef std::pair<
+      mesos::FrameworkID, mesos::ExecutorID> argument_type;
 
   result_type operator()(const argument_type& pair) const
   {
