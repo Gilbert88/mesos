@@ -493,9 +493,10 @@ Future<ManifestResponse> RegistryClientProcess::getManifest(
     }
 
     vector<FileSystemLayerInfo> fsLayerInfoList;
-    size_t index = 0;
 
-    foreach (const JSON::Value& layer, fsLayers.get().values) {
+    for (size_t index = fsLayers.get().values.size(); index-- > 0; ) {
+      const JSON::Value& layer = fsLayers.get().values[index];
+
       if (!layer.is<JSON::Object>()) {
         return Error(
             "Failed to parse layer JSON for index " + stringify(index));
@@ -551,8 +552,6 @@ Future<ManifestResponse> RegistryClientProcess::getManifest(
             blobSumInfo.get().value,
             id.get().value,
           });
-
-      index++;
     }
 
     return ManifestResponse {

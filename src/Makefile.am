@@ -534,6 +534,7 @@ libmesos_no_3rdparty_la_SOURCES =					\
 	slave/containerizer/provisioner/docker/paths.cpp		\
 	slave/containerizer/provisioner/docker/puller.cpp		\
 	slave/containerizer/provisioner/docker/registry_client.cpp	\
+	slave/containerizer/provisioner/docker/remote_puller.cpp	\
 	slave/containerizer/provisioner/docker/store.cpp		\
 	slave/containerizer/provisioner/docker/token_manager.cpp	\
 	slave/resource_estimators/noop.cpp				\
@@ -835,6 +836,7 @@ libmesos_no_3rdparty_la_SOURCES +=					\
 	slave/containerizer/provisioner/docker/paths.hpp		\
 	slave/containerizer/provisioner/docker/puller.hpp		\
 	slave/containerizer/provisioner/docker/registry_client.hpp	\
+	slave/containerizer/provisioner/docker/remote_puller.hpp	\
 	slave/containerizer/provisioner/docker/store.hpp		\
 	slave/containerizer/provisioner/docker/token_manager.hpp	\
 	slave/containerizer/isolators/posix.hpp				\
