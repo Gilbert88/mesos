@@ -43,10 +43,6 @@ namespace slave {
 namespace docker {
 namespace registry {
 
-using FileSystemLayerInfo = RegistryClient::FileSystemLayerInfo;
-
-using ManifestResponse = RegistryClient::ManifestResponse;
-
 const Duration RegistryClient::DEFAULT_MANIFEST_TIMEOUT_SECS = Seconds(10);
 
 const size_t RegistryClient::DEFAULT_MANIFEST_MAXSIZE_BYTES = 4096;
@@ -61,7 +57,7 @@ public:
       const URL& authServer,
       const Option<RegistryClient::Credentials>& creds);
 
-  Future<RegistryClient::ManifestResponse> getManifest(
+  Future<ManifestResponse> getManifest(
       const string& path,
       const Option<string>& tag,
       const Duration& timeout);

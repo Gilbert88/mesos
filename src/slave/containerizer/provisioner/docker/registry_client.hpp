@@ -40,31 +40,30 @@ namespace registry {
 // Forward declarations.
 class RegistryClientProcess;
 
+/**
+ * Encapsulates information about a file system layer.
+ */
+struct FileSystemLayerInfo {
+  //TODO(jojy): This string includes the checksum type also now. Need to
+  //separate this into checksum method and checksum.
+  const std::string checksumInfo;
+  const std::string layerId;
+};
+
+/**
+ * Encapsulates response of "GET Manifest" request.
+ *
+ * Reference: https://docs.docker.com/registry/spec/api
+ */
+struct ManifestResponse {
+  const std::string name;
+  const std::string digest;
+  const std::vector<FileSystemLayerInfo> fsLayerInfoList;
+};
 
 class RegistryClient
 {
 public:
-  /**
-   * Encapsulates information about a file system layer.
-   */
-  struct FileSystemLayerInfo {
-    //TODO(jojy): This string includes the checksum type also now. Need to
-    //separate this into checksum method and checksum.
-    const std::string checksumInfo;
-    const std::string layerId;
-  };
-
-  /**
-   * Encapsulates response of "GET Manifest" request.
-   *
-   * Reference: https://docs.docker.com/registry/spec/api
-   */
-  struct ManifestResponse {
-    const std::string name;
-    const std::string digest;
-    const std::vector<FileSystemLayerInfo> fsLayerInfoList;
-  };
-
   /**
    * Encapsulates auth credentials for the client sessions.
    * TODO(jojy): Secure heap to protect the credentials.
