@@ -20,6 +20,7 @@ nobase_include_HEADERS =		\
   process/defer.hpp			\
   process/deferred.hpp			\
   process/delay.hpp			\
+  process/digest.hpp			\
   process/dispatch.hpp			\
   process/event.hpp			\
   process/executor.hpp			\
