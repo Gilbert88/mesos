@@ -105,7 +105,7 @@ TEST(Digest, SimpleFile)
 TEST(Digest, DynamicDigestTypeFile)
 {
   const string testData("This is the data to be written to a file.");
-  const string filePath = path::join(os::getcwd(), "DynamicDigestType.txt");
+  const string filePath = path::join(os::getcwd(), "dynamicDigest.txt");
 
   ASSERT_SOME(os::write(filePath, testData));
 
