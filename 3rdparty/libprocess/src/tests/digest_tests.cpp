@@ -22,8 +22,8 @@
 
 #include <stout/gtest.hpp>
 #include <stout/os.hpp>
-#include <stout/try.hpp>
 #include <stout/path.hpp>
+#include <stout/try.hpp>
 
 #include <process/digest.hpp>
 #include <process/gtest.hpp>
