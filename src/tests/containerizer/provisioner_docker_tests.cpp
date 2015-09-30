@@ -507,7 +507,6 @@ TEST_F(DockerSpecTest, ValidationDockerManifestSignaturesNonEmpty)
   EXPECT_ERROR(dockerImageManifest);
 }
 
-
 #ifdef USE_SSL_SOCKET
 
 // Test suite for docker registry tests.
