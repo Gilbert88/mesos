@@ -25,6 +25,19 @@
 
 using std::string;
 
+// BlobSum Length Constant
+#ifndef SHA256_LENGTH
+#define SHA256_LENGTH 64
+#endif
+
+#ifndef SHA512_LENGTH
+#define SHA512_LENGTH 128
+#endif
+
+#ifndef SIGNATURE_LENGTH
+#define SIGNATURE_LENGTH 86
+#endif
+
 namespace mesos {
 namespace internal {
 namespace slave {
