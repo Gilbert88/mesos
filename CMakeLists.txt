@@ -44,15 +44,6 @@ option(
   )
 set(CMAKE_VERBOSE_MAKEFILE ${VERBOSE})
 
-# TODO(hausdorff): add the code to allow libevent on Unix builds.
-if ((NOT WIN32) AND ENABLE_LIBEVENT)
-  message(
-    FATAL_ERROR
-    "The Mesos CMake-based build system currently only supports libevent on "
-    "Windows builds."
-    )
-endif ((NOT WIN32) AND ENABLE_LIBEVENT)
-
 if (REBUNDLED AND ENABLE_LIBEVENT)
   message(
     WARNING
@@ -97,4 +88,7 @@ include(MesosConfigure)
 # SUBDIRECTORIES.
 #################
 add_subdirectory(3rdparty)
-add_subdirectory(src)
+
+if (NOT WIN32)
+  add_subdirectory(src)
+endif (NOT WIN32)
