@@ -21,22 +21,15 @@
 #include <stout/protobuf.hpp>
 #include <stout/strings.hpp>
 
+#include "slave/containerizer/mesos/provisioner/docker/registry_client.hpp"
 #include "slave/containerizer/mesos/provisioner/docker/spec.hpp"
 
 using std::string;
 
-// BlobSum Length Constant
-#ifndef SHA256_LENGTH
-#define SHA256_LENGTH 64
-#endif
+using namespace mesos::internal::slave::docker::registry;
 
-#ifndef SHA512_LENGTH
-#define SHA512_LENGTH 128
-#endif
-
-#ifndef SIGNATURE_LENGTH
-#define SIGNATURE_LENGTH 86
-#endif
+using FileSystemLayerInfo = RegistryClient::FileSystemLayerInfo;
+using ManifestResponse = RegistryClient::ManifestResponse;
 
 namespace mesos {
 namespace internal {
@@ -96,6 +89,40 @@ Try<DockerImageManifest> parse(const JSON::Object& json)
   }
 
   return manifest.get();
+}
+
+Try<docker::DockerManifestResponse> parseManifestResponse(
+    const ManifestResponse& manifestResponse)
+{
+  docker::DockerManifestResponse dockerManifestResponse;
+  dockerManifestResponse.set_name(manifestResponse.name);
+  dockerManifestResponse.set_digest(manifestResponse.digest);
+
+  auto createLayerInfo = [](
+      const string& checksumInfo,
+      const string& layerId)
+      -> Try<DockerManifestResponse::FileSystemLayerInfo> {
+    docker::DockerManifestResponse::FileSystemLayerInfo layerInfo;
+    layerInfo.set_checksuminfo(checksumInfo);
+    layerInfo.set_layerid(layerId);
+    return layerInfo;
+  };
+
+  foreach(const FileSystemLayerInfo& fsLayerInfo,
+          manifestResponse.fsLayerInfoList) {
+    Try<docker::DockerManifestResponse::FileSystemLayerInfo> layerInfo =
+      createLayerInfo(fsLayerInfo.checksumInfo, fsLayerInfo.layerId);
+
+    if (!layerInfo.isSome()) {
+      return Error(
+          "Fail to create file system layer info for layerId: "
+          + fsLayerInfo.layerId);
+    }
+
+    dockerManifestResponse.add_filesystemlayerinfo()->CopyFrom(layerInfo.get());
+  }
+
+  return dockerManifestResponse;
 }
 
 } // namespace spec {

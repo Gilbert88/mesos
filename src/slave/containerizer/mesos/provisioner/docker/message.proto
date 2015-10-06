@@ -98,3 +98,21 @@ message DockerImageManifest {
 
   repeated Signatures signatures = 7;
 }
+
+
+/**
+* Protobuf for the Docker Registry Responses (encapsulating response of
+* "GET Manifest" request).
+* Reference: https://docs.docker.com/registry/spec/api
+*/
+message DockerManifestResponse {
+  required string name = 1;
+  required string digest = 2;
+
+  message FileSystemLayerInfo {
+    required string checksumInfo = 1;
+    required string layerId = 2;
+  }
+
+  repeated FileSystemLayerInfo fileSystemLayerInfo = 3;
+}

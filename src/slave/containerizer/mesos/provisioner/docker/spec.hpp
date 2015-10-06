@@ -41,6 +41,10 @@ Option<Error> validateManifest(const docker::DockerImageManifest& manifest);
 // Parse the DockerImageManifest from the specified JSON object.
 Try<docker::DockerImageManifest> parse(const JSON::Object& json);
 
+// Parse docker registry responses as protobuf.
+Try<docker::DockerManifestResponse> parseManifestResponse(
+    const registry::RegistryClient::ManifestResponse& manifestResponse);
+
 } // namespace spec {
 } // namespace docker {
 } // namespace slave {

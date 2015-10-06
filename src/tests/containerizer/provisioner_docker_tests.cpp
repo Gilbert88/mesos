@@ -828,6 +828,23 @@ TEST_F(RegistryClientTest, SimpleGetManifest)
   ASSERT_EQ(
       manifestResponse.get().fsLayerInfos[0].layerId,
       "3ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
+
+  // Test serializing ManifestResponse to protobuf.
+  Try<slave::docker::DockerManifestResponse> response =
+    spec::parseManifestResponse(manifestResponseFuture.get());
+  ASSERT_SOME(response);
+
+  EXPECT_EQ(response.get().digest(),
+            "sha256:df9e13f36d2d5b30c16bfbf2a6110c45ebed0bfa1ea"
+            "42d357651bc6c736d5322");
+  EXPECT_EQ(response.get().name(), "library/busybox");
+  EXPECT_EQ(response.get().filesystemlayerinfo_size(), 3);
+  EXPECT_EQ(response.get().filesystemlayerinfo(0).layerid(),
+            "1ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
+  EXPECT_EQ(response.get().filesystemlayerinfo(1).layerid(),
+            "2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
+  EXPECT_EQ(response.get().filesystemlayerinfo(2).layerid(),
+            "3ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
 }
 
 
