@@ -23,6 +23,7 @@
 
 #include <glog/logging.h>
 
+#include <stout/hashmap.hpp>
 #include <stout/json.hpp>
 #include <stout/os.hpp>
 #include <stout/result.hpp>
@@ -86,6 +87,7 @@ private:
   const Flags flags;
   Owned<MetadataManager> metadataManager;
   Owned<Puller> puller;
+  hashmap<std::string, Owned<Promise<Image>>> pulling;
 };
 
 
@@ -96,21 +98,30 @@ Try<Owned<slave::Store>> Store::create(const Flags& flags)
     return Error("Failed to create Docker puller: " + puller.error());
   }
 
-  if (!os::exists(flags.docker_store_dir)) {
-    Try<Nothing> mkdir = os::mkdir(flags.docker_store_dir);
-    if (mkdir.isError()) {
-      return Error("Failed to create Docker store directory: " + mkdir.error());
-    }
+  Try<Owned<slave::Store>> store = Store::create(flags, puller.get());
+  if (store.isError()) {
+    return Error("Failed to create Docker store: " + store.error());
   }
 
-  if (!os::exists(paths::getStagingDir(flags.docker_store_dir))) {
-    Try<Nothing> mkdir =
-      os::mkdir(paths::getStagingDir(flags.docker_store_dir));
+  return store.get();
+}
 
-    if (mkdir.isError()) {
-      return Error("Failed to create Docker store staging directory: " +
-                   mkdir.error());
-    }
+
+Try<Owned<slave::Store>> Store::create(
+    const Flags& flags,
+    const Owned<Puller>& puller)
+{
+  Try<Nothing> mkdirStore = os::mkdir(flags.docker_store_dir);
+  if (mkdirStore.isError()) {
+    return Error("Failed to create Docker store directory: " +
+                 mkdirStore.error());
+  }
+
+  Try<Nothing> mkdirStaging =
+    os::mkdir(paths::getStagingDir(flags.docker_store_dir));
+  if (mkdirStaging.isError()) {
+    return Error("Failed to create Docker store staging directory: " +
+                 mkdirStaging.error());
   }
 
   Try<Owned<MetadataManager>> metadataManager = MetadataManager::create(flags);
@@ -119,7 +130,7 @@ Try<Owned<slave::Store>> Store::create(const Flags& flags)
   }
 
   Owned<StoreProcess> process(
-      new StoreProcess(flags, metadataManager.get(), puller.get()));
+      new StoreProcess(flags, metadataManager.get(), puller));
 
   return Owned<slave::Store>(new Store(process));
 }
@@ -179,15 +190,33 @@ Future<Image> StoreProcess::_get(
     return Failure("Failed to create a staging directory");
   }
 
-  return puller->pull(name, Path(staging.get()))
-    .then(defer(self(), &Self::moveLayers, lambda::_1))
-    .then(defer(self(), &Self::storeImage, name, lambda::_1))
-    .onAny([staging]() {
-      Try<Nothing> rmdir = os::rmdir(staging.get());
-      if (rmdir.isError()) {
-        LOG(WARNING) << "Failed to remove staging directory: " << rmdir.error();
-      }
-    });
+  const string imageName = stringify(name);
+
+  if (!pulling.contains(imageName)) {
+    Owned<Promise<Image>> promise(new Promise<Image>);
+
+    promise->associate(puller->pull(name, Path(staging.get()))
+      .then(defer(self(), &Self::moveLayers, lambda::_1))
+      .then(defer(self(), &Self::storeImage, name, lambda::_1))
+      .onAny([this, staging, imageName]() {
+        Try<Nothing> rmdir = os::rmdir(staging.get());
+        if (rmdir.isError()) {
+          LOG(WARNING) << "Failed to remove staging directory: "
+                       << rmdir.error();
+        }
+
+        pulling.erase(imageName);
+      }));
+
+    pulling[imageName] = promise;
+
+    return promise->future();
+  }
+
+  return pulling[imageName]->future()
+      .onAny([this, imageName]() {
+        pulling.erase(imageName);
+      });
 }
 
 

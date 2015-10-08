@@ -42,6 +42,7 @@
 
 #include "slave/containerizer/mesos/provisioner/docker/metadata_manager.hpp"
 #include "slave/containerizer/mesos/provisioner/docker/paths.hpp"
+#include "slave/containerizer/mesos/provisioner/docker/puller.hpp"
 #include "slave/containerizer/mesos/provisioner/docker/registry_client.hpp"
 #include "slave/containerizer/mesos/provisioner/docker/registry_puller.hpp"
 #include "slave/containerizer/mesos/provisioner/docker/spec.hpp"
@@ -1382,6 +1383,95 @@ TEST_F(ProvisionerDockerLocalStoreTest, MetadataManagerInitialization)
   layers = store.get()->get(image);
   AWAIT_READY(layers);
   verifyLocalDockerImage(flags, layers.get());
+}
+
+
+class MockPuller : public Puller
+{
+public:
+  MockPuller() {}
+
+  virtual ~MockPuller() {}
+
+  MOCK_METHOD2(
+      pull,
+      process::Future<std::list<std::pair<std::string, std::string>>>(
+          const slave::docker::Image::Name&,
+          const Path&));
+
+  process::Future<std::list<std::pair<std::string, std::string>>> _pull(
+      const slave::docker::Image::Name& name,
+      const Path& directory)
+  {
+    return Puller::pull(name, directory);
+  }
+
+  process::Future<std::list<std::pair<std::string, std::string>>>
+    unmocked_pull(
+      const slave::docker::Image::Name&,
+      const Path& directory);
+};
+
+
+// This tests the store to pull the same image simutanuously. It mocks
+// the local puller method to do store get twice at the same time.
+TEST_F(ProvisionerDockerLocalStoreTest, PullingSameImageSimutanuously)
+{
+  const string imageDir = path::join(os::getcwd(), "images");
+  const string image = path::join(imageDir, "abc:latest");
+  ASSERT_SOME(os::mkdir(imageDir));
+  ASSERT_SOME(os::mkdir(image));
+
+  slave::Flags flags;
+  flags.docker_puller = "local";
+  flags.docker_store_dir = path::join(os::getcwd(), "store");
+  flags.docker_local_archives_dir = imageDir;
+
+  MockPuller* puller(new MockPuller());
+  Future<Nothing> pull;
+  Promise<std::list<std::pair<std::string, std::string>>> promise;
+
+  EXPECT_CALL(*puller, pull(_, _))
+    .WillOnce(testing::DoAll(FutureSatisfy(&pull),
+                             Return(promise.future())));
+
+  Try<Owned<slave::Store>> store =
+      slave::docker::Store::create(flags, Owned<Puller>(puller));
+  ASSERT_SOME(store);
+
+  Image mesosImage;
+  mesosImage.set_type(Image::DOCKER);
+  mesosImage.mutable_docker()->set_name("abc");
+
+  Future<vector<string>> layers1 = store.get()->get(mesosImage);
+  AWAIT_READY(pull);
+
+  const string localRootfsPath1 =
+      "/tmp/ProvisionerDockerLocalStoreTest_LocalStoreTestWithTar_hIvd5l/store/"
+      "staging/D4mAFe/123/rootfs";
+  const string localRootfsPath2 =
+      "/tmp/ProvisionerDockerLocalStoreTest_LocalStoreTestWithTar_hIvd5l/store/"
+      "staging/D4mAFe/456/rootfs";
+
+  Try<Nothing> mkdir1 = os::mkdir(localRootfsPath1);
+  ASSERT_SOME(mkdir1);
+  Try<Nothing> mkdir2 = os::mkdir(localRootfsPath2);
+  ASSERT_SOME(mkdir2);
+
+  ASSERT_TRUE(layers1.isPending());
+  Future<vector<string>> layers2 = store.get()->get(mesosImage);
+
+  const std::list<std::pair<std::string, std::string>> result =
+      {{"123", localRootfsPath1},
+       {"456", localRootfsPath2}};
+
+  ASSERT_TRUE(layers2.isPending());
+  promise.set(result);
+
+  AWAIT_READY(layers1);
+  AWAIT_READY(layers2);
+
+  EXPECT_EQ(layers1.get(), layers2.get());
 }
 
 } // namespace tests {
