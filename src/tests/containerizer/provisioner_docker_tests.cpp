@@ -893,6 +893,38 @@ TEST_F(ProvisionerDockerLocalStoreTest, MetadataManagerInitialization)
   verifyLocalDockerImage(flags, layers.get());
 }
 
+// This tests the ability of the local puller to accept only one pull call
+// simutanuously. All other puller request can received from the result from
+// the first pull call, which spare space and computional time.
+TEST_F(ProvisionerDockerLocalStoreTest, LocalStorePullingSameImage)
+{
+  string imageDir = path::join(os::getcwd(), "images");
+  string image = path::join(imageDir, "abc:latest");
+  ASSERT_SOME(os::mkdir(imageDir));
+  ASSERT_SOME(os::mkdir(image));
+
+  slave::Flags flags;
+  flags.docker_puller = "local";
+  flags.docker_store_dir = path::join(os::getcwd(), "store");
+  flags.docker_local_archives_dir = imageDir;
+
+  Try<Owned<slave::Store>> store = slave::docker::Store::create(flags);
+  ASSERT_SOME(store);
+
+  Image mesosImage;
+  mesosImage.set_type(Image::DOCKER);
+  mesosImage.mutable_docker()->set_name("abc");
+
+  Future<vector<string>> layers_1 = store.get()->get(mesosImage);
+  Future<vector<string>> layers_2 = store.get()->get(mesosImage);
+
+  AWAIT_READY(layers_1);
+  AWAIT_READY(layers_2);
+
+  verifyLocalDockerImage(flags, layers_1.get());
+  verifyLocalDockerImage(flags, layers_2.get());
+}
+
 } // namespace tests {
 } // namespace internal {
 } // namespace mesos {
