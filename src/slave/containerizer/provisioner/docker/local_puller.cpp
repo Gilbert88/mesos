@@ -21,7 +21,7 @@
 
 #include <glog/logging.h>
 
-#include <stout/hashset>
+#include <stout/hashset.hpp>
 #include <stout/json.hpp>
 #include <stout/os.hpp>
 #include <stout/result.hpp>
