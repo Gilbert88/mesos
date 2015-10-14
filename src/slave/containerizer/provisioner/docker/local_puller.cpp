@@ -200,9 +200,9 @@ Future<list<pair<string, string>>> LocalPullerProcess::putImage(
 {
   if(!imagePool.contains(stringify(name))) {
     imagePool.insert(stringify(name));
-  } //else {
-  //   return Failure("Failed to read image from the previous untarred directory");
-  // }
+  } else {
+    return Failure("Failed to read image from the previous untarred directory");
+  }
 
   Try<string> value =
     os::read(paths::getImageArchiveRepositoriesPath(directory));
