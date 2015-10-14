@@ -198,7 +198,7 @@ Future<list<pair<string, string>>> LocalPullerProcess::putImage(
     const string& directory)
 {
   if(!imagePool.contains(stringify(name))) {
-    imagePool.insert(stringify(name);
+    imagePool.insert(stringify(name));
   } else {
     return Failure("Failed to read image from the previous untarred directory");
   }
