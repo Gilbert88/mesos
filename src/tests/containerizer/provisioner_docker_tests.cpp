@@ -912,11 +912,14 @@ TEST_F(ProvisionerDockerLocalStoreTest, LocalStorePullingSameImage)
   ASSERT_SOME(store);
 
   Image mesosImage;
+  Image mesosImage1;
   mesosImage.set_type(Image::DOCKER);
+  mesosImage1.set_type(Image::DOCKER);
   mesosImage.mutable_docker()->set_name("abc");
+  mesosImage1.mutable_docker()->set_name("abc");
 
   Future<vector<string>> layers_1 = store.get()->get(mesosImage);
-  Future<vector<string>> layers_2 = store.get()->get(mesosImage);
+  Future<vector<string>> layers_2 = store.get()->get(mesosImage1);
 
   AWAIT_READY(layers_1);
   AWAIT_READY(layers_2);
