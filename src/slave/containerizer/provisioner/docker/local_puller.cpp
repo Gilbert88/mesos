@@ -78,6 +78,7 @@ private:
       const std::string& layerId);
 
   const Flags flags;
+  hashset<std::string> imagePool;
 };
 
 
