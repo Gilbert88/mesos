@@ -54,6 +54,8 @@
 #include "slave/slave.hpp"
 #include "slave/status_update_manager.hpp"
 
+#include "version/version.hpp"
+
 using namespace mesos::internal;
 using namespace mesos::internal::slave;
 
@@ -103,6 +105,7 @@ int main(int argc, char** argv)
   flags.add(&master,
             "master",
             "May be one of:\n"
+            "  host:port\n"
             "  zk://host1:port1,host2:port2,.../path\n"
             "  zk://username:password@host1:port1,host2:port2,.../path\n"
             "  file:///path/to/file (where file contains one of the above)");
@@ -181,6 +184,8 @@ int main(int argc, char** argv)
   process::initialize("slave(1)");
 
   logging::initialize(argv[0], flags, true); // Catch signals.
+
+  spawn(new VersionProcess(), true);
 
   LOG(INFO) << "Build: " << build::DATE << " by " << build::USER;
 

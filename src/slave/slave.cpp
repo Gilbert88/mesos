@@ -114,6 +114,7 @@ namespace slave {
 
 using namespace state;
 
+
 Slave::Slave(const slave::Flags& _flags,
              MasterDetector* _detector,
              Containerizer* _containerizer,
@@ -351,7 +352,6 @@ void Slave::initialize()
   if (resources.isError()) {
     EXIT(1) << "Failed to determine slave resources: " << resources.error();
   }
-  LOG(INFO) << "Slave resources: " << resources.get();
 
   Attributes attributes;
   if (flags.attributes.isSome()) {
@@ -382,8 +382,23 @@ void Slave::initialize()
   // Initialize slave info.
   info.set_hostname(hostname);
   info.set_port(self().address.port);
+
   info.mutable_resources()->CopyFrom(resources.get());
+  if (HookManager::hooksAvailable()) {
+    info.mutable_resources()->CopyFrom(
+        HookManager::slaveResourcesDecorator(info));
+  }
+
+  LOG(INFO) << "Slave resources: " << info.resources();
+
   info.mutable_attributes()->CopyFrom(attributes);
+  if (HookManager::hooksAvailable()) {
+    info.mutable_attributes()->CopyFrom(
+        HookManager::slaveAttributesDecorator(info));
+  }
+
+  LOG(INFO) << "Slave attributes: " << info.attributes();
+
   // Checkpointing of slaves is always enabled.
   info.set_checkpoint(true);
 
@@ -501,7 +516,7 @@ void Slave::initialize()
   Http http = Http(this);
 
   route("/api/v1/executor",
-        Http::EXECUTOR_HELP,
+        Http::EXECUTOR_HELP(),
         [http](const process::http::Request& request) {
           Http::log(request);
           return http.executor(request);
@@ -510,19 +525,25 @@ void Slave::initialize()
   // TODO(ijimenez): Remove this endpoint at the end of the
   // deprecation cycle on 0.26.
   route("/state.json",
-        Http::STATE_HELP,
+        Http::STATE_HELP(),
         [http](const process::http::Request& request) {
           Http::log(request);
           return http.state(request);
         });
   route("/state",
-        Http::STATE_HELP,
+        Http::STATE_HELP(),
         [http](const process::http::Request& request) {
           Http::log(request);
           return http.state(request);
         });
+  route("/flags",
+        Http::FLAGS_HELP(),
+        [http](const process::http::Request& request) {
+          Http::log(request);
+          return http.flags(request);
+        });
   route("/health",
-        Http::HEALTH_HELP,
+        Http::HEALTH_HELP(),
         [http](const process::http::Request& request) {
           return http.health(request);
         });
@@ -1678,6 +1699,21 @@ void Slave::runTasks(
                << (future.isFailed() ? future.failure() : "discarded");
 
     containerizer->destroy(containerId);
+
+    Executor* executor = getExecutor(frameworkId, executorId);
+    if (executor != NULL) {
+      containerizer::Termination termination;
+      termination.set_state(TASK_LOST);
+      termination.add_reasons(TaskStatus::REASON_CONTAINER_UPDATE_FAILED);
+      termination.set_message(
+          "Failed to update resources for container: " +
+          (future.isFailed() ? future.failure() : "discarded"));
+
+      executor->pendingTermination = termination;
+
+      // TODO(jieyu): Set executor->state to be TERMINATING.
+    }
+
     return;
   }
 
@@ -2655,6 +2691,20 @@ void Slave::_reregisterExecutor(
                << (future.isFailed() ? future.failure() : "discarded");
 
     containerizer->destroy(containerId);
+
+    Executor* executor = getExecutor(frameworkId, executorId);
+    if (executor != NULL) {
+      containerizer::Termination termination;
+      termination.set_state(TASK_LOST);
+      termination.add_reasons(TaskStatus::REASON_CONTAINER_UPDATE_FAILED);
+      termination.set_message(
+          "Failed to update resources for container: " +
+          (future.isFailed() ? future.failure() : "discarded"));
+
+      executor->pendingTermination = termination;
+
+      // TODO(jieyu): Set executor->state to be TERMINATING.
+    }
   }
 }
 
@@ -2676,7 +2726,7 @@ void Slave::reregisterExecutorTimeout()
         case Executor::TERMINATING:
         case Executor::TERMINATED:
           break;
-        case Executor::REGISTERING:
+        case Executor::REGISTERING: {
           // If we are here, the executor must have been hung and not
           // exited! This is because if the executor properly exited,
           // it should have already been identified by the isolator
@@ -2684,10 +2734,21 @@ void Slave::reregisterExecutorTimeout()
           LOG(INFO) << "Killing un-reregistered executor '" << executor->id
                     << "' of framework " << framework->id();
 
+          containerizer->destroy(executor->containerId);
+
           executor->state = Executor::TERMINATING;
 
-          containerizer->destroy(executor->containerId);
+          containerizer::Termination termination;
+          termination.set_state(TASK_LOST);
+          termination.add_reasons(
+              TaskStatus::REASON_EXECUTOR_REREGISTRATION_TIMEOUT);
+          termination.set_message(
+              "Executor did not re-register within " +
+              stringify(EXECUTOR_REREGISTER_TIMEOUT));
+
+          executor->pendingTermination = termination;
           break;
+        }
         default:
           LOG(FATAL) << "Executor '" << executor->id
                      << "' of framework " << framework->id()
@@ -2907,15 +2968,28 @@ void Slave::_statusUpdate(
     const ContainerID& containerId,
     bool checkpoint)
 {
-  if (future.isSome() && !future.get().isReady()) {
+  if (future.isSome() && !future->isReady()) {
     LOG(ERROR) << "Failed to update resources for container " << containerId
                << " of executor " << executorId
                << " running task " << update.status().task_id()
                << " on status update for terminal task, destroying container: "
-               << (future.get().isFailed() ? future.get().failure()
-                                           : "discarded");
+               << (future->isFailed() ? future->failure() : "discarded");
 
     containerizer->destroy(containerId);
+
+    Executor* executor = getExecutor(update.framework_id(), executorId);
+    if (executor != NULL) {
+      containerizer::Termination termination;
+      termination.set_state(TASK_LOST);
+      termination.add_reasons(TaskStatus::REASON_CONTAINER_UPDATE_FAILED);
+      termination.set_message(
+          "Failed to update resources for container: " +
+          (future->isFailed() ? future->failure() : "discarded"));
+
+      executor->pendingTermination = termination;
+
+      // TODO(jieyu): Set executor->state to be TERMINATING.
+    }
   }
 
   if (checkpoint) {
@@ -3201,6 +3275,19 @@ Framework* Slave::getFramework(const FrameworkID& frameworkId)
 }
 
 
+Executor* Slave::getExecutor(
+    const FrameworkID& frameworkId,
+    const ExecutorID& executorId)
+{
+  Framework* framework = getFramework(frameworkId);
+  if (framework != NULL) {
+    return framework->getExecutor(executorId);
+  }
+
+  return NULL;
+}
+
+
 ExecutorInfo Slave::getExecutorInfo(
     const FrameworkID& frameworkId,
     const TaskInfo& task)
@@ -3348,6 +3435,21 @@ void Slave::executorLaunched(
     ++metrics.container_launch_errors;
 
     containerizer->destroy(containerId);
+
+    Executor* executor = getExecutor(frameworkId, executorId);
+    if (executor != NULL) {
+      containerizer::Termination termination;
+      termination.set_state(TASK_FAILED);
+      termination.add_reasons(TaskStatus::REASON_CONTAINER_LAUNCH_FAILED);
+      termination.set_message(
+          "Failed to launch container: " +
+          (future.isFailed() ? future.failure() : "discarded"));
+
+      executor->pendingTermination = termination;
+
+      // TODO(jieyu): Set executor->state to be TERMINATING.
+    }
+
     return;
   } else if (!future.get()) {
     LOG(ERROR) << "Container '" << containerId
@@ -3357,7 +3459,7 @@ void Slave::executorLaunched(
                << flags.containerizers << ") could create a container for the "
                << "provided TaskInfo/ExecutorInfo message.";
 
-     ++metrics.container_launch_errors;
+    ++metrics.container_launch_errors;
     return;
   }
 
@@ -3878,17 +3980,27 @@ void Slave::registerExecutorTimeout(
     case Executor::TERMINATED:
       // Ignore the registration timeout.
       break;
-    case Executor::REGISTERING:
+    case Executor::REGISTERING: {
       LOG(INFO) << "Terminating executor " << executor->id
                 << " of framework " << framework->id()
                 << " because it did not register within "
                 << flags.executor_registration_timeout;
 
+      // Immediately kill the executor.
+      containerizer->destroy(containerId);
+
       executor->state = Executor::TERMINATING;
 
-      // Immediately kill the executor.
-      containerizer->destroy(executor->containerId);
+      containerizer::Termination termination;
+      termination.set_state(TASK_FAILED);
+      termination.add_reasons(TaskStatus::REASON_EXECUTOR_REGISTRATION_TIMEOUT);
+      termination.set_message(
+          "Executor did not register within " +
+          stringify(flags.executor_registration_timeout));
+
+      executor->pendingTermination = termination;
       break;
+    }
     default:
       LOG(FATAL) << "Executor '" << executor->id
                  << "' of framework " << framework->id()
@@ -4423,6 +4535,8 @@ void Slave::_qosCorrections(const Future<list<QoSCorrection>>& future)
                     << "' of framework " << frameworkId
                     << " as QoS correction";
 
+          containerizer->destroy(containerId);
+
           // TODO(nnielsen): We should ensure that we are addressing
           // the _container_ which the QoS controller intended to
           // kill. Without this check, we may run into a scenario
@@ -4431,8 +4545,13 @@ void Slave::_qosCorrections(const Future<list<QoSCorrection>>& future)
           // container than the one the QoS controller targeted
           // (MESOS-2875).
           executor->state = Executor::TERMINATING;
-          executor->reason = TaskStatus::REASON_EXECUTOR_PREEMPTED;
-          containerizer->destroy(containerId);
+
+          containerizer::Termination termination;
+          termination.set_state(TASK_LOST);
+          termination.add_reasons(TaskStatus::REASON_CONTAINER_PREEMPTED);
+          termination.set_message("Container preempted by QoS correction");
+
+          executor->pendingTermination = termination;
 
           ++metrics.executors_preempted;
           break;
@@ -4626,38 +4745,61 @@ void Slave::sendExecutorTerminatedStatusUpdate(
     const FrameworkID& frameworkId,
     const Executor* executor)
 {
-  mesos::TaskState taskState = TASK_LOST;
-  TaskStatus::Reason reason = TaskStatus::REASON_EXECUTOR_TERMINATED;
-
   CHECK_NOTNULL(executor);
 
-  if (executor->reason.isSome()) {
-    // TODO(nnielsen): We want to dispatch the task status and reason
-    // from the termination reason (MESOS-2035) and the executor
-    // reason based on a specific policy i.e. if the termination
-    // reason is set, this overrides executor->reason. At the moment,
-    // we infer the containerizer reason for killing from 'killed'
-    // field in 'termination' and are explicitly overriding the task
-    // status and reason.
-    reason = executor->reason.get();
-  } else if (termination.isReady() && termination.get().killed()) {
-    taskState = TASK_FAILED;
-    // TODO(dhamon): MESOS-2035: Add 'reason' to containerizer::Termination.
-    reason = TaskStatus::REASON_MEMORY_LIMIT;
-  } else if (executor->isCommandExecutor()) {
-    taskState = TASK_FAILED;
-    reason = TaskStatus::REASON_COMMAND_EXECUTOR_FAILED;
+  mesos::TaskState state;
+  TaskStatus::Reason reason;
+  string message;
+
+  // Determine the task state for the status update.
+  if (termination.isReady() && termination->has_state()) {
+    state = termination->state();
+  } else if (executor->pendingTermination.isSome() &&
+             executor->pendingTermination->has_state()) {
+    state = executor->pendingTermination->state();
+  } else {
+    state = TASK_FAILED;
+  }
+
+  // Determine the task reason for the status update.
+  // TODO(jieyu): Handle multiple reasons (MESOS-2657).
+  if (termination.isReady() && termination->reasons().size() > 0) {
+    reason = termination->reasons(0);
+  } else if (executor->pendingTermination.isSome() &&
+             executor->pendingTermination->reasons().size() > 0) {
+    reason = executor->pendingTermination->reasons(0);
+  } else {
+    reason = TaskStatus::REASON_EXECUTOR_TERMINATED;
+  }
+
+  // Determine the message for the status update.
+  vector<string> messages;
+
+  if (executor->pendingTermination.isSome() &&
+      executor->pendingTermination->has_message()) {
+    messages.push_back(executor->pendingTermination->message());
+  }
+
+  if (!termination.isReady()) {
+    messages.push_back("Abnormal executor termination");
+  } else if (termination->has_message()) {
+    messages.push_back(termination->message());
+  }
+
+  if (messages.empty()) {
+    message = "Executor terminated";
+  } else {
+    message = strings::join("; ", messages);
   }
 
   statusUpdate(protobuf::createStatusUpdate(
       frameworkId,
       info.id(),
       taskId,
-      taskState,
+      state,
       TaskStatus::SOURCE_SLAVE,
       UUID::random(),
-      termination.isReady() ? termination.get().message()
-                            : "Abnormal executor termination",
+      message,
       reason,
       executor->id),
       UPID());

@@ -872,8 +872,8 @@ TEST_F(OversubscriptionTest, QoSCorrectionKill)
 
   // Verify task status is TASK_LOST.
   AWAIT_READY(status2);
-  ASSERT_EQ(TASK_LOST, status2.get().state());
-  ASSERT_EQ(TaskStatus::REASON_EXECUTOR_PREEMPTED, status2.get().reason());
+  ASSERT_EQ(TASK_LOST, status2->state());
+  ASSERT_EQ(TaskStatus::REASON_CONTAINER_PREEMPTED, status2->reason());
 
   // Verify that slave incremented counter for preempted executors.
   snapshot = Metrics();
@@ -986,15 +986,13 @@ TEST_F(OversubscriptionTest, UpdateAllocatorOnSchedulerFailover)
   AWAIT_READY(sched1Error);
 
   // Check if framework receives revocable offers.
+  Future<vector<Offer>> offers2;
+  EXPECT_CALL(sched2, resourceOffers(&driver2, _))
+    .WillOnce(FutureArg<1>(&offers2));
 
   Resources taskResources = createRevocableResources("cpus", "1");
   Resources executorResources = createRevocableResources("cpus", "1");
   estimations.put(taskResources + executorResources);
-
-  Future<vector<Offer>> offers2;
-  EXPECT_CALL(sched2, resourceOffers(&driver2, _))
-    .WillOnce(FutureArg<1>(&offers2))
-    .WillRepeatedly(Return());
 
   AWAIT_READY(offers2);
   EXPECT_NE(0u, offers2.get().size());

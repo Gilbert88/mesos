@@ -300,8 +300,12 @@ public:
 
   void authenticate();
 
-  // Helper routine to lookup a framework.
+  // Helper routines to lookup a framework/executor.
   Framework* getFramework(const FrameworkID& frameworkId);
+
+  Executor* getExecutor(
+      const FrameworkID& frameworkId,
+      const ExecutorID& executorId);
 
   // Returns an ExecutorInfo for a TaskInfo (possibly
   // constructing one if the task has a CommandInfo).
@@ -403,6 +407,10 @@ private:
     process::Future<process::http::Response> executor(
         const process::http::Request& request) const;
 
+    // /slave/flags
+    process::Future<process::http::Response> flags(
+        const process::http::Request& request) const;
+
     // /slave/health
     process::Future<process::http::Response> health(
         const process::http::Request& request) const;
@@ -411,9 +419,10 @@ private:
     process::Future<process::http::Response> state(
         const process::http::Request& request) const;
 
-    static const std::string EXECUTOR_HELP;
-    static const std::string HEALTH_HELP;
-    static const std::string STATE_HELP;
+    static std::string EXECUTOR_HELP();
+    static std::string FLAGS_HELP();
+    static std::string HEALTH_HELP();
+    static std::string STATE_HELP();
 
   private:
     Slave* slave;
@@ -623,10 +632,12 @@ struct Executor
   // attempts to do some memset's which are unsafe).
   boost::circular_buffer<std::shared_ptr<Task>> completedTasks;
 
-  // The 'reason' is for the slave to encode the reason behind a
-  // terminal status update for those pending/unterminated tasks when
-  // the executor is terminated.
-  Option<TaskStatus::Reason> reason;
+  // When the slave initiates a destroy of the container, we expect a
+  // termination to occur. The 'pendingTermation' indicates why the
+  // slave initiated the destruction and will influence the
+  // information sent in the status updates for any remaining
+  // non-terminal tasks.
+  Option<containerizer::Termination> pendingTermination;
 
 private:
   Executor(const Executor&);              // No copying.

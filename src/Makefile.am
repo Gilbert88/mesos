@@ -235,8 +235,24 @@ PYTHON_PROTOS =								\
   python/interface/src/mesos/interface/mesos_pb2.py			\
   python/interface/src/mesos/interface/containerizer_pb2.py
 
-BUILT_SOURCES += $(CXX_PROTOS) $(JAVA_PROTOS) $(V1_JAVA_PROTOS) $(PYTHON_PROTOS)
-CLEANFILES += $(CXX_PROTOS) $(JAVA_PROTOS) $(V1_JAVA_PROTOS) $(PYTHON_PROTOS)
+V1_PYTHON_PROTOS =							\
+  python/interface/src/mesos/v1/interface/mesos_pb2.py			\
+  python/interface/src/mesos/v1/interface/scheduler_pb2.py
+
+
+BUILT_SOURCES += 							\
+  $(CXX_PROTOS) 							\
+  $(JAVA_PROTOS) 							\
+  $(V1_JAVA_PROTOS) 							\
+  $(PYTHON_PROTOS) 							\
+  $(V1_PYTHON_PROTOS)
+
+CLEANFILES += 								\
+  $(CXX_PROTOS) 							\
+  $(JAVA_PROTOS) 							\
+  $(V1_JAVA_PROTOS) 							\
+  $(PYTHON_PROTOS) 							\
+  $(V1_PYTHON_PROTOS)
 
 FLAGS_PROTOS = messages/flags.pb.cc messages/flags.pb.h
 
@@ -411,35 +427,35 @@ python/interface/src/mesos/interface/containerizer_pb2.py:		\
 	$(PROTOC) -I$(top_srcdir)/include/mesos/containerizer		\
 		$(PROTOCFLAGS)						\
 		--python_out=python/interface/src/mesos/interface $^
-	sed -e 's/mesos\.mesos_pb2/mesos_pb2/' <$@ >$@
+	sed -i 's/mesos\.mesos_pb2/mesos_pb2/' $@
 
 python/interface/src/mesos/interface/scheduler_pb2.py: $(SCHEDULER_PROTO)
 	$(MKDIR_P) $(@D)
 	$(PROTOC) -I$(top_srcdir)/include/mesos/scheduler		\
           $(PROTOCFLAGS)						\
           --python_out=python/interface/src/mesos/interface $^
-	sed -e 's/mesos\.mesos_pb2/mesos_pb2/' <$@ >$@
+	sed -i 's/mesos\.mesos_pb2/mesos_pb2/' $@
 
 python/interface/src/mesos/v1/interface/scheduler_pb2.py: $(V1_SCHEDULER_PROTO)
 	$(MKDIR_P) $(@D)
 	$(PROTOC) -I$(top_srcdir)/include/mesos/v1/scheduler		\
           $(PROTOCFLAGS)						\
           --python_out=python/interface/src/mesos/v1/interface $^
-	sed -e 's/mesos\.mesos_pb2/mesos_pb2/' <$@ >$@
+	sed -i 's/mesos\.mesos_pb2/mesos_pb2/' $@
 
 python/interface/src/mesos/interface/executor_pb2.py: $(EXECUTOR_PROTO)
 	$(MKDIR_P) $(@D)
 	$(PROTOC) -I$(top_srcdir)/include/mesos/executor		\
           $(PROTOCFLAGS)						\
           --python_out=python/interface/src/mesos/interface $^
-	sed -e 's/mesos\.mesos_pb2/mesos_pb2/' <$@ >$@
+	sed -i 's/mesos\.mesos_pb2/mesos_pb2/' $@
 
 python/interface/src/mesos/v1/interface/executor_pb2.py: $(V1_EXECUTOR_PROTO)
 	$(MKDIR_P) $(@D)
 	$(PROTOC) -I$(top_srcdir)/include/mesos/v1/executor		\
           $(PROTOCFLAGS)						\
           --python_out=python/interface/src/mesos/v1/interface $^
-	sed -e 's/mesos\.mesos_pb2/mesos_pb2/' <$@ >$@
+	sed -i 's/mesos\.mesos_pb2/mesos_pb2/' $@
 
 # We even use a convenience library for most of Mesos so that we can
 # exclude third party libraries so setuptools/distribute can build a
@@ -495,6 +511,7 @@ libmesos_no_3rdparty_la_SOURCES =					\
 	master/repairer.cpp						\
 	master/validation.cpp						\
 	master/allocator/allocator.cpp					\
+	master/allocator/mesos/hierarchical.cpp				\
 	master/allocator/sorter/drf/sorter.cpp				\
 	messages/flags.proto						\
 	messages/messages.cpp						\
@@ -551,6 +568,7 @@ libmesos_no_3rdparty_la_SOURCES =					\
 	v1/mesos.cpp							\
 	v1/resources.cpp						\
 	v1/values.cpp							\
+	version/version.cpp						\
 	watcher/whitelist_watcher.cpp					\
 	zookeeper/contender.cpp						\
 	zookeeper/detector.cpp						\
@@ -882,6 +900,7 @@ libmesos_no_3rdparty_la_SOURCES +=					\
 	tests/containerizer/rootfs.hpp					\
 	tests/containerizer/setns_test_helper.hpp			\
 	usage/usage.hpp							\
+	version/version.hpp						\
 	watcher/whitelist_watcher.hpp					\
 	zookeeper/authentication.hpp					\
 	zookeeper/contender.hpp						\
@@ -1408,6 +1427,8 @@ PYTHON_SOURCE =								\
 	python/cli/src/mesos/http.py					\
 	python/interface/src/mesos/__init__.py				\
 	python/interface/src/mesos/interface/__init__.py		\
+	python/interface/src/mesos/v1/__init__.py			\
+	python/interface/src/mesos/v1/interface/__init__.py		\
 	python/native/src/mesos/__init__.py				\
 	python/native/src/mesos/native/__init__.py			\
 	python/native/src/mesos/native/mesos_executor_driver_impl.cpp	\
@@ -1481,6 +1502,7 @@ MESOS_WHLS =										\
 # and converts it into the correct directory path.
 $(MESOS_EGGS) $(MESOS_WHLS):								\
 		$(PYTHON_PROTOS)							\
+		$(V1_PYTHON_PROTOS)							\
 		$(PYTHON_SOURCE)							\
 		libmesos_no_3rdparty.la							\
 		$(PROTOBUF_EGG)
