@@ -58,8 +58,8 @@ class RegistryClientProcess : public Process<RegistryClientProcess>
 {
 public:
   static Try<Owned<RegistryClientProcess>> create(
-      const URL& authServer,
       const URL& registry,
+      const URL& authServer,
       const Option<RegistryClient::Credentials>& creds);
 
   Future<RegistryClient::ManifestResponse> getManifest(
@@ -76,8 +76,8 @@ public:
 
 private:
   RegistryClientProcess(
-    const Owned<TokenManager>& tokenMgr,
     const URL& registryServer,
+    const Owned<TokenManager>& tokenManager,
     const Option<RegistryClient::Credentials>& creds);
 
   Future<Response> doHttpGet(
@@ -90,8 +90,8 @@ private:
   Try<process::http::Headers> getAuthenticationAttributes(
       const Response& httpResponse) const;
 
-  Owned<TokenManager> tokenManager_;
   const URL registryServer_;
+  Owned<TokenManager> tokenManager_;
   const Option<RegistryClient::Credentials> credentials_;
 
   RegistryClientProcess(const RegistryClientProcess&) = delete;
@@ -100,8 +100,8 @@ private:
 
 
 Try<Owned<RegistryClient>> RegistryClient::create(
-    const URL& authServer,
     const URL& registryServer,
+    const URL& authServer,
     const Option<Credentials>& creds)
 {
   Try<Owned<RegistryClientProcess>> process =
@@ -117,12 +117,12 @@ Try<Owned<RegistryClient>> RegistryClient::create(
 
 
 RegistryClient::RegistryClient(
-    const URL& authServer,
     const URL& registryServer,
+    const URL& authServer,
     const Option<Credentials>& creds,
     const Owned<RegistryClientProcess>& process)
-  : authServer_(authServer),
-    registryServer_(registryServer),
+  : registryServer_(registryServer),
+    authServer_(authServer),
     credentials_(creds),
     process_(process)
 {
@@ -175,8 +175,8 @@ Future<size_t> RegistryClient::getBlob(
 
 
 Try<Owned<RegistryClientProcess>> RegistryClientProcess::create(
-    const URL& authServer,
     const URL& registryServer,
+    const URL& authServer,
     const Option<RegistryClient::Credentials>& creds)
 {
   Try<Owned<TokenManager>> tokenMgr = TokenManager::create(authServer);
@@ -185,16 +185,16 @@ Try<Owned<RegistryClientProcess>> RegistryClientProcess::create(
   }
 
   return Owned<RegistryClientProcess>(
-      new RegistryClientProcess(tokenMgr.get(), registryServer, creds));
+      new RegistryClientProcess(registryServer, tokenMgr.get(), creds));
 }
 
 
 RegistryClientProcess::RegistryClientProcess(
-    const Owned<TokenManager>& tokenMgr,
     const URL& registryServer,
+    const Owned<TokenManager>& tokenMgr,
     const Option<RegistryClient::Credentials>& creds)
-  : tokenManager_(tokenMgr),
-    registryServer_(registryServer),
+  : registryServer_(registryServer),
+    tokenManager_(tokenMgr),
     credentials_(creds) {}
 
 
@@ -288,6 +288,7 @@ Future<Response> RegistryClientProcess::doHttpGet(
         foreach (const JSON::Value& error, errorObjects.get().values) {
           Result<JSON::String> message =
             error.as<JSON::Object>().find<JSON::String>("message");
+
           if (message.isError()) {
             return Failure("Failed to parse bad request error message: " +
                            message.error());
@@ -302,6 +303,7 @@ Future<Response> RegistryClientProcess::doHttpGet(
             out << ", " << message.get().value;
           }
         }
+
         return Failure("Received Bad request, errors: [" + out.str() + "]");
       }
 
@@ -471,18 +473,82 @@ Future<ManifestResponse> RegistryClientProcess::getManifest(
       return Error("Failed to find \"fsLayers\" in manifest response");
     }
 
+    Result<JSON::Array> historyArray =
+      responseJSON.get().find<JSON::Array>("history");
+
+    if (historyArray.isNone()) {
+      return Error("Failed to find \"history\" in manifest response");
+    }
+
+    if (historyArray.get().values.size() != fsLayers.get().values.size()) {
+      return Error(
+          "\"history\" and \"fsLayers\" array count mismatch"
+          "in manifest response");
+    }
+
     vector<FileSystemLayerInfo> fsLayerInfoList;
+    size_t index = 0;
+
     foreach (const JSON::Value& layer, fsLayers.get().values) {
+      if (!layer.is<JSON::Object>()) {
+        return Error(
+            "Failed to parse layer as a JSON object for index: " +
+            stringify(index));
+      }
+
       const JSON::Object& layerInfoJSON = layer.as<JSON::Object>();
-      Result<JSON::String> blobSumInfo =
+
+      // Get blobsum for layer.
+      const Result<JSON::String> blobSumInfo =
         layerInfoJSON.find<JSON::String>("blobSum");
 
       if (blobSumInfo.isNone()) {
         return Error("Failed to find \"blobSum\" in manifest response");
       }
 
+      // Get history for layer.
+      if (!historyArray.get().values[index].is<JSON::Object>()) {
+        return Error(
+            "Failed to parse history as a JSON object for index: " +
+            stringify(index));
+      }
+      const JSON::Object& historyObj =
+        historyArray.get().values[index].as<JSON::Object>();
+
+      // Get layer id.
+      const Result<JSON::String> v1CompatibilityJSON =
+        historyObj.find<JSON::String>("v1Compatibility");
+
+      if (!v1CompatibilityJSON.isSome()) {
+        return Error(
+            "Failed to obtain layer v1 compability json in manifest for layer: "
+            + stringify(index));
+      }
+
+      Try<JSON::Object> v1CompatibilityObj =
+        JSON::parse<JSON::Object>(v1CompatibilityJSON.get().value);
+
+      if (!v1CompatibilityObj.isSome()) {
+        return Error(
+            "Failed to parse v1 compability json in manifest for layer: "
+            + stringify(index));
+      }
+
+      const Result<JSON::String> id =
+        v1CompatibilityObj.get().find<JSON::String>("id");
+
+      if (!id.isSome()) {
+        return Error(
+            "Failed to find \"id\" in manifest for layer: " + stringify(index));
+      }
+
       fsLayerInfoList.emplace_back(
-          FileSystemLayerInfo{blobSumInfo.get().value});
+          FileSystemLayerInfo{
+            blobSumInfo.get().value,
+            id.get().value,
+          });
+
+      index++;
     }
 
     return ManifestResponse {
