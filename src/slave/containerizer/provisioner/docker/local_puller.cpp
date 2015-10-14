@@ -21,7 +21,6 @@
 
 #include <glog/logging.h>
 
-#include <stout/hashset.hpp>
 #include <stout/json.hpp>
 #include <stout/os.hpp>
 #include <stout/result.hpp>
@@ -78,7 +77,6 @@ private:
       const std::string& layerId);
 
   const Flags flags;
-  hashset<std::string> imagePool;
 };
 
 
@@ -198,12 +196,6 @@ Future<list<pair<string, string>>> LocalPullerProcess::putImage(
     const Image::Name& name,
     const string& directory)
 {
-  if(!imagePool.contains(stringify(name))) {
-    imagePool.insert(stringify(name));
-  } else {
-    return Failure("Failed to read image from the previous untarred directory");
-  }
-
   Try<string> value =
     os::read(paths::getImageArchiveRepositoriesPath(directory));
 

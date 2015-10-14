@@ -76,6 +76,7 @@ private:
   // by the name of the Image.
   // For example, "ubuntu:14.04" -> ubuntu14:04 Image.
   hashmap<std::string, Image> storedImages;
+  hashset<std::string> imagePool;
 };
 
 
@@ -151,6 +152,12 @@ Future<Image> MetadataManagerProcess::put(
 Future<Option<Image>> MetadataManagerProcess::get(
     const Image::Name& name)
 {
+  if(!imagePool.contains(stringify(name))) {
+    imagePool.insert(stringify(name));
+  } else {
+    return Failure("Failed to read image from the previous untarred directory");
+  }
+
   const string imageName = stringify(name);
 
   if (!storedImages.contains(imageName)) {
