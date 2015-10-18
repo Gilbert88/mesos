@@ -11,34 +11,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef __STOUT_OS_WINDOWS_READ_HPP__
-#define __STOUT_OS_WINDOWS_READ_HPP__
+#ifndef __STOUT_OS_REALPATH_HPP__
+#define __STOUT_OS_REALPATH_HPP__
 
-#include <stdio.h>
-
-#include <string>
 
 #include <stout/result.hpp>
-#include <stout/try.hpp>
+
+#ifdef __WINDOWS__
+#include <stout/windows.hpp>
+#endif
 
 
 namespace os {
 
-// Reads 'size' bytes from a file from its current offset.
-// If EOF is encountered before reading 'size' bytes then the result
-// will contain the bytes read and a subsequent read will return None.
-inline Result<std::string> read(int fd, size_t size)
+inline Result<std::string> realpath(const std::string& path)
 {
-  UNIMPLEMENTED;
-}
-
-
-// Returns the contents of the file.
-inline Try<std::string> read(const std::string& path)
-{
-  UNIMPLEMENTED;
+  char temp[PATH_MAX];
+  if (::realpath(path.c_str(), temp) == NULL) {
+    if (errno == ENOENT || errno == ENOTDIR) {
+      return None();
+    }
+    return ErrnoError();
+  }
+  return std::string(temp);
 }
 
 } // namespace os {
 
-#endif // __STOUT_OS_WINDOWS_READ_HPP__
+#endif // __STOUT_OS_REALPATH_HPP__

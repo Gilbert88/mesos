@@ -11,24 +11,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-#ifndef __STOUT_OS_WINDOWS_OPEN_HPP__
-#define __STOUT_OS_WINDOWS_OPEN_HPP__
-
-#include <sys/types.h>
-
-#include <string>
-
-#include <stout/try.hpp>
+#ifndef __STOUT_OS_FTRUNCATE_HPP__
+#define __STOUT_OS_FTRUNCATE_HPP__
 
 
-namespace os {
+// For readability, we minimize the number of #ifdef blocks in the code by
+// splitting platform specifc system calls into separate directories.
+#ifdef __WINDOWS__
+#include <stout/os/windows/ftruncate.hpp>
+#else
+#include <stout/os/posix/ftruncate.hpp>
+#endif // __WINDOWS__
 
-inline Try<int> open(const std::string& path, int oflag, mode_t mode = 0)
-{
-  UNIMPLEMENTED;
-}
 
-} // namespace os {
-
-#endif // __STOUT_OS_WINDOWS_OPEN_HPP__
+#endif // __STOUT_OS_FTRUNCATE_HPP__
