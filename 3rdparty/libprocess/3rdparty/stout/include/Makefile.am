@@ -54,6 +54,7 @@ nobase_include_HEADERS =		\
   stout/os.hpp				\
   stout/os/bootid.hpp			\
   stout/os/close.hpp			\
+  stout/os/environment.hpp		\
   stout/os/exists.hpp			\
   stout/os/fcntl.hpp			\
   stout/os/fork.hpp			\
@@ -89,6 +90,7 @@ nobase_include_HEADERS =		\
   stout/os/pstree.hpp			\
   stout/os/sysctl.hpp			\
   stout/os/write.hpp			\
+  stout/os/raw/environment.hpp		\
   stout/os/windows/bootid.hpp		\
   stout/os/windows/exists.hpp		\
   stout/os/windows/fcntl.hpp		\
