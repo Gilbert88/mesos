@@ -25,7 +25,7 @@
 
 #include <mesos/mesos.hpp>
 
-#include "slave/containerizer/provisioner/docker/message.hpp"
+#include "slave/containerizer/mesos/provisioner/docker/message.hpp"
 
 namespace mesos {
 namespace internal {

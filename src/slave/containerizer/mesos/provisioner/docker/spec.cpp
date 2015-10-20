@@ -21,7 +21,7 @@
 #include <stout/protobuf.hpp>
 #include <stout/strings.hpp>
 
-#include "slave/containerizer/provisioner/docker/spec.hpp"
+#include "slave/containerizer/mesos/provisioner/docker/spec.hpp"
 
 using std::string;
 
