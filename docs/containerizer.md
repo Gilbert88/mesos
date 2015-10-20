@@ -82,3 +82,55 @@ The interval between two `du`s can be controlled by the slave flag
 `--container_disk_watch_interval`. For example,
 `--container_disk_watch_interval=1mins` sets the interval to be 1
 minute. The default interval is 15 seconds.
+
+### Resource Usage
+
+To collect resource usage statistics for the MesosContainerizer, an usage api is provided. Given a `ContainerID`, `mesos::ResourceStatistics` can be returned by calling the following method in MesosContainerizer:
+
+~~~{.cpp}
+process::Future<ResourceStatistics> usage(const ContainerID& containerId);
+~~~
+
+The returned type `mesos::ResourceStatistics` is defined as a protobuf and can be easily interpreted. Here is an example of partial resource usage statistics defined in this protobuf message:
+
+~~~{.cpp}
+/*
+ * A snapshot of resource usage statistics.
+ */
+message ResourceStatistics {
+  required double timestamp = 1; // Snapshot time, in seconds since the Epoch.
+
+  // CPU Usage Information:
+  // Total CPU time spent in user mode, and kernel mode.
+  optional double cpus_user_time_secs = 2;
+  optional double cpus_system_time_secs = 3;
+
+  // Number of CPUs allocated.
+  optional double cpus_limit = 4;
+
+  // Memory Usage Information:
+  optional uint64 mem_rss_bytes = 5; // Resident Set Size.
+
+  // Amount of memory resources allocated.
+  optional uint64 mem_limit_bytes = 6;
+}
+~~~
+
+While the External Containerizaer returns `mesos::ResourceStatistics` via stdout, MesosContainerizer returns `mesos::ResourceStatistics` only, but usage can be interpreted by the following example:
+
+~~~{.cpp}
+Try<ResourceStatistics> statistics =
+    MesosContainerizer::usage(containerId);
+
+if (statistics.isError()) {
+  return Failure(statistics.error());
+}
+
+VLOG(2) << "Container '" << containerId << "' "
+        << "total mem usage "
+        << statistics.get().mem_rss_bytes() << " "
+        << "total CPU user usage "
+        << statistics.get().cpus_user_time_secs() << " "
+        << "total CPU system usage "
+        << statistics.get().cpus_system_time_secs();
+~~~

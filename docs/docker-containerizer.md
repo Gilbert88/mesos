@@ -77,3 +77,55 @@ If shell option is set to true the Docker Containerizer will run the user's comm
 The Docker containerizer supports recovering Docker containers when the slave restarts, which supports both when the slave is running in a Docker container or not.
 
 With the `--docker_mesos_image` flag enabled, the Docker containerizer assumes the containerizer is running in a container itself and modifies the mechanism it recovers and launches docker containers accordingly.
+
+## Resource Usage
+
+Docker containerizer `usage()` can only be supported on linux platform. The resource usage statistics are collected through `cgroupsStatistics()`, which is implemented by cgroup methods. Given a `ContainerID`, `mesos::ResourceStatistics` can be returned by calling the following method in MesosContainerizer:
+
+~~~{.cpp}
+process::Future<ResourceStatistics> usage(const ContainerID& containerId);
+~~~
+
+The returned type `mesos::ResourceStatistics` is defined as a protobuf. Here is an example of partial resource usage statistics defined in this protobuf message:
+
+~~~{.cpp}
+/*
+ * A snapshot of resource usage statistics.
+ */
+message ResourceStatistics {
+  required double timestamp = 1; // Snapshot time, in seconds since the Epoch.
+
+  // CPU Usage Information:
+  // Total CPU time spent in user mode, and kernel mode.
+  optional double cpus_user_time_secs = 2;
+  optional double cpus_system_time_secs = 3;
+
+  // Number of CPUs allocated.
+  optional double cpus_limit = 4;
+
+  // Memory Usage Information:
+  optional uint64 mem_rss_bytes = 5; // Resident Set Size.
+
+  // Amount of memory resources allocated.
+  optional uint64 mem_limit_bytes = 6;
+}
+~~~
+
+Docker containerizer `usage()` returns `mesos::ResourceStatistics`. Usage can be interpreted by the following example:
+
+~~~{.cpp}
+Try<ResourceStatistics> statistics =
+    DockerContainerizer::usage(containerId);
+
+if (statistics.isError()) {
+  return Failure(statistics.error());
+}
+
+VLOG(2) << "Container '" << containerId << "' "
+        << "total mem usage "
+        << statistics.get().mem_rss_bytes() << " "
+        << "total CPU user usage "
+        << statistics.get().cpus_user_time_secs() << " "
+        << "total CPU system usage "
+        << statistics.get().cpus_system_time_secs();
+~~~
