@@ -1485,12 +1485,8 @@ void DockerContainerizerProcess::_destroy(
   // for a task).
   LOG(INFO) << "Running docker stop on container '" << containerId << "'";
 
-  if (killed) {
-    docker->stop(container->name(), flags.docker_stop_timeout)
-      .onAny(defer(self(), &Self::__destroy, containerId, killed, lambda::_1));
-  } else {
-    __destroy(containerId, killed, Nothing());
-  }
+  docker->stop(container->name(), flags.docker_stop_timeout)
+    .onAny(defer(self(), &Self::__destroy, containerId, killed, lambda::_1));
 }
 
 
