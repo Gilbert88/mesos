@@ -59,7 +59,7 @@ Option<Error> validateManifest(const DockerImageManifest& manifest)
            manifest.fslayers()) {
     const string& blobSum = fsLayers.blobsum();
     if (!strings::contains(blobSum, ":")) {
-      return Error("Incorrect 'blobSum' format: " + bloSum);
+      return Error("Incorrect 'blobSum' format: " + blobSum);
     }
   }
 
