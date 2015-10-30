@@ -57,7 +57,7 @@ Option<Error> validateManifest(const DockerImageManifest& manifest)
   // FsLayers field validation.
   foreach (const DockerImageManifest::FsLayers& fslayer,
            manifest.fslayers()) {
-    const string& blobSum = fslayers.blobsum();
+    const string& blobSum = fslayer.blobsum();
     if (!strings::contains(blobSum, ":")) {
       return Error("Incorrect 'blobSum' format: " + blobSum);
     }
