@@ -55,11 +55,10 @@ Option<Error> validateManifest(const DockerImageManifest& manifest)
   }
 
   // FsLayers field validation.
-  foreach (const docker::DockerImageManifest::FsLayers& fslayer,
+  foreach (const DockerImageManifest::FsLayers& fslayer,
            manifest.fslayers()) {
-    const string& blobSum = fslayer.blobsum();
-    if (!strings::contains(blobSum, ":")) {
-      return Error("Incorrect blobSum format");
+    if (!strings::contains(fslayer.blobsum(), ":")) {
+      return Error("Incorrect 'blobSum " fslayer.blobsum() "' format");
     }
   }
 
@@ -67,10 +66,10 @@ Option<Error> validateManifest(const DockerImageManifest& manifest)
 }
 
 
-Try<docker::DockerImageManifest> parse(const JSON::Object& json)
+Try<DockerImageManifest> parse(const JSON::Object& json)
 {
-  Try<docker::DockerImageManifest> manifest =
-    protobuf::parse<docker::DockerImageManifest>(json);
+  Try<DockerImageManifest> manifest =
+    protobuf::parse<DockerImageManifest>(json);
 
   if (manifest.isError()) {
     return Error("Protobuf parse failed: " + manifest.error());
