@@ -60,12 +60,11 @@ namespace slave {
 namespace docker {
 namespace registry {
 
-using FileSystemLayerInfo = RegistryClient::FileSystemLayerInfo;
-using ManifestResponse = RegistryClient::ManifestResponse;
 
 const Duration RegistryClient::DEFAULT_MANIFEST_TIMEOUT_SECS = Seconds(10);
 const size_t RegistryClient::DEFAULT_MANIFEST_MAXSIZE_BYTES = 4096;
 static const uint16_t DEFAULT_SSL_PORT = 443;
+
 
 class RegistryClientProcess : public Process<RegistryClientProcess>
 {
@@ -73,9 +72,9 @@ public:
   static Try<Owned<RegistryClientProcess>> create(
       const URL& registry,
       const URL& authServer,
-      const Option<RegistryClient::Credentials>& creds);
+      const Option<Credentials>& creds);
 
-  Future<RegistryClient::ManifestResponse> getManifest(
+  Future<Manifest> getManifest(
       const string& path,
       const Option<string>& tag,
       const Duration& timeout);
@@ -91,7 +90,7 @@ private:
   RegistryClientProcess(
     const URL& registryServer,
     const Owned<TokenManager>& tokenManager,
-    const Option<RegistryClient::Credentials>& creds);
+    const Option<Credentials>& creds);
 
   Future<http::Response> doHttpGet(
       const URL& url,
@@ -105,7 +104,7 @@ private:
 
   const URL registryServer_;
   Owned<TokenManager> tokenManager_;
-  const Option<RegistryClient::Credentials> credentials_;
+  const Option<Credentials> credentials_;
 
   RegistryClientProcess(const RegistryClientProcess&) = delete;
   RegistryClientProcess& operator = (const RegistryClientProcess&) = delete;
@@ -150,7 +149,7 @@ RegistryClient::~RegistryClient()
 }
 
 
-Future<ManifestResponse> RegistryClient::getManifest(
+Future<Manifest> RegistryClient::getManifest(
     const string& _path,
     const Option<string>& _tag,
     const Option<Duration>& _timeout)
@@ -190,7 +189,7 @@ Future<size_t> RegistryClient::getBlob(
 Try<Owned<RegistryClientProcess>> RegistryClientProcess::create(
     const URL& registryServer,
     const URL& authServer,
-    const Option<RegistryClient::Credentials>& creds)
+    const Option<Credentials>& creds)
 {
   Try<Owned<TokenManager>> tokenMgr = TokenManager::create(authServer);
   if (tokenMgr.isError()) {
@@ -205,7 +204,7 @@ Try<Owned<RegistryClientProcess>> RegistryClientProcess::create(
 RegistryClientProcess::RegistryClientProcess(
     const URL& registryServer,
     const Owned<TokenManager>& tokenMgr,
-    const Option<RegistryClient::Credentials>& creds)
+    const Option<Credentials>& creds)
   : registryServer_(registryServer),
     tokenManager_(tokenMgr),
     credentials_(creds) {}
@@ -443,7 +442,7 @@ Future<http::Response> RegistryClientProcess::doHttpGet(
 }
 
 
-Future<ManifestResponse> RegistryClientProcess::getManifest(
+Future<Manifest> RegistryClientProcess::getManifest(
     const string& path,
     const Option<string>& tag,
     const Duration& timeout)
@@ -461,8 +460,7 @@ Future<ManifestResponse> RegistryClientProcess::getManifest(
   manifestURL.path =
     "v2/" + path + "/manifests/" + repoTag;
 
-  auto getManifestResponse = [](const http::Response& httpResponse)
-      -> Try<ManifestResponse> {
+  auto getManifest = [](const http::Response& httpResponse) -> Try<Manifest> {
     if (!httpResponse.headers.contains("Docker-Content-Digest")) {
       return Error("Docker-Content-Digest header missing in response");
     }
@@ -564,7 +562,7 @@ Future<ManifestResponse> RegistryClientProcess::getManifest(
       index++;
     }
 
-    return ManifestResponse {
+    return Manifest {
       name.get().value,
       httpResponse.headers.at("Docker-Content-Digest"),
       fsLayerInfoList,
@@ -572,16 +570,15 @@ Future<ManifestResponse> RegistryClientProcess::getManifest(
   };
 
   return doHttpGet(manifestURL, None(), timeout, true, None())
-    .then([getManifestResponse] (const http::Response& response)
-        -> Future<ManifestResponse> {
-      Try<ManifestResponse> manifestResponse = getManifestResponse(response);
+    .then([getManifest] (const http::Response& response) -> Future<Manifest> {
+      Try<Manifest> manifest = getManifest(response);
 
-      if (manifestResponse.isError()) {
+      if (manifest.isError()) {
         return Failure(
-            "Failed to parse manifest response: " + manifestResponse.error());
+            "Failed to parse manifest response: " + manifest.error());
       }
 
-      return manifestResponse.get();
+      return manifest.get();
     });
 }
 
