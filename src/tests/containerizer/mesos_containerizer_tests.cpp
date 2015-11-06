@@ -569,7 +569,7 @@ TEST_F(MesosContainerizerDestroyTest, DestroyWhileFetching)
     .WillOnce(DoAll(FutureSatisfy(&exec),
                     Return(promise.future())));
 
-  MesosContainerizer containerizer(Owned<MesosContainerizerProcess>(process));
+  MesosContainerizer containerizer((Owned<MesosContainerizerProcess>(process)));
 
   ContainerID containerId;
   containerId.set_value("test_container");
