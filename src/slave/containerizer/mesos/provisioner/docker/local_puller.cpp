@@ -345,7 +345,7 @@ Future<pair<string, string>> LocalPullerProcess::putLayer(
                        " '" + layerId + "'");
       }
 
-      LOG << "!!!!(" << layerId << ", " << rootfsPath << ")!!!!!!";
+      LOG(WARNING) << "!!!!(" << layerId << ", " << rootfsPath << ")!!!!!!";
 
       return pair<string, string>(layerId, rootfsPath);
     });

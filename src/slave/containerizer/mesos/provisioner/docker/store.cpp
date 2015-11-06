@@ -184,7 +184,7 @@ Future<Image> StoreProcess::_get(
     .then(defer(self(), &Self::moveLayers, staging.get(), lambda::_1))
     .then(defer(self(), &Self::storeImage, name, lambda::_1))
     .onAny([staging]() {
-      LOG << "!!!!!!!!!!!!" << staging.get();
+      LOG(WARNING) << "!!!!!!!!!!!!" << staging.get();
       Try<Nothing> rmdir = os::rmdir(staging.get());
       if (rmdir.isError()) {
         LOG(WARNING) << "Failed to remove staging directory: " << rmdir.error();
