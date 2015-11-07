@@ -3030,8 +3030,8 @@ void Slave::forward(StatusUpdate update)
 
   // Ensure that task status uuid is set even if this update was sent by the
   // status update manager after recovering a pre 0.23.x slave/executor driver's
-  // updates. This allows us to simplify the master code (in >= 0.27.0) to asume
-  // the uuid is always set for retryable updates.
+  // updates. This allows us to simplify the master code (in >= 0.27.0) to
+  // assume the uuid is always set for retryable updates.
   CHECK(update.has_uuid())
     << "Expecting updates without 'uuid' to have been rejected";
 
@@ -3252,8 +3252,7 @@ ExecutorInfo Slave::getExecutorInfo(
     executor.mutable_executor_id()->set_value(task.task_id().value());
     executor.mutable_framework_id()->CopyFrom(frameworkInfo.id());
 
-    if (task.has_container() &&
-        task.container().type() != ContainerInfo::MESOS) {
+    if (task.has_container()) {
       // Store the container info in the executor info so it will
       // be checkpointed. This allows the correct containerizer to
       // recover this task on restart.
@@ -3266,6 +3265,16 @@ ExecutorInfo Slave::getExecutorInfo(
 
     if (hasRootfs) {
       ContainerInfo* container = executor.mutable_container();
+
+      // For command-tasks, we are now copying the entire `task.container` into
+      // the `executorInfo`. Thus, `executor.container` now has the image if
+      // `task.container` had one. However, in case of rootfs, we want to run
+      // the command executor in the host filesystem and prepare/mount the image
+      // into the container as a volume (command executor will use pivot_root to
+      // mount the image). For this reason, we need to strip the image in
+      // `executor.container.mesos`.
+      container->mutable_mesos()->clear_image();
+
       container->set_type(ContainerInfo::MESOS);
       Volume* volume = container->add_volumes();
       volume->mutable_image()->CopyFrom(task.container().mesos().image());
