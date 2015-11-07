@@ -75,7 +75,6 @@ private:
   Future<vector<string>> __get(const Image& image);
 
   Future<vector<string>> moveLayers(
-      const std::string& staging,
       const std::list<pair<string, string>>& layerPaths);
 
   Future<Image> storeImage(
