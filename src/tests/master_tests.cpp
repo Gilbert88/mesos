@@ -53,6 +53,8 @@
 #include "master/flags.hpp"
 #include "master/master.hpp"
 
+#include "master/allocator/mesos/allocator.hpp"
+
 #include "slave/constants.hpp"
 #include "slave/gc.hpp"
 #include "slave/flags.hpp"
@@ -3168,13 +3170,13 @@ TEST_F(MasterTest, TaskLabels)
 
   // Verify the contents of 'foo:bar', 'bar:baz', and 'bar:qux' pairs.
   EXPECT_EQ(
-      JSON::Value(JSON::Protobuf(createLabel("foo", "bar"))),
+      JSON::Value(JSON::protobuf(createLabel("foo", "bar"))),
       labelsObject.values[0]);
   EXPECT_EQ(
-      JSON::Value(JSON::Protobuf(createLabel("bar", "baz"))),
+      JSON::Value(JSON::protobuf(createLabel("bar", "baz"))),
       labelsObject.values[1]);
   EXPECT_EQ(
-      JSON::Value(JSON::Protobuf(createLabel("bar", "qux"))),
+      JSON::Value(JSON::protobuf(createLabel("bar", "qux"))),
       labelsObject.values[2]);
 
   EXPECT_CALL(exec, shutdown(_))
@@ -3270,13 +3272,13 @@ TEST_F(MasterTest, TaskStatusLabels)
 
   // Verify the content of 'foo:bar' pair.
   EXPECT_EQ(
-      JSON::Value(JSON::Protobuf(createLabel("foo", "bar"))),
+      JSON::Value(JSON::protobuf(createLabel("foo", "bar"))),
       labelsObject.values[0]);
   EXPECT_EQ(
-      JSON::Value(JSON::Protobuf(createLabel("bar", "baz"))),
+      JSON::Value(JSON::protobuf(createLabel("bar", "baz"))),
       labelsObject.values[1]);
   EXPECT_EQ(
-      JSON::Value(JSON::Protobuf(createLabel("bar", "qux"))),
+      JSON::Value(JSON::protobuf(createLabel("bar", "qux"))),
       labelsObject.values[2]);
 
   EXPECT_CALL(exec, shutdown(_))
@@ -3339,13 +3341,11 @@ TEST_F(MasterTest, TaskStatusContainerStatus)
 
   // Validate that the Slave has passed in its IP address in
   // TaskStatus.container_status.network_infos[0].ip_address.
-  EXPECT_TRUE(status.get().has_container_status());
-  EXPECT_EQ(1, status.get().container_status().network_infos().size());
-  EXPECT_TRUE(
-      status.get().container_status().network_infos(0).has_ip_address());
-  EXPECT_EQ(
-      slaveIPAddress,
-      status.get().container_status().network_infos(0).ip_address());
+  EXPECT_TRUE(status->has_container_status());
+  ContainerStatus containerStatus = status->container_status();
+  EXPECT_EQ(1, containerStatus.network_infos().size());
+  EXPECT_TRUE(containerStatus.network_infos(0).has_ip_address());
+  EXPECT_EQ(slaveIPAddress, containerStatus.network_infos(0).ip_address());
 
   // Now do the same validation with state endpoint.
   Future<process::http::Response> response =
@@ -3366,6 +3366,44 @@ TEST_F(MasterTest, TaskStatusContainerStatus)
       parse.get().find<JSON::String>(
           "frameworks[0].tasks[0].statuses[0]"
           ".container_status.network_infos[0].ip_address"));
+
+  // Now test for explicit reconciliation.
+  Future<TaskStatus> explicitReconciliationStatus;
+  EXPECT_CALL(sched, statusUpdate(&driver, _))
+    .WillOnce(FutureArg<1>(&explicitReconciliationStatus));
+
+  // Send a task status to trigger explicit reconciliation.
+  TaskStatus taskStatus;
+  taskStatus.mutable_task_id()->CopyFrom(status->task_id());
+  // State is not checked by reconciliation, but is required to be
+  // a valid task status.
+  taskStatus.set_state(TASK_RUNNING);
+  driver.reconcileTasks({taskStatus});
+
+  AWAIT_READY(explicitReconciliationStatus);
+  EXPECT_EQ(TASK_RUNNING, explicitReconciliationStatus->state());
+  EXPECT_TRUE(explicitReconciliationStatus->has_container_status());
+
+  containerStatus = explicitReconciliationStatus->container_status();
+  EXPECT_EQ(1, containerStatus.network_infos().size());
+  EXPECT_TRUE(containerStatus.network_infos(0).has_ip_address());
+  EXPECT_EQ(slaveIPAddress, containerStatus.network_infos(0).ip_address());
+
+  Future<TaskStatus> implicitReconciliationStatus;
+  EXPECT_CALL(sched, statusUpdate(&driver, _))
+    .WillOnce(FutureArg<1>(&implicitReconciliationStatus));
+
+  // Send an empty vector of task statuses to trigger implicit reconciliation.
+  driver.reconcileTasks({});
+
+  AWAIT_READY(implicitReconciliationStatus);
+  EXPECT_EQ(TASK_RUNNING, implicitReconciliationStatus->state());
+  EXPECT_TRUE(implicitReconciliationStatus->has_container_status());
+
+  containerStatus = implicitReconciliationStatus->container_status();
+  EXPECT_EQ(1, containerStatus.network_infos().size());
+  EXPECT_TRUE(containerStatus.network_infos(0).has_ip_address());
+  EXPECT_EQ(slaveIPAddress, containerStatus.network_infos(0).ip_address());
 
   EXPECT_CALL(exec, shutdown(_))
     .Times(AtMost(1));
@@ -3487,6 +3525,7 @@ TEST_F(MasterTest, TaskDiscoveryInfo)
   port2->set_number(9999);
   port2->set_name("myport2");
   port2->set_protocol("udp");
+  port2->set_visibility(DiscoveryInfo::CLUSTER);
 
   // Add two labels to the discovery info.
   Labels* labels = info->mutable_labels();
@@ -3583,7 +3622,8 @@ TEST_F(MasterTest, TaskDiscoveryInfo)
       "{"
       "  \"number\":9999,"
       "  \"name\":\"myport2\","
-      "  \"protocol\":\"udp\""
+      "  \"protocol\":\"udp\","
+      "  \"visibility\":\"CLUSTER\""
       "}");
   ASSERT_SOME(expected);
   EXPECT_EQ(expected.get(), portsArray.values[1]);
@@ -3598,12 +3638,12 @@ TEST_F(MasterTest, TaskDiscoveryInfo)
 
   // Verify the content of 'clearance:high' pair.
   EXPECT_EQ(
-      JSON::Value(JSON::Protobuf(createLabel("clearance", "high"))),
+      JSON::Value(JSON::protobuf(createLabel("clearance", "high"))),
       labelsArray.values[0]);
 
   // Verify the content of 'RPC:yes' pair.
   EXPECT_EQ(
-      JSON::Value(JSON::Protobuf(createLabel("RPC", "yes"))),
+      JSON::Value(JSON::protobuf(createLabel("RPC", "yes"))),
       labelsArray.values[1]);
 
   EXPECT_CALL(exec, shutdown(_))
@@ -3813,15 +3853,15 @@ TEST_F(MasterTest, FrameworkInfoLabels)
   JSON::Array labelsObject_ = labelsObject.get();
 
   EXPECT_EQ(
-      JSON::Value(JSON::Protobuf(createLabel("foo", "bar"))),
+      JSON::Value(JSON::protobuf(createLabel("foo", "bar"))),
       labelsObject_.values[0]);
 
   EXPECT_EQ(
-      JSON::Value(JSON::Protobuf(createLabel("bar", "baz"))),
+      JSON::Value(JSON::protobuf(createLabel("bar", "baz"))),
       labelsObject_.values[1]);
 
   EXPECT_EQ(
-      JSON::Value(JSON::Protobuf(createLabel("bar", "qux"))),
+      JSON::Value(JSON::protobuf(createLabel("bar", "qux"))),
       labelsObject_.values[2]);
 
   driver.stop();

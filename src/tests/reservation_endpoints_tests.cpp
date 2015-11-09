@@ -36,11 +36,14 @@
 #include "master/flags.hpp"
 #include "master/master.hpp"
 
+#include "tests/allocator.hpp"
 #include "tests/mesos.hpp"
 #include "tests/utils.hpp"
 
 using std::string;
 using std::vector;
+
+using google::protobuf::RepeatedPtrField;
 
 using mesos::internal::master::Master;
 using mesos::internal::slave::Slave;
@@ -63,23 +66,6 @@ using testing::Return;
 namespace mesos {
 namespace internal {
 namespace tests {
-
-
-// Converts a 'RepeatedPtrField<Resource>' to a 'JSON::Array'.
-// TODO(mpark): Generalize this to 'JSON::protobuf(RepeatedPtrField<T>)'.
-JSON::Array toJSONArray(
-    const google::protobuf::RepeatedPtrField<Resource>& resources)
-{
-  JSON::Array array;
-
-  array.values.reserve(resources.size());
-
-  foreach (const Resource& resource, resources) {
-    array.values.push_back(JSON::Protobuf(resource));
-  }
-
-  return array;
-}
 
 
 class ReservationEndpointsTest : public MesosTest
@@ -114,12 +100,12 @@ public:
   }
 
   string createRequestBody(
-      const SlaveID& slaveId, const Resources& resources) const
+      const SlaveID& slaveId, const RepeatedPtrField<Resource>& resources) const
   {
     return strings::format(
         "slaveId=%s&resources=%s",
         slaveId.value(),
-        toJSONArray(resources)).get();
+        JSON::protobuf(resources)).get();
   }
 };
 
@@ -843,7 +829,10 @@ TEST_F(ReservationEndpointsTest, NoSlaveId)
       "role", createReservationInfo(DEFAULT_CREDENTIAL.principal()));
 
   process::http::Headers headers = createBasicAuthHeaders(DEFAULT_CREDENTIAL);
-  string body = "resources=" + stringify(toJSONArray(dynamicallyReserved));
+  string body =
+    "resources=" +
+    stringify(JSON::protobuf(
+        static_cast<const RepeatedPtrField<Resource>&>(dynamicallyReserved)));
 
   Future<Response> response =
     process::http::post(master.get(), "reserve", headers, body);

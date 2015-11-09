@@ -47,6 +47,8 @@
 
 #include "master/master.hpp"
 
+#include "master/allocator/mesos/allocator.hpp"
+
 #include "sched/constants.hpp"
 
 #include "slave/constants.hpp"
@@ -1938,7 +1940,7 @@ TEST_F(FaultToleranceTest, UpdateFrameworkInfoOnSchedulerFailover)
   JSON::Array labels = framework.values["labels"].as<JSON::Array>();
 
   EXPECT_EQ(
-      JSON::Value(JSON::Protobuf(createLabel("baz", "qux"))),
+      JSON::Value(JSON::protobuf(createLabel("baz", "qux"))),
       labels.values[0]);
 
   EXPECT_EQ(DRIVER_STOPPED, driver2.stop());
