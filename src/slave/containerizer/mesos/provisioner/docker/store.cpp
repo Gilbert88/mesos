@@ -75,7 +75,6 @@ private:
   Future<vector<string>> __get(const Image& image);
 
   Future<vector<string>> moveLayers(
-      const std::string& staging,
       const std::list<pair<string, string>>& layerPaths);
 
   Future<Image> storeImage(
@@ -180,8 +179,8 @@ Future<Image> StoreProcess::_get(
     return Failure("Failed to create a staging directory");
   }
 
-  return puller->pull(name, staging.get())
-    .then(defer(self(), &Self::moveLayers, staging.get(), lambda::_1))
+  return puller->pull(name, Path(staging.get()))
+    .then(defer(self(), &Self::moveLayers, lambda::_1))
     .then(defer(self(), &Self::storeImage, name, lambda::_1))
     .onAny([staging]() {
       Try<Nothing> rmdir = os::rmdir(staging.get());
@@ -212,7 +211,6 @@ Future<Nothing> StoreProcess::recover()
 
 
 Future<vector<string>> StoreProcess::moveLayers(
-    const string& staging,
     const list<pair<string, string>>& layerPaths)
 {
   list<Future<Nothing>> futures;

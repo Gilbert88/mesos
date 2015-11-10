@@ -22,6 +22,9 @@
 #include <list>
 #include <utility>
 
+#include <stout/duration.hpp>
+#include <stout/option.hpp>
+#include <stout/path.hpp>
 #include <stout/try.hpp>
 
 #include <process/future.hpp>
@@ -56,8 +59,21 @@ public:
    */
   virtual process::Future<std::list<std::pair<std::string, std::string>>> pull(
       const docker::Image::Name& name,
-      const std::string& directory) = 0;
+      const Path& directory) = 0;
 };
+
+
+/**
+ * Untars(extracts) the tar file(input param) to the given output directory.
+ *
+ * @param file tar file to be extracted.
+ * @param directory target directory for extracting the tar file.
+ * @return Nothing in case of success.
+ *         Failure otherwise.
+ */
+process::Future<Nothing> untar(
+    const std::string& file,
+    const std::string& directory);
 
 } // namespace docker {
 } // namespace slave {
