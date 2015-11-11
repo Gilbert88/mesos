@@ -554,6 +554,7 @@ libmesos_no_3rdparty_la_SOURCES =						\
 	slave/containerizer/mesos/mount.cpp					\
 	slave/containerizer/mesos/isolators/filesystem/posix.cpp		\
 	slave/containerizer/mesos/isolators/posix/disk.cpp			\
+	slave/containerizer/mesos/provisioner/backend.cpp			\
 	slave/containerizer/mesos/provisioner/paths.cpp				\
 	slave/containerizer/mesos/provisioner/provisioner.cpp			\
 	slave/containerizer/mesos/provisioner/store.cpp				\
