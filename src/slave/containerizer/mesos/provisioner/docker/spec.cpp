@@ -97,7 +97,7 @@ Try<docker::ManifestResponse> parseManifestResponse(
   auto createLayerInfo = [](
       const string& checksumInfo,
       const string& layerId)
-      -> Try<docker::Manifest::FileSystemLayerInfo> {
+      -> Try<ManifestResponse::FileSystemLayerInfo> {
     docker::ManifestResponse::FileSystemLayerInfo layerInfo;
     layerInfo.set_checksuminfo(checksumInfo);
     layerInfo.set_layerid(layerId);
@@ -106,7 +106,7 @@ Try<docker::ManifestResponse> parseManifestResponse(
 
   foreach(const FileSystemLayerInfo& fsLayerInfo,
           manifest.fsLayerInfos) {
-    Try<docker::Manifest::FileSystemLayerInfo> layerInfo =
+    Try<ManifestResponse::FileSystemLayerInfo> layerInfo =
       createLayerInfo(fsLayerInfo.checksumInfo, fsLayerInfo.layerId);
 
     if (!layerInfo.isSome()) {
