@@ -91,26 +91,25 @@ Try<DockerImageManifest> parse(const JSON::Object& json)
   return manifest.get();
 }
 
-Try<docker::DockerManifestResponse> parseManifestResponse(
-    const ManifestResponse& manifestResponse)
+Try<docker::Manifest> parseManifestResponse(
+    const Manifest& ManifestResponse)
 {
-  docker::DockerManifestResponse dockerManifestResponse;
-  dockerManifestResponse.set_name(manifestResponse.name);
-  dockerManifestResponse.set_digest(manifestResponse.digest);
+  docker::Manifest manifest;
+  manifest.set_name(ManifestResponse.name);
 
   auto createLayerInfo = [](
       const string& checksumInfo,
       const string& layerId)
-      -> Try<DockerManifestResponse::FileSystemLayerInfo> {
-    docker::DockerManifestResponse::FileSystemLayerInfo layerInfo;
+      -> Try<Manifest::FileSystemLayerInfo> {
+    docker::Manifest::FileSystemLayerInfo layerInfo;
     layerInfo.set_checksuminfo(checksumInfo);
     layerInfo.set_layerid(layerId);
     return layerInfo;
   };
 
   foreach(const FileSystemLayerInfo& fsLayerInfo,
-          manifestResponse.fsLayerInfoList) {
-    Try<docker::DockerManifestResponse::FileSystemLayerInfo> layerInfo =
+          ManifestResponse.fsLayerInfos) {
+    Try<docker::Manifest::FileSystemLayerInfo> layerInfo =
       createLayerInfo(fsLayerInfo.checksumInfo, fsLayerInfo.layerId);
 
     if (!layerInfo.isSome()) {
@@ -119,10 +118,10 @@ Try<docker::DockerManifestResponse> parseManifestResponse(
           + fsLayerInfo.layerId);
     }
 
-    dockerManifestResponse.add_filesystemlayerinfo()->CopyFrom(layerInfo.get());
+    manifest.add_filesystemlayerinfo()->CopyFrom(layerInfo.get());
   }
 
-  return dockerManifestResponse;
+  return manifest;
 }
 
 } // namespace spec {

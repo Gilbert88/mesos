@@ -101,18 +101,17 @@ message DockerImageManifest {
 
 
 /**
-* Protobuf for the Docker Registry Responses (encapsulating response of
+* Protobuf for the Docker Registry Responses (response for
 * "GET Manifest" request).
 * Reference: https://docs.docker.com/registry/spec/api
 */
-message DockerManifestResponse {
+message Manifest {
   required string name = 1;
-  required string digest = 2;
 
   message FileSystemLayerInfo {
     required string checksumInfo = 1;
     required string layerId = 2;
   }
 
-  repeated FileSystemLayerInfo fileSystemLayerInfo = 3;
+  repeated FileSystemLayerInfo fileSystemLayerInfo = 2;
 }
