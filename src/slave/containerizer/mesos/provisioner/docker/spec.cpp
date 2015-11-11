@@ -28,9 +28,6 @@ using std::string;
 
 using namespace mesos::internal::slave::docker::registry;
 
-using FileSystemLayerInfo = RegistryClient::FileSystemLayerInfo;
-using ManifestResponse = RegistryClient::ManifestResponse;
-
 namespace mesos {
 namespace internal {
 namespace slave {
