@@ -43,7 +43,7 @@ Try<docker::DockerImageManifest> parse(const JSON::Object& json);
 
 // Parse docker registry responses as protobuf.
 Try<docker::Manifest> parseManifestResponse(
-    const registry::RegistryClient::Manifest& manifest);
+    const registry::Manifest& manifest);
 
 } // namespace spec {
 } // namespace docker {
