@@ -97,7 +97,7 @@ Try<docker::ManifestResponse> parseManifestResponse(
   auto createLayerInfo = [](
       const string& checksumInfo,
       const string& layerId)
-      -> Try<Manifest::FileSystemLayerInfo> {
+      -> Try<docker::Manifest::FileSystemLayerInfo> {
     docker::ManifestResponse::FileSystemLayerInfo layerInfo;
     layerInfo.set_checksuminfo(checksumInfo);
     layerInfo.set_layerid(layerId);
