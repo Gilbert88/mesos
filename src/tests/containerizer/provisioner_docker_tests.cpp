@@ -836,11 +836,11 @@ TEST_F(RegistryClientTest, SimpleGetManifest)
 
   EXPECT_EQ(response.get().name(), "library/busybox");
   EXPECT_EQ(response.get().filesystemlayerinfo_size(), 3);
-  EXPECT_EQ(response.get().filesystemlayerinfo(0).layerid(),
+  EXPECT_EQ(response.get().filesystemlayerinfo(2).layerid(),
             "1ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
   EXPECT_EQ(response.get().filesystemlayerinfo(1).layerid(),
             "2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
-  EXPECT_EQ(response.get().filesystemlayerinfo(2).layerid(),
+  EXPECT_EQ(response.get().filesystemlayerinfo(0).layerid(),
             "3ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
 }
 
