@@ -42,8 +42,9 @@
 #include "tests/mesos.hpp"
 #include "tests/utils.hpp"
 
-#include "tests/containerizer/isolator.hpp"
 #include "tests/containerizer/launcher.hpp"
+
+#include "tests/containerizer/isolator.hpp"
 
 using namespace process;
 
