@@ -1399,17 +1399,13 @@ public:
           const slave::docker::Image::Name&,
           const Path&));
 
-  process::Future<std::list<std::pair<std::string, std::string>>> _pull(
+  process::Future<std::list<std::pair<std::string, std::string>>>
+    unmocked_pull(
       const slave::docker::Image::Name& name,
       const Path& directory)
   {
-    return Puller::pull(name, directory);
+    return std::list<std::pair<std::string, std::string>>();
   }
-
-  process::Future<std::list<std::pair<std::string, std::string>>>
-    unmocked_pull(
-      const slave::docker::Image::Name&,
-      const Path& directory);
 };
 
 
