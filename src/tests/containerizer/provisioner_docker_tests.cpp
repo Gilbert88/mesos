@@ -1442,20 +1442,20 @@ TEST_F(ProvisionerDockerLocalStoreTest, PullingSameImageSimutanuously)
   Future<vector<string>> layers1 = store.get()->get(mesosImage);
   AWAIT_READY(pull);
 
-  const string localRootfsPath1 = path::join(os::getcwd(), "rootfs1");
-  const string localRootfsPath2 = path::join(os::getcwd(), "rootfs2");
+  const string rootfsPath1 = path::join(os::getcwd(), "rootfs1");
+  const string rootfsPath2 = path::join(os::getcwd(), "rootfs2");
 
-  Try<Nothing> mkdir1 = os::mkdir(localRootfsPath1);
+  Try<Nothing> mkdir1 = os::mkdir(rootfsPath1);
   ASSERT_SOME(mkdir1);
-  Try<Nothing> mkdir2 = os::mkdir(localRootfsPath2);
+  Try<Nothing> mkdir2 = os::mkdir(rootfsPath2);
   ASSERT_SOME(mkdir2);
 
   ASSERT_TRUE(layers1.isPending());
   Future<vector<string>> layers2 = store.get()->get(mesosImage);
 
   const std::list<std::pair<std::string, std::string>> result =
-      {{"123", localRootfsPath1},
-       {"456", localRootfsPath2}};
+      {{"123", rootfsPath1},
+       {"456", rootfsPath2}};
 
   ASSERT_TRUE(layers2.isPending());
   promise.set(result);
