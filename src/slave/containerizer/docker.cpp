@@ -831,6 +831,14 @@ Future<Docker::Container> DockerContainerizerProcess::launchExecutorContainer(
   Container* container = containers_[containerId];
   container->state = Container::RUNNING;
 
+  // Check whether environment variable "MESOS_NATIVE_JAVA_LIBRARY"
+  // is set when creating docker container. If yes, erase it, because
+  // it should not be leaked to the docker executor. Please see
+  // MESOS-3866.
+  if (container->environment.count("MESOS_NATIVE_JAVA_LIBRARY")) {
+    container->environment.erase("MESOS_NATIVE_JAVA_LIBRARY");
+  }
+
   // Start the executor in a Docker container.
   // This executor could either be a custom executor specified by an
   // ExecutorInfo, or the docker executor.
