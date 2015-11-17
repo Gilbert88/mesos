@@ -1442,12 +1442,8 @@ TEST_F(ProvisionerDockerLocalStoreTest, PullingSameImageSimutanuously)
   Future<vector<string>> layers1 = store.get()->get(mesosImage);
   AWAIT_READY(pull);
 
-  const string localRootfsPath1 =
-      "/tmp/ProvisionerDockerLocalStoreTest_LocalStoreTestWithTar_hIvd5l/store/"
-      "staging/D4mAFe/123/rootfs";
-  const string localRootfsPath2 =
-      "/tmp/ProvisionerDockerLocalStoreTest_LocalStoreTestWithTar_hIvd5l/store/"
-      "staging/D4mAFe/456/rootfs";
+  const string localRootfsPath1 = path::join(os::getcwd(), "rootfs1");
+  const string localRootfsPath2 = path::join(os::getcwd(), "rootfs2");
 
   Try<Nothing> mkdir1 = os::mkdir(localRootfsPath1);
   ASSERT_SOME(mkdir1);
