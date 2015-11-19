@@ -326,8 +326,8 @@ TEST_F(DockerSpecTest, SerializeDockerManifest)
     \"history\": [  \
       { \
         \"v1Compatibility\": \
-          \"{\\\"id\\\": \
-    \\\"1ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\\\", \
+          \"{\"id\": \
+    \"1ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\", \
             \\\"parent\\\": \
     \\\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\\\" \
             }\" \
