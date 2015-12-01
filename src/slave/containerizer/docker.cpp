@@ -296,6 +296,7 @@ DockerContainerizerProcess::Container::create(
         checkpoint,
         flags,
         false);
+
     launchesExecutorContainer = true;
   }
 
@@ -351,10 +352,30 @@ Future<Nothing> DockerContainerizerProcess::pull(
     image,
     container->forcePullImage());
 
-  containers_[containerId]->pull = future;
+  container->pull = future;
 
-  return future.then(defer(self(), [=]() {
+  return future.then(defer(self(), [=](const Docker::Image& dockerImage) {
     VLOG(1) << "Docker pull " << image << " completed";
+
+    // Merge environment variables specified in docker image.
+    Option<map<string, string>> imageEnvironment = dockerImage.environment;
+
+    if (imageEnvironment.isNone()) {
+      return Nothing();
+    }
+
+    foreachpair (const string& key,
+                 const string& value,
+                 imageEnvironment.get()) {
+      container->environment[key] = value;
+    }
+
+    // Merge environment variables if they are set by ExecutorInfo.
+    foreach (const Environment::Variable& variable,
+             container->executor.command().environment().variables()) {
+      environment[variable.name()] = variable.value();
+    }
+
     return Nothing();
   }));
 }
