@@ -33,6 +33,13 @@ namespace mesos {
 namespace internal {
 namespace slave {
 
+// Runtime configuration struct includes execution configuration
+// (e.g., Entrypoint, Env, user, ports, etc).
+struct RuntimeConfig
+{
+  // TODO(gilbert): Add more runtime configurations from image.
+};
+
 // An image store abstraction that "stores" images. It serves as a
 // read-through cache (cache misses are fetched remotely and
 // transparently) for images.
