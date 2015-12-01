@@ -132,6 +132,19 @@ public:
 
     CHECK(task.container().type() == ContainerInfo::DOCKER);
 
+    map<string, string> environment;
+
+    if (task.container().docker().isSome() &&
+        task.container().docker().network() ==
+            ContainerInfo::DockerInfo::HOST) {
+      Option<string> libprocessIP = os:::getenv("LIBPROCESS_IP");
+      if (libprocessIP.isSome()) {
+        environment["LIBPROCESS_IP"] = libprocessIP.get();
+      }
+
+      environment["LIBPROCESS_PORT"] = "0";
+    }
+
     // We're adding task and executor resources to launch docker since
     // the DockerContainerizer updates the container cgroup limits
     // directly and it expects it to be the sum of both task and
@@ -145,7 +158,7 @@ public:
         sandboxDirectory,
         mappedDirectory,
         task.resources() + task.executor().resources(),
-        None(),
+        environment,
         path::join(sandboxDirectory, "stdout"),
         path::join(sandboxDirectory, "stderr"))
       .onAny(defer(
