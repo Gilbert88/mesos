@@ -109,6 +109,30 @@ Try<docker::v2::ImageManifest> parse(const JSON::Object& json)
     return Error("Protobuf parse failed: " + manifest.error());
   }
 
+  for (int i = 0; i < manifest.get().history_size(); i++) {
+    Try<JSON::Object> v1Compat = JSON::parse<JSON::Object>(
+        stringify(manifest.get().history(i).v1compatibility()));
+
+    if (v1Compat.isError()) {
+      return Error("JSON parse failed: " + v1Compat.error());
+    }
+
+    Try<docker::v2::ImageManifest::History::V1Compatibility> v1Compatibility =
+      protobuf::parse<docker::v2::ImageManifest::History::V1Compatibility>(
+          v1Compat.get());
+
+    if (v1Compatibility.isError()) {
+      return Error("Protobuf parse failed: " + v1Compatibility.error());
+    }
+
+    if (manifest.get().history(i).has_v1compat()) {
+      return Error("Unexpected optional field is set");
+    }
+
+    manifest.get().mutable_history(i)->mutable_v1compat()
+        ->CopyFrom(v1Compatibility.get());
+  }
+
   Option<Error> error = validate(manifest.get());
   if (error.isSome()) {
     return Error("Docker v2 Image Manifest Validation failed: " +

@@ -36,10 +36,19 @@ message ImageManifest {
   message History {
     message V1Compatibility {
       required string id = 1;
-      required string parent = 2;
+      optional string parent = 2;
     }
 
-    required V1Compatibility v1Compatibility = 1;
+    // TODO(gilbert): We should make protobuf::parse support nested
+    // JSON parsing in the future.
+    // We save all sub-fields of v1Compability as a string because
+    // it cannot be supported by protobuf::parse as a nested JSON.
+    optional string v1Compatibility = 1;
+
+    // This field does not exist in Docker manifest. We use docker
+    // spec parse to save it as a string and then set to this
+    // field because they are nested string JSON.
+    optional V1Compatibility v1Compat = 2;
   }
 
   repeated History history = 5;

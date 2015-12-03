@@ -456,39 +456,39 @@ TEST_F(DockerSpecTest, SerializeV2DockerManifest)
     "   \"history\": ["
     "      {"
     "         \"v1Compatibility\": "
-    "           {"
-    "             \"id\": "
-    "\"2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\","
-    "             \"parent\": "
-    "\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\""
-    "           }"
+    "           \"{"
+    "             \\\"id\\\": "
+    "\\\"2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\\\","
+    "             \\\"parent\\\": "
+    "\\\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\\\""
+    "           }\""
     "      },"
     "      {"
     "         \"v1Compatibility\": "
-    "           {"
-    "             \"id\": "
-    "\"2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\","
-    "             \"parent\": "
-    "\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\""
-    "           }"
+    "           \"{"
+    "             \\\"id\\\": "
+    "\\\"2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\\\","
+    "             \\\"parent\\\": "
+    "\\\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\\\""
+    "           }\""
     "      },"
     "      {"
     "         \"v1Compatibility\": "
-    "           {"
-    "             \"id\": "
-    "\"2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\","
-    "             \"parent\": "
-    "\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\""
-    "           }"
+    "           \"{"
+    "             \\\"id\\\": "
+    "\\\"2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\\\","
+    "             \\\"parent\\\": "
+    "\\\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\\\""
+    "           }\""
     "      },"
     "      {"
     "         \"v1Compatibility\": "
-    "           {"
-    "             \"id\": "
-    "\"2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\","
-    "             \"parent\": "
-    "\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\""
-    "           }"
+    "           \"{"
+    "             \\\"id\\\": "
+    "\\\"2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\\\","
+    "             \\\"parent\\\": "
+    "\\\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\\\""
+    "           }\""
     "      }"
     "   ],"
     "   \"schemaVersion\": 1,"
@@ -534,9 +534,9 @@ TEST_F(DockerSpecTest, SerializeV2DockerManifest)
   EXPECT_EQ(manifest.get().fslayers(3).blobsum(),
     "sha256:2a7812e636235448785062100bb9103096aa6655a8f6bb9ac9b13fe8290f66df");
 
-  EXPECT_EQ(manifest.get().history(1).v1compatibility().id(),
+  EXPECT_EQ(manifest.get().history(1).v1compat().id(),
     "2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
-  EXPECT_EQ(manifest.get().history(2).v1compatibility().parent(),
+  EXPECT_EQ(manifest.get().history(2).v1compat().parent(),
     "cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff");
 
   EXPECT_EQ(manifest.get().schemaversion(), 1u);
@@ -870,30 +870,30 @@ TEST_F(RegistryClientTest, SimpleGetManifest)
     "   \"history\": ["
     "      {"
     "         \"v1Compatibility\": "
-    "           {"
-    "             \"id\": "
-    "\"1ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\","
-    "             \"parent\": "
-    "\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\""
-    "           }"
+    "           \"{"
+    "             \\\"id\\\": "
+    "\\\"1ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\\\","
+    "             \\\"parent\\\": "
+    "\\\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\\\""
+    "           }\""
     "      },"
     "      {"
     "         \"v1Compatibility\": "
-    "           {"
-    "             \"id\": "
-    "\"2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\","
-    "             \"parent\": "
-    "\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\""
-    "           }"
+    "           \"{"
+    "             \\\"id\\\": "
+    "\\\"2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\\\","
+    "             \\\"parent\\\": "
+    "\\\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\\\""
+    "           }\""
     "      },"
     "      {"
     "         \"v1Compatibility\": "
-    "           {"
-    "             \"id\": "
-    "\"3ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\","
-    "             \"parent\": "
-    "\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\""
-    "           }"
+    "           \"{"
+    "             \\\"id\\\": "
+    "\\\"3ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\\\","
+    "             \\\"parent\\\": "
+    "\\\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\\\""
+    "           }\""
     "      }"
     "   ],"
     "   \"signatures\": ["
@@ -932,15 +932,15 @@ TEST_F(RegistryClientTest, SimpleGetManifest)
   AWAIT_ASSERT_READY(manifestResponse);
 
   EXPECT_EQ(
-      manifestResponse.get().history(2).v1compatibility().id(),
+      manifestResponse.get().history(2).v1compat().id(),
       "1ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
 
   EXPECT_EQ(
-      manifestResponse.get().history(1).v1compatibility().id(),
+      manifestResponse.get().history(1).v1compat().id(),
       "2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
 
   EXPECT_EQ(
-      manifestResponse.get().history(0).v1compatibility().id(),
+      manifestResponse.get().history(0).v1compat().id(),
       "3ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
 }
 
@@ -1209,12 +1209,12 @@ TEST_F(RegistryClientTest, SimpleRegistryPuller)
     "   \"history\": ["
     "      {"
     "         \"v1Compatibility\": "
-    "           {"
-    "             \"id\": "
-    "\"1ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\","
-    "             \"parent\": "
-    "\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\""
-    "           }"
+    "           \"{"
+    "             \\\"id\\\": "
+    "\\\"1ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea\\\","
+    "             \\\"parent\\\": "
+    "\\\"cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff\\\""
+    "           }\""
     "      }"
     "   ],"
     "   \"signatures\": ["

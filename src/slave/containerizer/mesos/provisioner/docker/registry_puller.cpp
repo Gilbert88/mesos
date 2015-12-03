@@ -273,7 +273,7 @@ Future<list<pair<string, string>>> RegistryPullerProcess::downloadLayers(
         downloadLayer(imageName,
                       directory,
                       manifest.fslayers(i).blobsum(),
-                      manifest.history(i).v1compatibility().id()));
+                      manifest.history(i).v1compat().id()));
   }
 
   // TODO(jojy): Delete downloaded files in the directory on discard and
