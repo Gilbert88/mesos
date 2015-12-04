@@ -373,7 +373,7 @@ Future<Nothing> DockerContainerizerProcess::pull(
     // Merge environment variables if they are set by ExecutorInfo.
     foreach (const Environment::Variable& variable,
              container->executor.command().environment().variables()) {
-      environment[variable.name()] = variable.value();
+      container->environment[variable.name()] = variable.value();
     }
 
     return Nothing();
