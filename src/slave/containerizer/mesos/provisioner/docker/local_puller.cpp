@@ -53,12 +53,12 @@ public:
 
   ~LocalPullerProcess() {}
 
-  process::Future<list<pair<string, string>>> pull(
+  process::Future<ImageInfo> pull(
       const Image::Name& name,
       const string& directory);
 
 private:
-  process::Future<list<pair<string, string>>> putImage(
+  process::Future<ImageInfo> putImage(
       const Image::Name& name,
       const std::string& directory);
 
@@ -84,7 +84,7 @@ LocalPuller::~LocalPuller()
 }
 
 
-Future<list<pair<string, string>>> LocalPuller::pull(
+Future<ImageInfo> LocalPuller::pull(
     const Image::Name& name,
     const Path& directory)
 {
@@ -92,7 +92,7 @@ Future<list<pair<string, string>>> LocalPuller::pull(
 }
 
 
-Future<list<pair<string, string>>> LocalPullerProcess::pull(
+Future<ImageInfo> LocalPullerProcess::pull(
     const Image::Name& name,
     const string& directory)
 {
@@ -140,7 +140,7 @@ static Result<string> getParentId(
 }
 
 
-Future<list<pair<string, string>>> LocalPullerProcess::putImage(
+Future<ImageInfo> LocalPullerProcess::putImage(
     const Image::Name& name,
     const string& directory)
 {
@@ -204,7 +204,11 @@ Future<list<pair<string, string>>> LocalPullerProcess::putImage(
                    "': " + parentId.error());
   }
 
-  return putLayers(directory, layerIds);
+  return putLayers(directory, layerIds)
+    .then([manifest](const Future<list<pair<string, string>>>& layerPaths)
+        -> Future<ImageInfo> {
+      return ImageInfo{layerPaths.get(), manifest.get()};
+    });
 }
 
 

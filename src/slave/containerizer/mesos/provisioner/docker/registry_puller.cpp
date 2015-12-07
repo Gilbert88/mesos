@@ -18,6 +18,8 @@
 
 #include <list>
 
+#include <stout/json.hpp>
+
 #include <process/collect.hpp>
 #include <process/defer.hpp>
 #include <process/dispatch.hpp>
@@ -55,7 +57,7 @@ class RegistryPullerProcess : public Process<RegistryPullerProcess>
 public:
   static Try<Owned<RegistryPullerProcess>> create(const Flags& flags);
 
-  process::Future<list<pair<string, string>>> pull(
+  process::Future<ImageInfo> pull(
       const Image::Name& imageName,
       const Path& directory);
 
@@ -75,7 +77,7 @@ private:
       const Image::Name& imageName,
       const Path& downloadDir);
 
-  process::Future<list<pair<string, string>>> _pull(
+  process::Future<ImageInfo> _pull(
       const Image::Name& imageName,
       const Path& downloadDir);
 
@@ -119,7 +121,7 @@ RegistryPuller::~RegistryPuller()
 }
 
 
-Future<list<pair<string, string>>> RegistryPuller::pull(
+Future<ImageInfo> RegistryPuller::pull(
     const Image::Name& imageName,
     const Path& downloadDir)
 {
@@ -237,7 +239,7 @@ Future<pair<string, string>> RegistryPullerProcess::downloadLayer(
 }
 
 
-Future<list<pair<string, string>>> RegistryPullerProcess::pull(
+Future<ImageInfo> RegistryPullerProcess::pull(
     const Image::Name& imageName,
     const Path& directory)
 {
@@ -245,19 +247,25 @@ Future<list<pair<string, string>>> RegistryPullerProcess::pull(
   return registryClient_->getManifest(imageName)
     .then(process::defer(self(), [this, directory, imageName](
         const DockerImageManifest& manifest) {
-      return downloadLayers(manifest, imageName, directory);
-    }))
-    .then(process::defer(self(), [this, directory](
-        const Future<list<pair<string, string>>>& layerFutures)
-        -> Future<list<pair<string, string>>> {
-      return untarLayers(layerFutures, directory);
-    }))
-    .after(pullTimeout_, [imageName](
-        Future<list<pair<string, string>>> future) {
-      future.discard();
+      return downloadLayers(manifest, imageName, directory)
+        .then(process::defer(self(), [this, directory, manifest](
+            const Future<list<pair<string, string>>>& layerFutures)
+            -> Future<list<pair<string, string>>> {
+          return untarLayers(layerFutures, directory);
+        }))
+        .then([this, manifest](
+            const Future<list<pair<string, string>>>& layerFutures)
+            -> Future<ImageInfo> {
+          return ImageInfo{layerFutures.get(),
+                           stringify(JSON::protobuf(manifest))};
+        })
+        .after(pullTimeout_, [](
+            Future<ImageInfo> imageInfo) {
+          imageInfo.discard();
 
-      return Failure("Timed out");
-    });
+          return Failure("Timed out");;
+        });
+    }));
 }
 
 

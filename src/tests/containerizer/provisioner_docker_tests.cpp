@@ -1020,7 +1020,7 @@ TEST_F(RegistryClientTest, SimpleRegistryPuller)
 
   ASSERT_SOME(imageName);
 
-  Future<list<pair<string, string>>> registryPullerFuture =
+  Future<ImageInfo> registryPullerFuture =
     registryPuller.get()->pull(imageName.get(), registryPullerPath);
 
   const string unauthResponseHeaders = "WWW-Authenticate: Bearer"
@@ -1219,13 +1219,13 @@ TEST_F(RegistryClientTest, SimpleRegistryPuller)
       blobResponseSize));
 
   AWAIT_ASSERT_READY(registryPullerFuture);
-  list<pair<string, string>> layers = registryPullerFuture.get();
-  ASSERT_EQ(1u, layers.size());
-  ASSERT_EQ(layers.front().first,
+  ImageInfo layers = registryPullerFuture.get();
+  ASSERT_EQ(1u, layers.layerPaths.size());
+  ASSERT_EQ(layers.layerPaths.front().first,
             "1ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
 
   Try<string> blob = os::read(
-      path::join(layers.front().second, blobFile));
+      path::join(layers.layerPaths.front().second, blobFile));
   ASSERT_SOME(blob);
   ASSERT_EQ(blob.get(), blobResponse);
 }
@@ -1401,16 +1401,16 @@ public:
 
   MOCK_METHOD2(
       pull,
-      Future<list<pair<string, string>>>(
+      Future<ImageInfo>(
           const slave::docker::Image::Name&,
           const Path&));
 
-  Future<list<pair<string, string>>> unmocked_pull(
+  Future<ImageInfo> unmocked_pull(
       const slave::docker::Image::Name& name,
       const Path& directory)
   {
-    // TODO(gilbert): Allow return list to be overridden.
-    return list<pair<string, string>>();
+    // TODO(gilbert): Allow return struct to be overridden.
+    return ImageInfo{list<pair<string, string>>(), ""};
   }
 };
 
@@ -1432,7 +1432,7 @@ TEST_F(ProvisionerDockerLocalStoreTest, PullingSameImageSimutanuously)
 
   MockPuller* puller = new MockPuller();
   Future<Nothing> pull;
-  Promise<list<pair<string, string>>> promise;
+  Promise<ImageInfo> promise;
 
   EXPECT_CALL(*puller, pull(_, _))
     .WillOnce(testing::DoAll(FutureSatisfy(&pull),
@@ -1460,9 +1460,10 @@ TEST_F(ProvisionerDockerLocalStoreTest, PullingSameImageSimutanuously)
   ASSERT_TRUE(layers1.isPending());
   Future<vector<string>> layers2 = store.get()->get(mesosImage);
 
-  const std::list<std::pair<std::string, std::string>> result =
-      {{"123", rootfsPath1},
-       {"456", rootfsPath2}};
+  const ImageInfo result =
+      {{{"123", rootfsPath1},
+        {"456", rootfsPath2}},
+        ""};
 
   ASSERT_TRUE(layers2.isPending());
   promise.set(result);

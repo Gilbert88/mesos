@@ -59,7 +59,7 @@ public:
    * @param imageName local name of the image.
    * @param downloadDir path to which the layers should be downloaded.
    */
-  process::Future<std::list<std::pair<std::string, std::string>>> pull(
+  process::Future<ImageInfo> pull(
       const Image::Name& imageName,
       const Path& downloadDir);
 

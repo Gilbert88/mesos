@@ -45,7 +45,7 @@ public:
 
   ~LocalPuller();
 
-  process::Future<std::list<std::pair<std::string, std::string>>> pull(
+  process::Future<ImageInfo> pull(
       const Image::Name& name,
       const Path& directory);
 

@@ -37,6 +37,15 @@ namespace internal {
 namespace slave {
 namespace docker {
 
+// Image info struct includes the list of layer id and layer path
+// string pair and all runtime configurations.
+struct ImageInfo
+{
+  std::list<std::pair<std::string, std::string>> layerPaths;
+  std::string manifest;
+};
+
+
 class Puller
 {
 public:
@@ -55,7 +64,7 @@ public:
    * @return list of layers maped to its local directory ordered by its
    *         dependency.
    */
-  virtual process::Future<std::list<std::pair<std::string, std::string>>> pull(
+  virtual process::Future<ImageInfo> pull(
       const docker::Image::Name& name,
       const Path& directory) = 0;
 };

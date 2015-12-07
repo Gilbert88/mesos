@@ -74,7 +74,7 @@ private:
   Future<vector<string>> __get(const Image& image);
 
   Future<vector<string>> moveLayers(
-      const std::list<pair<string, string>>& layerPaths);
+      const ImageInfo& imageInfo);
 
   Future<Image> storeImage(
       const Image::Name& name,
@@ -236,17 +236,17 @@ Future<Nothing> StoreProcess::recover()
 
 
 Future<vector<string>> StoreProcess::moveLayers(
-    const list<pair<string, string>>& layerPaths)
+    const ImageInfo& imageInfo)
 {
   list<Future<Nothing>> futures;
-  foreach (const auto& layerPath, layerPaths) {
+  foreach (const auto& layerPath, imageInfo.layerPaths) {
     futures.push_back(moveLayer(layerPath));
   }
 
   return collect(futures)
-    .then([layerPaths]() {
+    .then([imageInfo]() {
         vector<string> layerIds;
-        foreach (const auto& layerPath, layerPaths) {
+        foreach (const auto& layerPath, imageInfo.layerPaths) {
           layerIds.push_back(layerPath.first);
         }
 
