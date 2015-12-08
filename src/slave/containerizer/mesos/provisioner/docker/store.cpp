@@ -73,12 +73,12 @@ private:
 
   Future<vector<string>> __get(const Image& image);
 
-  Future<vector<string>> moveLayers(
+  Future<pair<vector<string>, string>> moveLayers(
       const ImageInfo& imageInfo);
 
   Future<Image> storeImage(
       const Image::Name& name,
-      const std::vector<std::string>& layerIds);
+      const pair<vector<string>, string>& layerIds);
 
   Future<Nothing> moveLayer(const pair<string, string>& layerPath);
 
@@ -235,7 +235,7 @@ Future<Nothing> StoreProcess::recover()
 }
 
 
-Future<vector<string>> StoreProcess::moveLayers(
+Future<pair<vector<string>, string>> StoreProcess::moveLayers(
     const ImageInfo& imageInfo)
 {
   list<Future<Nothing>> futures;
@@ -250,16 +250,16 @@ Future<vector<string>> StoreProcess::moveLayers(
           layerIds.push_back(layerPath.first);
         }
 
-        return layerIds;
+        return pair<vector<string>, string>(layerIds, imageInfo.manifest);
     });
 }
 
 
 Future<Image> StoreProcess::storeImage(
     const Image::Name& name,
-    const vector<string>& layerIds)
+    const pair<vector<string>, string>& imageInfo)
 {
-  return metadataManager->put(name, layerIds);
+  return metadataManager->put(name, imageInfo.first, imageInfo.second);
 }
 
 
