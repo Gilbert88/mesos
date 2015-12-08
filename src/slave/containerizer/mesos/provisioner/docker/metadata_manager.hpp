@@ -73,10 +73,12 @@ public:
    * @param layerIds the list of layer ids that comprise the Docker image in
    *                 order where the root layer's id (no parent layer) is first
    *                 and the leaf layer's id is last.
+   * @param manifest image manifest containing runtime config.
    */
   process::Future<Image> put(
       const Image::Name& name,
-      const std::vector<std::string>& layerIds);
+      const std::vector<std::string>& layerIds,
+      const std::string& manifest);
 
   /**
    * Retrieve Image based on image name if it is among the Images

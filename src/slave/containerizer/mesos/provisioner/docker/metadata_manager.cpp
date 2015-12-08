@@ -58,7 +58,8 @@ public:
 
   Future<Image> put(
       const Image::Name& name,
-      const std::vector<std::string>& layerIds);
+      const std::vector<std::string>& layerIds,
+      const std::string& manifest);
 
   Future<Option<Image>> get(const Image::Name& name);
 
@@ -107,13 +108,15 @@ Future<Nothing> MetadataManager::recover()
 
 Future<Image> MetadataManager::put(
     const Image::Name& name,
-    const vector<string>& layerIds)
+    const vector<string>& layerIds,
+    const string& manifest)
 {
   return dispatch(
       process.get(),
       &MetadataManagerProcess::put,
       name,
-      layerIds);
+      layerIds,
+      manifest);
 }
 
 
@@ -123,14 +126,39 @@ Future<Option<Image>> MetadataManager::get(const Image::Name& name)
 }
 
 
+static Result<string> getRuntimeConfig(const string& manifest) {
+  if (manifest.empty()) {
+    return None();
+  }
+
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(manifest);
+  if (json.isError()) {
+    return Error("Failed to parse 'manifest': " + json.error());
+  }
+
+  // Save all runtime config in a JSON object.
+  JSON::Object runtimeConfig;
+
+  // TODO(gibert): Add more runtime configuration here.
+  return stringify(runtimeConfig);
+}
+
+
 Future<Image> MetadataManagerProcess::put(
     const Image::Name& name,
-    const vector<string>& layerIds)
+    const vector<string>& layerIds,
+    const string& manifest)
 {
   const string imageName = stringify(name);
 
+  Result<string> runtimeConfig = getRuntimeConfig(manifest);
+  if (runtimeConfig.isError()) {
+    return Failure("Failed to get RuntimeConfig: " + runtimeConfig.error());
+  }
+
   Image dockerImage;
   dockerImage.mutable_name()->CopyFrom(name);
+  dockerImage.set_runtimeconfig(runtimeConfig.get());
   foreach (const string& layerId, layerIds) {
     dockerImage.add_layer_ids(layerId);
   }
