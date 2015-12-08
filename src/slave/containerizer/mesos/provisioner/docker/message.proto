@@ -36,6 +36,12 @@ message Image {
 
   // The order of the layers represents the dependency between layers.
   repeated string layer_ids = 2;
+
+  // Contains all runtime configurations. It is maintained in
+  // metadata manager's lookup table and is persisted on disk,
+  // so that runtime configurations can be obtained when
+  // recovering.
+  optional string runtimeconfig = 3;
 }
 
 

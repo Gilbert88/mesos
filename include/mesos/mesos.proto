@@ -1347,6 +1347,65 @@ message Image {
 
 
 /**
+ * Describes runtime configurations specified in the manifest of
+ * an image. It should be obtained by provisioner puller, and it
+ * should be returned to mesos containerizer via linux filesystem
+ * isolator.
+ */
+message RuntimeConfig {
+  // TODO(gilbert): Add OCI type here if we start to support OCI
+  // runtime configuration.
+  enum Type {
+    APPC = 1;
+    DOCKER = 2;
+  }
+
+  // Protobuf for specifying runtime configurations for an Appc
+  // container image. See:
+  // https://github.com/appc/spec/blob/master/spec/aci.md
+  message AppcRuntimeConfig {
+    // Executable to launch and any flags.
+    repeated string exec = 1;
+
+    // Indicates either the username/group name or the
+    // UID/GID the app is to be run as.
+    required string user = 2;
+    required string group = 3;
+
+    // Working directory of the launched application.
+    optional string workingdirectory = 4;
+
+    optional Environment environment = 5;
+
+    // TODO(gilbert): Add more runtime configuration fields here
+    // (e.g., ports, volume).
+  }
+
+  message DockerRuntimeConfig {
+    // Configure a container that will run as an executable.
+    repeated string entrypoint = 1;
+
+    // Provides defaults for an executing container.
+    repeated string cmd = 2;
+
+    optional string workingdir = 3;
+    optional Environment env = 4;
+    optional string user = 5;
+
+    // TODO(gilbert): Add more runtime configuration fields here
+    // (e.g., ports, volume).
+  }
+
+  required Type type = 1;
+
+  // Only one of the following runtime configuration messages
+  // should be set to match the type.
+  optional AppcRuntimeConfig appc_runtimeconfig = 2;
+  optional DockerRuntimeConfig docker_runtimeconfig = 3;
+}
+
+
+/**
  * Describes a volume mapping either from host to container or vice
  * versa. Both paths can either refer to a directory or a file.
  */
