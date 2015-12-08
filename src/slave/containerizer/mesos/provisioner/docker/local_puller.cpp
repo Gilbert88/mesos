@@ -186,11 +186,6 @@ Future<ImageInfo> LocalPullerProcess::putImage(
     return Failure("Failed to read manifest: " + manifest.error());
   }
 
-  Try<JSON::Object> manifestJson = JSON::parse<JSON::Object>(manifest.get());
-  if (manifestJson.isError()) {
-    return Failure("Failed to parse manifest: " + manifestJson.error());
-  }
-
   vector<string> layerIds;
   layerIds.push_back(layerId);
   Result<string> parentId = getParentId(directory, layerId);
