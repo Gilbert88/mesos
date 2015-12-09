@@ -33,6 +33,13 @@ namespace mesos {
 namespace internal {
 namespace slave {
 
+struct ImageSpecs
+{
+  std::vector<std::string> imagePaths;
+  Option<RuntimeConfig> runtimeConfig;
+};
+
+
 // An image store abstraction that "stores" images. It serves as a
 // read-through cache (cache misses are fetched remotely and
 // transparently) for images.
@@ -63,7 +70,7 @@ public:
   //
   // The returned future fails if the requested image or any of its
   // dependencies cannot be found or failed to be fetched.
-  virtual process::Future<std::vector<std::string>> get(const Image& image) = 0;
+  virtual process::Future<ImageSpecs> get(const Image& image) = 0;
 };
 
 } // namespace slave {

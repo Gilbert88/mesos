@@ -1348,10 +1348,10 @@ TEST_F(ProvisionerDockerLocalStoreTest, LocalStoreTestWithTar)
   mesosImage.set_type(Image::DOCKER);
   mesosImage.mutable_docker()->set_name("abc");
 
-  Future<vector<string>> layers = store.get()->get(mesosImage);
-  AWAIT_READY(layers);
+  Future<slave::ImageSpecs> imageSpecs = store.get()->get(mesosImage);
+  AWAIT_READY(imageSpecs);
 
-  verifyLocalDockerImage(flags, layers.get());
+  verifyLocalDockerImage(flags, imageSpecs.get().imagePaths);
 }
 
 
@@ -1371,8 +1371,8 @@ TEST_F(ProvisionerDockerLocalStoreTest, MetadataManagerInitialization)
   image.set_type(Image::DOCKER);
   image.mutable_docker()->set_name("abc");
 
-  Future<vector<string>> layers = store.get()->get(image);
-  AWAIT_READY(layers);
+  Future<slave::ImageSpecs> imageSpecs = store.get()->get(image);
+  AWAIT_READY(imageSpecs);
 
   // Store is deleted and recreated. Metadata Manager is initialized upon
   // creation of the store.
@@ -1382,9 +1382,9 @@ TEST_F(ProvisionerDockerLocalStoreTest, MetadataManagerInitialization)
   Future<Nothing> recover = store.get()->recover();
   AWAIT_READY(recover);
 
-  layers = store.get()->get(image);
-  AWAIT_READY(layers);
-  verifyLocalDockerImage(flags, layers.get());
+  imageSpecs = store.get()->get(image);
+  AWAIT_READY(imageSpecs);
+  verifyLocalDockerImage(flags, imageSpecs.get().imagePaths);
 }
 
 
@@ -1446,7 +1446,7 @@ TEST_F(ProvisionerDockerLocalStoreTest, PullingSameImageSimutanuously)
   mesosImage.set_type(Image::DOCKER);
   mesosImage.mutable_docker()->set_name("abc");
 
-  Future<vector<string>> layers1 = store.get()->get(mesosImage);
+  Future<slave::ImageSpecs> imageSpecs1 = store.get()->get(mesosImage);
   AWAIT_READY(pull);
 
   const string rootfsPath1 = path::join(os::getcwd(), "rootfs1");
@@ -1457,21 +1457,21 @@ TEST_F(ProvisionerDockerLocalStoreTest, PullingSameImageSimutanuously)
   Try<Nothing> mkdir2 = os::mkdir(rootfsPath2);
   ASSERT_SOME(mkdir2);
 
-  ASSERT_TRUE(layers1.isPending());
-  Future<vector<string>> layers2 = store.get()->get(mesosImage);
+  ASSERT_TRUE(imageSpecs1.isPending());
+  Future<slave::ImageSpecs> imageSpecs2 = store.get()->get(mesosImage);
 
   const ImageInfo result =
       {{{"123", rootfsPath1},
         {"456", rootfsPath2}},
         ""};
 
-  ASSERT_TRUE(layers2.isPending());
+  ASSERT_TRUE(imageSpecs2.isPending());
   promise.set(result);
 
-  AWAIT_READY(layers1);
-  AWAIT_READY(layers2);
+  AWAIT_READY(imageSpecs1);
+  AWAIT_READY(imageSpecs1);
 
-  EXPECT_EQ(layers1.get(), layers2.get());
+  EXPECT_EQ(imageSpecs1.get().imagePaths, imageSpecs2.get().imagePaths);
 }
 
 } // namespace tests {
