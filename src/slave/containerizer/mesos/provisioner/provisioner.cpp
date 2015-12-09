@@ -268,7 +268,7 @@ Future<ProvisionInfo> ProvisionerProcess::provision(
 
 Future<ProvisionInfo> ProvisionerProcess::_provision(
     const ContainerID& containerId,
-    const vector<string>& layers)
+    const ImageSpecs& imageSpecs)
 {
   // TODO(jieyu): Choose a backend smartly. For instance, if there is
   // only one layer returned from the store. prefer to use bind
@@ -295,9 +295,9 @@ Future<ProvisionInfo> ProvisionerProcess::_provision(
 
   infos[containerId]->rootfses[backend].insert(rootfsId);
 
-  return backends.get(backend).get()->provision(layers, rootfs)
-    .then([rootfs]() -> Future<ProvisionInfo> {
-      return ProvisionInfo{rootfs, None()};
+  return backends.get(backend).get()->provision(imageSpecs.imagePaths, rootfs)
+    .then([rootfs, imageSpecs]() -> Future<ProvisionInfo> {
+      return ProvisionInfo{rootfs, imageSpecs.runtimeConfig};
     });
 }
 

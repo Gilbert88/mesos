@@ -125,7 +125,7 @@ public:
 private:
   process::Future<ProvisionInfo> _provision(
       const ContainerID& containerId,
-      const std::vector<std::string>& layers);
+      const ImageSpecs& layers);
 
   process::Future<bool> _destroy(const ContainerID& containerId);
 
