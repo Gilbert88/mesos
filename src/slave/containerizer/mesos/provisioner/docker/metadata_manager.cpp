@@ -139,7 +139,11 @@ static Result<string> getRuntimeConfig(const string& manifest) {
   // Save all runtime config in a JSON object.
   JSON::Object runtimeConfig;
 
-  // TODO(gibert): Add more runtime configuration here.
+  // TODO(gilbert): Pick neccessary runtime config from manifest
+  // and carefully save as JSON object, so that it can be parsed
+  // by protobuf::parse as RuntimeConfig easily.
+
+  // TODO(gilbert): Add more runtime configuration here.
   return stringify(runtimeConfig);
 }
 
@@ -158,7 +162,11 @@ Future<Image> MetadataManagerProcess::put(
 
   Image dockerImage;
   dockerImage.mutable_name()->CopyFrom(name);
-  dockerImage.set_runtimeconfig(runtimeConfig.get());
+
+  if (runtimeConfig.isSome()) {
+    dockerImage.set_runtimeconfig(runtimeConfig.get());
+  }
+
   foreach (const string& layerId, layerIds) {
     dockerImage.add_layer_ids(layerId);
   }
