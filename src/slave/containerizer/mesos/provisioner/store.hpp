@@ -39,6 +39,8 @@ namespace slave {
 // well, such as environment variables, entrypoint, volumes, etc.
 struct RuntimeConfig
 {
+  Option<std::vector<std::string>> entrypoint;
+
   // TODO(gilbert): Add more runtime configurations from image.
 };
 
