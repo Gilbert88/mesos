@@ -793,6 +793,11 @@ Future<list<Option<ContainerPrepareInfo>>> MesosContainerizerProcess::prepare(
 
   if (provisionInfo.isSome()) {
     containerConfig.set_rootfs(provisionInfo.get().rootfs);
+
+    if (provisionInfo.dockerManifest.isSome()) {
+      containerConfig.mutable_docker->set_manifest(
+          provisionInfo.get().dockerManifest.get());
+    }
   }
 
   // We prepare the isolators sequentially according to their ordering

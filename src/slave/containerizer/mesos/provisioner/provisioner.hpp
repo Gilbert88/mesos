@@ -32,6 +32,8 @@
 #include <process/metrics/counter.hpp>
 #include <process/metrics/metrics.hpp>
 
+#include "docker/v1.hpp"
+
 #include "slave/flags.hpp"
 
 #include "slave/containerizer/fetcher.hpp"
@@ -48,12 +50,21 @@ class ProvisionerProcess;
 class Store;
 
 // Provision info struct includes root filesystem for the container
-// with specified image, all runtime configurations from the image
-// that will be passed to Mesos Containerizer.
+// with specified image, all image manifests that include runtime
+// configurations from the image will be passed to Mesos Containerizer.
 struct ProvisionInfo
 {
   std::string rootfs;
-  Option<RuntimeConfig> runtimeConfig;
+
+  // The following specifies the image manifest for the container.
+  // They are passed by ImageInfo. At most one of the following
+  // should be set.
+
+  // Docker v1 image manifest.
+  Option<::docker::spec::v1::ImageManifest> dockerManifest;
+
+  // Appc image manifest.
+  Option<AppcImageManifest> appcManifest;
 };
 
 

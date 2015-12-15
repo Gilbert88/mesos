@@ -27,28 +27,28 @@
 
 #include <stout/try.hpp>
 
+#include "docker/v1.hpp"
+
 #include "slave/flags.hpp"
 
 namespace mesos {
 namespace internal {
 namespace slave {
 
-// Runtime configuration struct includes execution configuration
-// which are specified in the image. Besides the root filesystem,
-// Docker and Appc images also contain runtime information as
-// well, such as environment variables, entrypoint, volumes, etc.
-struct RuntimeConfig
-{
-  // TODO(gilbert): Add more runtime configurations from image.
-};
-
-
 // Includes a vector of rootfs layers in topological order corresponding
 // to a specific image, and its runtime configuration.
 struct ImageInfo
 {
   std::vector<std::string> layers;
-  Option<RuntimeConfig> runtimeConfig;
+
+  // The following specifies the image manifest for the container.
+  // At most one of the following should be set.
+
+  // Docker v1 image manifest.
+  Option<::docker::spec::v1::ImageManifest> dockerManifest;
+
+  // Appc image manifest.
+  Option<AppcImageManifest> appcManifest;
 };
 
 
