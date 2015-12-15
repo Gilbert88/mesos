@@ -36,6 +36,7 @@
 #include "slave/containerizer/mesos/provisioner/docker/metadata_manager.hpp"
 #include "slave/containerizer/mesos/provisioner/docker/paths.hpp"
 #include "slave/containerizer/mesos/provisioner/docker/puller.hpp"
+#include "slave/containerizer/mesos/provisioner/docker/spec.hpp"
 
 #include "slave/flags.hpp"
 
@@ -159,6 +160,32 @@ Future<ImageInfo> Store::get(const mesos::Image& image)
 }
 
 
+static Result<RuntimeConfig> getRuntimeConfig(
+    const JSON::Object& manifest)
+{
+  Try<v1::ImageManifest> v1DockerImageManifest =
+    spec::v1::parse(manifest);
+  if (v1DockerImageManifest.isError()) {
+    return Error("Failed to parse manifest: " + v1DockerImageManifest.error());
+  }
+
+  // TODO(gilbert): Add more runtime configuration here.
+  // If each member of RuntimeConfig is none, we return none.
+  if (v1DockerImageManifest.get().container_config().entrypoint_size() <= 0) {
+    return None();
+  }
+
+  vector<string> entrypoint;
+  foreach (
+      const string& cmd,
+      v1DockerImageManifest.get().container_config().entrypoint()) {
+    entrypoint.push_back(cmd);
+  }
+
+  return RuntimeConfig{entrypoint};
+}
+
+
 Future<ImageInfo> StoreProcess::get(const mesos::Image& image)
 {
   if (image.type() != mesos::Image::DOCKER) {
@@ -226,12 +253,28 @@ Future<ImageInfo> StoreProcess::__get(const Image& image)
             flags.docker_store_dir, layer));
   }
 
-  // TODO(gilbert): We should be able to support storing all image
-  // spec locally, and simply grab neccessary runtime config from
-  // local manifest.
-  Option<RuntimeConfig> runtimeConfig = None();
+  // Read the manifest from the last layer because all runtime
+  // config are merged at the leaf already.
+  Try<string> manifest =
+    os::read(
+        paths::getImageLayerManifestPath(
+            flags.docker_store_dir, image.layer_ids(
+                image.layer_ids_size() - 1)));
+  if (manifest.isError()) {
+    return Failure("Failed to read manifest JSON: " + manifest.error());
+  }
 
-  return ImageInfo{layerDirectories, runtimeConfig};
+  Try<JSON::Object> manifestJson = JSON::parse<JSON::Object>(manifest.get());
+  if (manifestJson.isError()) {
+    return Failure("Failed to parse 'manifest': " + manifestJson.error());
+  }
+
+  Result<RuntimeConfig> runtimeConfig = getRuntimeConfig(manifestJson.get());
+  if (runtimeConfig.isError()) {
+    return Failure("Failed to get RuntimeConfig: " + runtimeConfig.error());
+  }
+
+  return ImageInfo{layerDirectories, runtimeConfig.get()};
 }
 
 

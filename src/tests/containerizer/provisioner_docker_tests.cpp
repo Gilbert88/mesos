@@ -1419,7 +1419,19 @@ protected:
     ASSERT_SOME(os::mkdir(path::join(image, "123")));
     JSON::Value manifest123 = JSON::parse(
         "{"
-        "  \"parent\": \"\""
+        "  \"parent\": \"\","
+        "  \"container_config\": {"
+        "      \"Entrypoint\": null,"
+        "      \"Env\": null,"
+        "      \"User\": \"\","
+        "      \"Cmd\": ["
+        "          \"/bin/sh\","
+        "          \"-c\","
+        "          \"#(nop) CMD [\\\"sh\\\"]\""
+        "      ],"
+        "      \"WorkingDir\": \"\","
+        "      \"ExposedPorts\": null"
+        "  }"
         "}").get();
     ASSERT_SOME(os::write(
         path::join(image, "123", "json"), stringify(manifest123)));
@@ -1437,7 +1449,26 @@ protected:
     ASSERT_SOME(os::mkdir(path::join(image, "456")));
     JSON::Value manifest456 = JSON::parse(
         "{"
-        "  \"parent\": \"123\""
+        "  \"parent\": \"123\","
+        "  \"container_config\": {"
+        "      \"Entrypoint\": ["
+        "          \"./bin/start\""
+        "      ],"
+        "      \"Env\": ["
+        "          \"LANG=C.UTF-8\","
+        "          \"JAVA_VERSION=8u66\","
+        "          \"JAVA_DEBIAN_VERSION=8u66-b01-1~bpo8+1\","
+        "          \"CA_CERTIFICATES_JAVA_VERSION=20140324\""
+        "      ],"
+        "      \"User\": \"\","
+        "      \"Cmd\": ["
+        "          \"/bin/sh\","
+        "          \"-c\","
+        "          \"#(nop) CMD [\\\"sh\\\"]\""
+        "      ],"
+        "      \"WorkingDir\": \"/marathon\","
+        "      \"ExposedPorts\": null"
+        "  }"
         "}").get();
     ASSERT_SOME(
         os::write(path::join(image, "456", "json"), stringify(manifest456)));
@@ -1581,20 +1612,42 @@ TEST_F(ProvisionerDockerLocalStoreTest, PullingSameImageSimutanuously)
   Future<slave::ImageInfo> imageInfo1 = store.get()->get(mesosImage);
   AWAIT_READY(pull);
 
-  const string rootfsPath1 = path::join(os::getcwd(), "rootfs1");
-  const string rootfsPath2 = path::join(os::getcwd(), "rootfs2");
+  const string layerPath = path::join(os::getcwd(), "456");
 
-  Try<Nothing> mkdir1 = os::mkdir(rootfsPath1);
-  ASSERT_SOME(mkdir1);
-  Try<Nothing> mkdir2 = os::mkdir(rootfsPath2);
-  ASSERT_SOME(mkdir2);
+  Try<Nothing> mkdir = os::mkdir(layerPath);
+  ASSERT_SOME(mkdir);
+
+  JSON::Value manifest = JSON::parse(
+        "{"
+        "  \"parent\": \"123\","
+        "  \"container_config\": {"
+        "      \"Entrypoint\": ["
+        "          \"./bin/start\""
+        "      ],"
+        "      \"Env\": ["
+        "          \"LANG=C.UTF-8\","
+        "          \"JAVA_VERSION=8u66\","
+        "          \"JAVA_DEBIAN_VERSION=8u66-b01-1~bpo8+1\","
+        "          \"CA_CERTIFICATES_JAVA_VERSION=20140324\""
+        "      ],"
+        "      \"User\": \"\","
+        "      \"Cmd\": ["
+        "          \"/bin/sh\","
+        "          \"-c\","
+        "          \"#(nop) CMD [\\\"sh\\\"]\""
+        "      ],"
+        "      \"WorkingDir\": \"/marathon\","
+        "      \"ExposedPorts\": null"
+        "  }"
+        "}").get();
+    ASSERT_SOME(
+        os::write(path::join(layerPath, "json"), stringify(manifest)));
 
   ASSERT_TRUE(imageInfo1.isPending());
   Future<slave::ImageInfo> imageInfo2 = store.get()->get(mesosImage);
 
   const std::list<std::pair<std::string, std::string>> result =
-      {{"123", rootfsPath1},
-       {"456", rootfsPath2}};
+    {{"456", layerPath}};
 
   ASSERT_TRUE(imageInfo2.isPending());
   promise.set(result);
