@@ -30,6 +30,8 @@
 
 #include "common/status_utils.hpp"
 
+#include "docker/spec.hpp"
+
 #include "slave/containerizer/mesos/provisioner/docker/metadata_manager.hpp"
 #include "slave/containerizer/mesos/provisioner/docker/store.hpp"
 #include "slave/containerizer/mesos/provisioner/docker/paths.hpp"
@@ -214,6 +216,8 @@ Future<Image> StoreProcess::_get(
 
 Future<ImageInfo> StoreProcess::__get(const Image& image)
 {
+  CHECK(image.layer_ids_size() > 0);
+
   vector<string> layerDirectories;
   foreach (const string& layer, image.layer_ids()) {
     layerDirectories.push_back(
@@ -221,12 +225,28 @@ Future<ImageInfo> StoreProcess::__get(const Image& image)
             flags.docker_store_dir, layer));
   }
 
-  // TODO(gilbert): We should be able to support storing all image
-  // spec locally, and simply grab neccessary runtime config from
-  // local manifest.
-  Option<RuntimeConfig> runtimeConfig = None();
+  // Read the manifest from the last layer because all runtime
+  // config are merged at the leaf already.
+  Try<string> manifest = os::read(
+      paths::getImageLayerManifestPath(
+          flags.docker_store_dir,
+          image.layer_ids(image.layer_ids_size() - 1)));
+  if (manifest.isError()) {
+    return Failure("Failed to read manifest JSON: " + manifest.error());
+  }
 
-  return ImageInfo{layerDirectories, runtimeConfig};
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(manifest.get());
+  if (json.isError()) {
+    return Failure("Failed to parse manifest JSON: " + json.error());
+  }
+
+  Try<::docker::spec::v1::ImageManifest> v1 =
+    ::docker::spec::v1::parse(json.get());
+  if (v1.isError()) {
+    return Failure("Failed to parse docker v1 manifest: " + v1.error());
+  }
+
+  return ImageInfo{layerDirectories, v1.get()};
 }
 
 
