@@ -462,7 +462,6 @@ TEST_F(DockerTest, DOCKER_CreateImage)
                                       false).get());
 
   JSON::Value inspect = JSON::parse(
-    "["
     "{"
     "    \"Id\": "
     "\"0a8ee093d995e48aa8af626b8a4c48fe3949e474b0ccca9be9d5cf08abd9eda1\","
@@ -550,8 +549,7 @@ TEST_F(DockerTest, DOCKER_CreateImage)
     "    \"Os\": \"linux\","
     "    \"Size\": 0,"
     "    \"VirtualSize\": 977664708"
-    "}"
-    "]").get();
+    "}").get();
 
   Try<JSON::Object> json = JSON::parse<JSON::Object>(stringify(inspect));
   ASSERT_SOME(json);
