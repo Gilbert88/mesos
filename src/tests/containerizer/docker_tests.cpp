@@ -455,7 +455,9 @@ TEST_F(DockerTest, ROOT_DOCKER_MountAbsolute)
 }
 
 
-TEST_F(DockerTest, DOCKER_CreateImage)
+class DockerImageTest : public ::testing::Test {};
+
+TEST_F(DockerImageTest, Docker_CreateImage)
 {
   Owned<Docker> docker(Docker::create(tests::flags.docker,
                                       tests::flags.docker_socket,
