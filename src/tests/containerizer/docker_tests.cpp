@@ -455,7 +455,7 @@ TEST_F(DockerTest, ROOT_DOCKER_MountAbsolute)
 }
 
 
-class DockerImageTest : public ::testing::Test {};
+class DockerImageTest : public MesosTest {};
 
 TEST_F(DockerImageTest, Docker_CreateImage)
 {
