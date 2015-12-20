@@ -459,10 +459,6 @@ class DockerImageTest : public ::testing::Test {};
 
 TEST_F(DockerImageTest, Docker_CreateImage)
 {
-  Owned<Docker> docker(Docker::create(tests::flags.docker,
-                                      tests::flags.docker_socket,
-                                      false).get());
-
   JSON::Value inspect = JSON::parse(
     "{"
     "    \"Id\": "
