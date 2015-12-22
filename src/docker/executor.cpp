@@ -139,7 +139,7 @@ public:
     if (task.container().has_docker() &&
         task.container().docker().network() ==
             ContainerInfo::DockerInfo::HOST) {
-      Option<string> libprocessIP = os:::getenv("LIBPROCESS_IP");
+      Option<string> libprocessIP = os::getenv("LIBPROCESS_IP");
       if (libprocessIP.isSome()) {
         environment["LIBPROCESS_IP"] = libprocessIP.get();
       }
