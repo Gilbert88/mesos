@@ -16,6 +16,7 @@
 
 #include <stdio.h>
 
+#include <map>
 #include <string>
 
 #include <mesos/mesos.hpp>
@@ -44,6 +45,7 @@
 using std::cerr;
 using std::cout;
 using std::endl;
+using std::map;
 using std::string;
 using std::vector;
 
@@ -134,7 +136,7 @@ public:
 
     map<string, string> environment;
 
-    if (task.container().docker().isSome() &&
+    if (task.container().has_docker() &&
         task.container().docker().network() ==
             ContainerInfo::DockerInfo::HOST) {
       Option<string> libprocessIP = os:::getenv("LIBPROCESS_IP");
