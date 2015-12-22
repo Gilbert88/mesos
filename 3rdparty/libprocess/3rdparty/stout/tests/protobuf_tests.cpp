@@ -339,3 +339,50 @@ TEST(ProtobufTest, ParseJSONArray)
   EXPECT_EQ(message, repeated.Get(0));
   EXPECT_EQ(message, repeated.Get(1));
 }
+
+
+TEST(ProtobufTest, ParseJSONContainingJSONNull)
+{
+  // Test message with optional field as JSON null.
+  string message1 =
+    "{"
+    "  \"str\": \"message1\","
+    "  \"optional_str\": null"
+    "}";
+
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(message1);
+  ASSERT_SOME(json);
+
+  Try<tests::Nested> parse = protobuf::parse<tests::Nested>(json.get());
+  ASSERT_SOME(parse);
+
+  EXPECT_EQ("message1", parse.get().str());
+
+  // Test message with repeated field as JSON null.
+  string message2 =
+    "{"
+    "  \"str\": \"message2\","
+    "  \"repeated_str\": null"
+    "}";
+
+  json = JSON::parse<JSON::Object>(message2);
+  ASSERT_SOME(json);
+
+  parse = protobuf::parse<tests::Nested>(json.get());
+  ASSERT_SOME(parse);
+
+  EXPECT_EQ("message2", parse.get().str());
+
+  // Test message with required field as JSON null.
+  string message3 =
+    "{"
+    "  \"str\": null,"
+    "  \"optional_str\": \"message3\""
+    "}";
+
+  json = JSON::parse<JSON::Object>(message3);
+  ASSERT_SOME(json);
+
+  parse = protobuf::parse<tests::Nested>(json.get());
+  ASSERT_ERROR(parse);
+}
