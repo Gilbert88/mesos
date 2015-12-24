@@ -26,6 +26,7 @@
 #include <stout/json.hpp>
 #include <stout/os.hpp>
 #include <stout/path.hpp>
+#include <stout/protobuf.hpp>
 #include <stout/stringify.hpp>
 
 #include <process/address.hpp>
@@ -298,6 +299,49 @@ TEST_F(RegistryTokenTest, NotBeforeInFuture)
 
 
 class DockerSpecTest : public ::testing::Test {};
+
+TEST_F(DockerSpecTest, ParseJSONNull)
+{
+  string message = strings::remove(
+      "{"
+      "  \"id\": \"abc\","
+      "  \"tag\": null"
+      "}",
+      " ");
+
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(message);
+  ASSERT_SOME(json);
+
+  Try<slave::docker::Foo> foo =
+    ::protobuf::parse<slave::docker::Foo>(json.get());
+  ASSERT_SOME(foo);
+
+  EXPECT_EQ("abc", foo.get().id());
+}
+
+
+TEST_F(DockerSpecTest, ParseNestedJSONNull)
+{
+  string message = strings::remove(
+      "{"
+      "  \"id\": \"abc\","
+      "  \"bar\": {"
+      "      \"id\": \"nested\","
+      "      \"tag\": null"
+      "  }"
+      "}",
+      " ");
+
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(message);
+  ASSERT_SOME(json);
+
+  Try<slave::docker::Foo> foo =
+    ::protobuf::parse<slave::docker::Foo>(json.get());
+  ASSERT_SOME(foo);
+
+  EXPECT_EQ("abc", foo.get().id());
+  EXPECT_EQ("nested", foo.get().bar().id());
+}
 
 
 TEST_F(DockerSpecTest, SerializeV1DockerManifest)

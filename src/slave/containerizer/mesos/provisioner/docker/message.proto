@@ -42,3 +42,17 @@ message Image {
 message Images {
   repeated Image images = 1;
 }
+
+
+// A message for testing protobuf parse with JSON Null.
+message Foo {
+  required string id = 1;
+  optional string tag = 2;
+
+  message Bar {
+    optional string id = 1;
+    repeated string tag = 2;
+  }
+
+  optional Bar bar = 3;
+}
