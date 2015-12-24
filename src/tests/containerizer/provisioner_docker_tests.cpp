@@ -322,17 +322,16 @@ TEST_F(DockerSpecTest, ParseJSONNull)
 
 TEST_F(DockerSpecTest, ParseNestedJSONNull)
 {
-  string message = strings::remove(
+  JSON::Value message = JSON::parse(
       "{"
       "  \"id\": \"abc\","
       "  \"bar\": {"
       "      \"id\": \"nested\","
       "      \"tag\": null"
       "  }"
-      "}",
-      " ");
+      "}").get();
 
-  Try<JSON::Object> json = JSON::parse<JSON::Object>(message);
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(stringify(message));
   ASSERT_SOME(json);
 
   Try<slave::docker::Foo> foo =

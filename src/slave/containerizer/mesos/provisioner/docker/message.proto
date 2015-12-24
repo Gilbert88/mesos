@@ -46,7 +46,7 @@ message Images {
 
 // A message for testing protobuf parse with JSON Null.
 message Foo {
-  required string id = 1;
+  optional string id = 1;
   optional string tag = 2;
 
   message Bar {
