@@ -324,10 +324,9 @@ TEST_F(DockerSpecTest, ParseNestedJSONNull)
 {
   JSON::Value message = JSON::parse(
       "{"
-      "  \"id\": \"abc\","
       "  \"bar\": {"
-      "      \"id\": \"nested\","
-      "      \"tag\": null"
+      "      \"monkey\": \"nested\","
+      "      \"tags\": null"
       "  }"
       "}").get();
 
@@ -338,8 +337,7 @@ TEST_F(DockerSpecTest, ParseNestedJSONNull)
     ::protobuf::parse<slave::docker::Foo>(json.get());
   ASSERT_SOME(foo);
 
-  EXPECT_EQ("abc", foo.get().id());
-  EXPECT_EQ("nested", foo.get().bar().id());
+  EXPECT_EQ("nested", foo.get().bar().monkey());
 }
 
 

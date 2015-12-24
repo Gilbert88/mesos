@@ -50,8 +50,8 @@ message Foo {
   optional string tag = 2;
 
   message Bar {
-    optional string id = 1;
-    repeated string tag = 2;
+    optional string monkey = 1;
+    repeated string tags = 2;
   }
 
   optional Bar bar = 3;
