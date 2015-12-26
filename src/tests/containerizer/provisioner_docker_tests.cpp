@@ -325,7 +325,7 @@ TEST_F(DockerSpecTest, ParseNestedJSONNull)
   JSON::Value message = JSON::parse(
       "{"
       "  \"bar\": {"
-      "      \"tiger\": \"nested\","
+      "      \"hostname\": \"nested\","
       "      \"tags\": null"
       "  }"
       "}").get();
@@ -337,7 +337,7 @@ TEST_F(DockerSpecTest, ParseNestedJSONNull)
     ::protobuf::parse<slave::docker::Foo>(json.get());
   ASSERT_SOME(foo);
 
-  EXPECT_EQ("nested", foo.get().bar().tiger());
+  EXPECT_EQ("nested", foo.get().bar().hostname());
 }
 
 
