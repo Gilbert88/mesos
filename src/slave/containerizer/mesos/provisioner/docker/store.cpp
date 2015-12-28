@@ -211,13 +211,28 @@ static Result<RuntimeConfig> getRuntimeConfig(
     envOption = env;
   }
 
+  Option<vector<string>> cmdOption = None();
+
+  if (v1DockerImageManifest.get().container_config().cmd_size() > 0) {
+    vector<string> cmd;
+
+    foreach (
+        const string& argument,
+        v1DockerImageManifest.get().container_config().cmd()) {
+      cmd.push_back(argument);
+    }
+
+    cmdOption = cmd;
+  }
+
   // If each member of RuntimeConfig is none, we return none.
   if (entrypointOption.isNone() &&
-      envOption.isNone()) {
+      envOption.isNone() &&
+      cmdOption.isNone()) {
     return None();
   }
 
-  return RuntimeConfig{entrypointOption, envOption};
+  return RuntimeConfig{entrypointOption, envOption, cmdOption};
 }
 
 

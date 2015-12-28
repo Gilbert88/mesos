@@ -42,6 +42,10 @@ struct RuntimeConfig
   Option<std::vector<std::string>> entrypoint;
   Option<std::map<std::string, std::string>> env;
 
+  // If Entrypoint is none, then the first entry of the Cmd should
+  // be interpreted as the executable to run.
+  Option<std::vector<std::string>> cmd;
+
   // TODO(gilbert): Add more runtime configurations from image.
 };
 
