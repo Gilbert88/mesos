@@ -17,6 +17,7 @@
 #include "slave/containerizer/mesos/provisioner/docker/store.hpp"
 
 #include <list>
+#include <map>
 #include <vector>
 
 #include <glog/logging.h>
@@ -25,6 +26,7 @@
 #include <stout/json.hpp>
 #include <stout/os.hpp>
 #include <stout/result.hpp>
+#include <stout/strings.hpp>
 
 #include <process/collect.hpp>
 #include <process/defer.hpp>
@@ -43,6 +45,7 @@
 using namespace process;
 
 using std::list;
+using std::map;
 using std::pair;
 using std::string;
 using std::vector;
@@ -184,12 +187,37 @@ static Result<RuntimeConfig> getRuntimeConfig(
     entrypointOption = entrypoint;
   }
 
+  Option<map<string, string>> envOption = None();
+
+  if (v1DockerImageManifest.get().container_config().env_size() > 0) {
+    map<string, string> env;
+
+    foreach (
+        const string& envPair,
+        v1DockerImageManifest.get().container_config().env()) {
+      const vector<string> tokens = strings::tokenize(envPair, "=");
+
+      if (tokens.size() != 2) {
+        return Error("Unexpected Env format: '" + envPair + "'");
+      }
+
+      if (env.count(tokens[0])) {
+        return Error("Unexpected deplicate Env: '" + tokens[0] + "'");
+      }
+
+      env[tokens[0]] = tokens[1];
+    }
+
+    envOption = env;
+  }
+
   // If each member of RuntimeConfig is none, we return none.
-  if (entrypointOption.isNone()) {
+  if (entrypointOption.isNone() &&
+      envOption.isNone()) {
     return None();
   }
 
-  return RuntimeConfig{entrypointOption};
+  return RuntimeConfig{entrypointOption, envOption};
 }
 
 

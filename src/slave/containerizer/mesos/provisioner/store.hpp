@@ -40,6 +40,7 @@ namespace slave {
 struct RuntimeConfig
 {
   Option<std::vector<std::string>> entrypoint;
+  Option<std::map<std::string, std::string>> env;
 
   // TODO(gilbert): Add more runtime configurations from image.
 };
