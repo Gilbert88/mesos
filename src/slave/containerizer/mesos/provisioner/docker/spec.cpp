@@ -114,7 +114,7 @@ Try<docker::v2::ImageManifest> parse(const JSON::Object& json)
         stringify(manifest.get().history(i).v1compatibility()));
 
     if (v1Compat.isError()) {
-      return Error("JSON parse failed: " + v1Compat.error());
+      return Error("Failed to parse v1Compatbility JSON: " + v1Compat.error());
     }
 
     Try<docker::v2::ImageManifest::History::V1Compatibility> v1Compatibility =
@@ -122,12 +122,11 @@ Try<docker::v2::ImageManifest> parse(const JSON::Object& json)
           v1Compat.get());
 
     if (v1Compatibility.isError()) {
-      return Error("Protobuf parse failed: " + v1Compatibility.error());
+      return Error("Parsing v1Compatibility protobuf failed: " +
+                   v1Compatibility.error());
     }
 
-    if (manifest.get().history(i).has_v1compat()) {
-      return Error("Unexpected optional field is set");
-    }
+    CHECK(!manifest.get().history(i).has_v1compat());
 
     manifest.get().mutable_history(i)->mutable_v1compat()
         ->CopyFrom(v1Compatibility.get());
