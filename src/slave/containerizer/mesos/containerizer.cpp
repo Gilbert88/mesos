@@ -248,6 +248,7 @@ Try<MesosContainerizer*> MesosContainerizer::create(
       fetcher,
       Owned<ContainerLogger>(logger.get()),
       Owned<Launcher>(launcher.get()),
+      provisioner.get(),
       isolators);
 }
 
@@ -258,6 +259,7 @@ MesosContainerizer::MesosContainerizer(
     Fetcher* fetcher,
     const Owned<ContainerLogger>& logger,
     const Owned<Launcher>& launcher,
+    const Owned<Provisioner>& provisioner,
     const vector<Owned<Isolator>>& isolators)
   : process(new MesosContainerizerProcess(
       flags,
@@ -265,6 +267,7 @@ MesosContainerizer::MesosContainerizer(
       fetcher,
       logger,
       launcher,
+      provisioner,
       isolators))
 {
   spawn(process.get());
