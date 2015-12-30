@@ -234,7 +234,8 @@ Future<Option<ContainerPrepareInfo>> CgroupsMemIsolatorProcess::prepare(
     const ContainerID& containerId,
     const ExecutorInfo& executorInfo,
     const string& directory,
-    const Option<string>& user)
+    const Option<string>& user,
+    const Option<ContainerConfig>& containerConfig)
 {
   if (infos.contains(containerId)) {
     return Failure("Container has already been prepared");

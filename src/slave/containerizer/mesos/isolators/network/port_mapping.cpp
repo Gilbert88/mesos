@@ -2110,7 +2110,8 @@ Future<Option<ContainerPrepareInfo>> PortMappingIsolatorProcess::prepare(
     const ContainerID& containerId,
     const ExecutorInfo& executorInfo,
     const string& directory,
-    const Option<string>& user)
+    const Option<string>& user,
+    const Option<ContainerConfig>& containerConfig)
 {
   if (unmanaged.contains(containerId)) {
     return Failure("Asked to prepare an unmanaged container");

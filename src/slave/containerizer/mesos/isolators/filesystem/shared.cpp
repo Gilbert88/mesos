@@ -78,7 +78,8 @@ Future<Option<ContainerPrepareInfo>> SharedFilesystemIsolatorProcess::prepare(
     const ContainerID& containerId,
     const ExecutorInfo& executorInfo,
     const string& directory,
-    const Option<string>& user)
+    const Option<string>& user,
+    const Option<ContainerConfig>& containerConfig)
 {
   if (executorInfo.has_container() &&
       executorInfo.container().type() != ContainerInfo::MESOS) {
