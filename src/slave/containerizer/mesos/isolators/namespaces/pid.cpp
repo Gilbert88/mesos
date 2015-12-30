@@ -155,7 +155,8 @@ Future<Option<ContainerPrepareInfo>> NamespacesPidIsolatorProcess::prepare(
     const ContainerID& containerId,
     const ExecutorInfo& executorInfo,
     const string& directory,
-    const Option<string>& user)
+    const Option<string>& user,
+    const Option<ContainerConfig>& containerConfig)
 {
   ContainerPrepareInfo prepareInfo;
   prepareInfo.set_namespaces(CLONE_NEWPID | CLONE_NEWNS);

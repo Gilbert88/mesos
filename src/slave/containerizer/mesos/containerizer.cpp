@@ -670,7 +670,8 @@ static Future<list<Option<ContainerPrepareInfo>>> __prepare(
   }
 
   // Propagate any failure.
-  return isolator->prepare(containerId, executorInfo, directory, user)
+  return isolator->prepare(
+      containerId, executorInfo, directory, user, containerConfig)
     .then(lambda::bind(&accumulate, prepareInfos, lambda::_1));
 }
 
