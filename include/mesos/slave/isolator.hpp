@@ -59,7 +59,8 @@ public:
       const ContainerID& containerId,
       const ExecutorInfo& executorInfo,
       const std::string& directory,
-      const Option<std::string>& user) = 0;
+      const Option<std::string>& user,
+      const Option<ContainerConfig>& containerConfig) = 0;
 
   // Isolate the executor.
   virtual process::Future<Nothing> isolate(
