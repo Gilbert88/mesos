@@ -192,9 +192,7 @@ Try<MesosContainerizer*> MesosContainerizer::create(
     // Filesystem isolators.
     {"filesystem/posix", &PosixFilesystemIsolatorProcess::create},
 #ifdef __linux__
-    {"filesystem/linux", lambda::bind(&LinuxFilesystemIsolatorProcess::create,
-                                      lambda::_1,
-                                      provisioner.get())},
+    {"filesystem/linux", &LinuxFilesystemIsolatorProcess::create},
 
     // TODO(jieyu): Deprecate this in favor of using filesystem/linux.
     {"filesystem/shared", &SharedFilesystemIsolatorProcess::create},
@@ -482,6 +480,9 @@ Future<Nothing> MesosContainerizerProcess::_recover(
 {
   list<Future<Nothing>> futures;
 
+  // Recover the provisioner first.
+  futures.push_back(provisioner->recover(recoverable, orphans));
+
   // Then recover the isolators.
   foreach (const Owned<Isolator>& isolator, isolators) {
     futures.push_back(isolator->recover(recoverable, orphans));
@@ -650,7 +651,7 @@ static list<Option<ContainerPrepareInfo>> accumulate(
 }
 
 
-static Future<list<Option<ContainerPrepareInfo>>> __prepare(
+static Future<list<Option<ContainerPrepareInfo>>> ___prepare(
     const Owned<Isolator>& isolator,
     const ContainerID& containerId,
     const ExecutorInfo& executorInfo,
@@ -676,6 +677,56 @@ static Future<list<Option<ContainerPrepareInfo>>> __prepare(
 }
 
 
+Future<list<Option<ContainerPrepareInfo>>> MesosContainerizerProcess::__prepare(
+    const Owned<Isolator>& isolator,
+    const ContainerID& containerId,
+    const ExecutorInfo& executorInfo,
+    const string& directory,
+    const Option<string>& user,
+    const Option<ProvisionInfo>& provisionInfo,
+    const list<Option<ContainerPrepareInfo>> prepareInfos)
+{
+  CHECK(executorInfo.has_container());
+  CHECK_EQ(executorInfo.container().type(), ContainerInfo::MESOS);
+
+  // We will provision the images specified in ContainerInfo::volumes
+  // as well. We will mutate ContainerInfo::volumes to include the
+  // paths to the provisioned root filesystems (by setting the
+  // 'host_path') if the volume specifies an image as the source.
+  Owned<ExecutorInfo> _executorInfo(new ExecutorInfo(executorInfo));
+  list<Future<Nothing>> futures;
+
+  for (int i = 0; i < _executorInfo->container().volumes_size(); i++) {
+    Volume* volume = _executorInfo->mutable_container()->mutable_volumes(i);
+
+    if (!volume->has_image()) {
+      continue;
+    }
+
+    const Image& image = volume->image();
+
+    futures.push_back(
+        provisioner->provision(containerId, image)
+          .then([volume](const ProvisionInfo& info) -> Future<Nothing> {
+            volume->set_host_path(info.rootfs);
+            return Nothing();
+          }));
+  }
+
+  return collect(futures)
+    .then([=]() -> Future<list<Option<ContainerPrepareInfo>>> {
+      return ___prepare(
+          isolator,
+          containerId,
+          *_executorInfo,
+          directory,
+          user,
+          provisionInfo,
+          prepareInfos);
+    });
+}
+
+
 Future<list<Option<ContainerPrepareInfo>>> MesosContainerizerProcess::_prepare(
     const Owned<Isolator>& isolator,
     const ContainerID& containerId,
@@ -685,7 +736,7 @@ Future<list<Option<ContainerPrepareInfo>>> MesosContainerizerProcess::_prepare(
     const list<Option<ContainerPrepareInfo>> prepareInfos)
 {
   if (!executorInfo.has_container()) {
-    return __prepare(isolator,
+    return ___prepare(isolator,
                      containerId,
                      executorInfo,
                      directory,
@@ -710,14 +761,15 @@ Future<list<Option<ContainerPrepareInfo>>> MesosContainerizerProcess::_prepare(
   const Image& image = executorInfo.container().mesos().image();
 
   return provisioner->provision(containerId, image)
-    .then(lambda::bind(&__prepare,
-                       isolator,
-                       containerId,
-                       executorInfo,
-                       directory,
-                       user,
-                       lambda::_1,
-                       prepareInfos));
+    .then(defer(PID<MesosContainerizerProcess>(this),
+                &MesosContainerizerProcess::__prepare,
+                isolator,
+                containerId,
+                executorInfo,
+                directory,
+                user,
+                lambda::_1,
+                prepareInfos));
 }
 
 Future<list<Option<ContainerPrepareInfo>>> MesosContainerizerProcess::prepare(
@@ -1415,7 +1467,11 @@ Future<list<Future<Nothing>>> MesosContainerizerProcess::cleanupIsolators(
                             lambda::_1));
   }
 
-  return f;
+  // Destroy the provisioned root filesystems.
+  return provisioner->destroy(containerId)
+    .then([f]() -> Future<list<Future<Nothing>>> {
+      return f;
+    });
 }
 
 } // namespace slave {

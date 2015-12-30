@@ -190,6 +190,16 @@ private:
       const Option<std::string>& user,
       const std::list<Option<mesos::slave::ContainerPrepareInfo>> prepareInfos);
 
+  process::Future<std::list<Option<mesos::slave::ContainerPrepareInfo>>>
+    __prepare(
+      const process::Owned<mesos::slave::Isolator>& isolator,
+      const ContainerID& containerId,
+      const ExecutorInfo& executorInfo,
+      const std::string& directory,
+      const Option<std::string>& user,
+      const Option<ProvisionInfo>& provisionInfo,
+      const std::list<Option<mesos::slave::ContainerPrepareInfo>> prepareInfos);
+
   process::Future<Nothing> fetch(
       const ContainerID& containerId,
       const CommandInfo& commandInfo,
