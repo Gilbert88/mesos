@@ -488,7 +488,11 @@ struct Parser : boost::static_visitor<Try<Nothing> >
 
   Try<Nothing> operator()(const JSON::Null&) const
   {
-    return Error("Not expecting a JSON null");
+    if (field->is_required()) {
+      return Error("Not expecting a JSON null");
+    }
+
+    return Nothing();
   }
 
 private:
