@@ -135,6 +135,11 @@ TEST_F(DockerSpecTest, ParseV1ImageManifest)
       "CA_CERTIFICATES_JAVA_VERSION=20140324",
       manifest.get().container_config().env(3));
 
+  EXPECT_EQ(
+      "cfa753dfea5e68a24366dfba16e6edf573daa447abf65bc11619c1a98a3aff54",
+      manifest.get().container_config().image());
+  EXPECT_EQ("/marathon", manifest.get().container_config().workingdir());
+
   EXPECT_EQ("/bin/sh", manifest.get().container_config().cmd(0));
   EXPECT_EQ("-c", manifest.get().container_config().cmd(1));
 
