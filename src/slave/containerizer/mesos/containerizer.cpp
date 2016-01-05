@@ -178,13 +178,11 @@ Try<MesosContainerizer*> MesosContainerizer::create(
     return Error("Failed to create launcher: " + launcher.error());
   }
 
-#ifdef __linux__
   // The provisioner will be used by the 'filesystem/linux' isolator.
   Try<Owned<Provisioner>> provisioner = Provisioner::create(flags_);
   if (provisioner.isError()) {
     return Error("Failed to create provisioner: " + provisioner.error());
   }
-#endif
 
   // Create the isolators for the MesosContainerizer.
   const hashmap<string, lambda::function<Try<Isolator*>(const Flags&)>>

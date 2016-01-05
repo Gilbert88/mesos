@@ -38,6 +38,7 @@
 
 #include "slave/containerizer/mesos/containerizer.hpp"
 #include "slave/containerizer/mesos/launcher.hpp"
+
 #include "slave/containerizer/mesos/provisioner/provisioner.hpp"
 
 #include "tests/flags.hpp"
@@ -121,8 +122,7 @@ public:
       return Error("Failed to create container logger: " + logger.error());
     }
 
-    Try<Owned<Provisioner>> provisioner = Provisioner::create(flags, fetcher);
-
+    Try<Owned<Provisioner>> provisioner = Provisioner::create(flags);
     if (provisioner.isError()) {
       return Error("Failed to create provisioner: " + provisioner.error());
     }
@@ -581,8 +581,7 @@ TEST_F(MesosContainerizerDestroyTest, DestroyWhileFetching)
 
   ASSERT_SOME(logger);
 
-  Try<Owned<Provisioner>> provisioner = Provisioner::create(flags, &fetcher);
-
+  Try<Owned<Provisioner>> provisioner = Provisioner::create(flags);
   ASSERT_SOME(provisioner);
 
   MockMesosContainerizerProcess* process = new MockMesosContainerizerProcess(
@@ -658,8 +657,7 @@ TEST_F(MesosContainerizerDestroyTest, DestroyWhilePreparing)
 
   ASSERT_SOME(logger);
 
-  Try<Owned<Provisioner>> provisioner = Provisioner::create(flags, &fetcher);
-
+  Try<Owned<Provisioner>> provisioner = Provisioner::create(flags);
   ASSERT_SOME(provisioner);
 
   MockMesosContainerizerProcess* process = new MockMesosContainerizerProcess(
@@ -745,8 +743,7 @@ TEST_F(MesosContainerizerDestroyTest, LauncherDestroyFailure)
 
   ASSERT_SOME(logger);
 
-  Try<Owned<Provisioner>> provisioner = Provisioner::create(flags, &fetcher);
-
+  Try<Owned<Provisioner>> provisioner = Provisioner::create(flags);
   ASSERT_SOME(provisioner);
 
   MesosContainerizerProcess* process = new MesosContainerizerProcess(
