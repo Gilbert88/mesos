@@ -65,6 +65,7 @@ using mesos::internal::slave::state::FrameworkState;
 using mesos::internal::slave::state::RunState;
 using mesos::internal::slave::state::SlaveState;
 
+using mesos::slave::ContainerConfig;
 using mesos::slave::ContainerLimitation;
 using mesos::slave::ContainerLogger;
 using mesos::slave::ContainerPrepareInfo;
@@ -514,7 +515,7 @@ public:
     EXPECT_CALL(*this, cleanup(_))
       .WillRepeatedly(Return(Nothing()));
 
-    EXPECT_CALL(*this, prepare(_, _, _, _, _))
+    EXPECT_CALL(*this, prepare(_, _, _))
       .WillRepeatedly(Invoke(this, &MockIsolator::_prepare));
   }
 
@@ -524,21 +525,17 @@ public:
           const list<ContainerState>&,
           const hashset<ContainerID>&));
 
-  MOCK_METHOD5(
+  MOCK_METHOD3(
       prepare,
       Future<Option<ContainerPrepareInfo>>(
           const ContainerID&,
           const ExecutorInfo&,
-          const string&,
-          const Option<string>&,
-          const Option<ContainerConfig>&));
+          const ContainerConfig&));
 
   virtual Future<Option<ContainerPrepareInfo>> _prepare(
       const ContainerID& containerId,
       const ExecutorInfo& executorInfo,
-      const string& directory,
-      const Option<string>& user,
-      const Option<ContainerConfig>& containerConfig)
+      const ContainerConfig& containerConfig)
   {
     return None();
   }
@@ -648,7 +645,7 @@ TEST_F(MesosContainerizerDestroyTest, DestroyWhilePreparing)
   Promise<Option<ContainerPrepareInfo>> promise;
 
   // Simulate a long prepare from the isolator.
-  EXPECT_CALL(*isolator, prepare(_, _, _, _, _))
+  EXPECT_CALL(*isolator, prepare(_, _, _))
     .WillOnce(DoAll(FutureSatisfy(&prepare),
                     Return(promise.future())));
 

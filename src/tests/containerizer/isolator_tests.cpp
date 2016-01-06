@@ -90,6 +90,7 @@ using mesos::internal::slave::PosixCpuIsolatorProcess;
 using mesos::internal::slave::PosixMemIsolatorProcess;
 using mesos::internal::slave::Slave;
 
+using mesos::slave::ContainerConfig;
 using mesos::slave::ContainerPrepareInfo;
 using mesos::slave::Isolator;
 
@@ -160,12 +161,13 @@ TYPED_TEST(CpuIsolatorTest, UserCpuUsage)
   Try<string> dir = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir);
 
+  ContainerConfig containerConfig;
+  containerConfig.set_directory(dir.get());
+
   AWAIT_READY(isolator.get()->prepare(
       containerId,
       executorInfo,
-      dir.get(),
-      None(),
-      None()));
+      containerConfig));
 
   const string& file = path::join(dir.get(), "mesos_isolator_test_ready");
 
@@ -271,12 +273,13 @@ TYPED_TEST(CpuIsolatorTest, SystemCpuUsage)
   Try<string> dir = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir);
 
+  ContainerConfig containerConfig;
+  containerConfig.set_directory(dir.get());
+
   AWAIT_READY(isolator.get()->prepare(
       containerId,
       executorInfo,
-      dir.get(),
-      None(),
-      None()));
+      containerConfig));
 
   const string& file = path::join(dir.get(), "mesos_isolator_test_ready");
 
@@ -384,12 +387,13 @@ TEST_F(RevocableCpuIsolatorTest, ROOT_CGROUPS_RevocableCpu)
   ContainerID containerId;
   containerId.set_value(UUID::random().toString());
 
+  ContainerConfig containerConfig;
+  containerConfig.set_directory(os::getcwd());
+
   AWAIT_READY(isolator.get()->prepare(
         containerId,
         executorInfo,
-        os::getcwd(),
-        None(),
-        None()));
+        containerConfig));
 
   vector<string> argv{"sleep", "100"};
 
@@ -465,13 +469,14 @@ TEST_F(LimitedCpuIsolatorTest, ROOT_CGROUPS_CFS_Enable_Cfs)
   Try<string> dir = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir);
 
+  ContainerConfig containerConfig;
+  containerConfig.set_directory(dir.get());
+
   Future<Option<ContainerPrepareInfo>> prepare =
     isolator.get()->prepare(
         containerId,
         executorInfo,
-        dir.get(),
-        None(),
-        None());
+        containerConfig);
 
   AWAIT_READY(prepare);
 
@@ -580,13 +585,14 @@ TEST_F(LimitedCpuIsolatorTest, ROOT_CGROUPS_CFS_Big_Quota)
   Try<string> dir = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir);
 
+  ContainerConfig containerConfig;
+  containerConfig.set_directory(dir.get());
+
   Future<Option<ContainerPrepareInfo>> prepare =
     isolator.get()->prepare(
         containerId,
         executorInfo,
-        dir.get(),
-        None(),
-        None());
+        containerConfig);
 
   AWAIT_READY(prepare);
 
@@ -667,13 +673,14 @@ TEST_F(LimitedCpuIsolatorTest, ROOT_CGROUPS_Pids_and_Tids)
   Try<string> dir = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir);
 
+  ContainerConfig containerConfig;
+  containerConfig.set_directory(dir.get());
+
   Future<Option<ContainerPrepareInfo>> prepare =
     isolator.get()->prepare(
         containerId,
         executorInfo,
-        dir.get(),
-        None(),
-        None());
+        containerConfig);
 
   AWAIT_READY(prepare);
 
@@ -793,12 +800,13 @@ TYPED_TEST(MemIsolatorTest, MemUsage)
   Try<string> dir = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir);
 
+  ContainerConfig containerConfig;
+  containerConfig.set_directory(dir.get());
+
   AWAIT_READY(isolator.get()->prepare(
       containerId,
       executorInfo,
-      dir.get(),
-      None(),
-      None()));
+      containerConfig));
 
   MemoryTestHelper helper;
   ASSERT_SOME(helper.spawn());
@@ -856,12 +864,13 @@ TEST_F(PerfEventIsolatorTest, ROOT_CGROUPS_Sample)
   Try<string> dir = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir);
 
+  ContainerConfig containerConfig;
+  containerConfig.set_directory(dir.get());
+
   AWAIT_READY(isolator.get()->prepare(
       containerId,
       executorInfo,
-      dir.get(),
-      None(),
-      None()));
+      containerConfig));
 
   // This first sample is likely to be empty because perf hasn't
   // completed yet but we should still have the required fields.
@@ -952,13 +961,14 @@ TEST_F(SharedFilesystemIsolatorTest, DISABLED_ROOT_RelativeVolume)
   ContainerID containerId;
   containerId.set_value(UUID::random().toString());
 
+  ContainerConfig containerConfig;
+  containerConfig.set_directory(flags.work_dir);
+
   Future<Option<ContainerPrepareInfo> > prepare =
     isolator.get()->prepare(
         containerId,
         executorInfo,
-        flags.work_dir,
-        None(),
-        None());
+        containerConfig);
 
   AWAIT_READY(prepare);
   ASSERT_SOME(prepare.get());
@@ -1058,13 +1068,14 @@ TEST_F(SharedFilesystemIsolatorTest, DISABLED_ROOT_AbsoluteVolume)
   ContainerID containerId;
   containerId.set_value(UUID::random().toString());
 
+  ContainerConfig containerConfig;
+  containerConfig.set_directory(flags.work_dir);
+
   Future<Option<ContainerPrepareInfo> > prepare =
     isolator.get()->prepare(
         containerId,
         executorInfo,
-        flags.work_dir,
-        None(),
-        None());
+        containerConfig);
 
   AWAIT_READY(prepare);
   ASSERT_SOME(prepare.get());
@@ -1235,12 +1246,14 @@ TYPED_TEST(UserCgroupIsolatorTest, ROOT_CGROUPS_UserCgroup)
   ContainerID containerId;
   containerId.set_value(UUID::random().toString());
 
+  ContainerConfig containerConfig;
+  containerConfig.set_directory(os::getcwd());
+  containerConfig.set_user(UNPRIVILEGED_USERNAME);
+
   AWAIT_READY(isolator.get()->prepare(
       containerId,
       executorInfo,
-      os::getcwd(),
-      UNPRIVILEGED_USERNAME,
-      None()));
+      containerConfig));
 
   // Isolators don't provide a way to determine the cgroups they use
   // so we'll inspect the cgroups for an isolated dummy process.
