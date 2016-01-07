@@ -386,3 +386,32 @@ TEST(ProtobufTest, ParseJSONContainingJSONNull)
   parse = protobuf::parse<tests::Nested>(json.get());
   ASSERT_ERROR(parse);
 }
+
+
+TEST(ProtobufTest, ParseNestedJSONWithErrorMessage)
+{
+  // We only concern the JSON field 'nested' here to test a nested
+  // JSON with an error from protobuf parse. We use the long message
+  // below to avoid creating a new protobuf message in protobuf tests.
+  string message =
+    "{"
+    "  \"b\": true,"
+    "  \"str\": \"string\","
+    "  \"bytes\": \"Ynl0ZXM=\","
+    "  \"f\": 1.0,"
+    "  \"d\": 1.0,"
+    "  \"e\": \"ONE\","
+    "  \"nested\": {"
+    "      \"str\": 1.0"
+    "  }"
+    "}";
+
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(message);
+  ASSERT_SOME(json);
+
+  Try<tests::Message> parse = protobuf::parse<tests::Message>(json.get());
+  ASSERT_ERROR(parse);
+
+  EXPECT_TRUE(strings::startsWith(
+      parse.error(), "Not expecting a JSON number for field"));
+}
