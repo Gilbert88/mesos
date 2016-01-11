@@ -332,10 +332,27 @@ struct Parser : boost::static_visitor<Try<Nothing> >
   {
     switch (field->type()) {
       case google::protobuf::FieldDescriptor::TYPE_MESSAGE:
+        // TODO(gilbert): Support collecting message names in each
+        // iteration for recursive case, and print them out sequencially
+        // in one error message.
         if (field->is_repeated()) {
-          parse(reflection->AddMessage(message, field), object);
+          Try<Nothing> parseIsRepeated =
+            parse(reflection->AddMessage(message, field), object);
+
+          // We pass the error message directly to avoid redundant
+          // messages for recursive case.
+          if (parseIsRepeated.isError()) {
+            return Error(parseIsRepeated.error());
+          }
         } else {
-          parse(reflection->MutableMessage(message, field), object);
+          Try<Nothing> parseElse =
+            parse(reflection->MutableMessage(message, field), object);
+
+          // We pass the error message directly to avoid redundant
+          // messages for recursive case.
+          if (parseElse.isError()) {
+            return Error(parseElse.error());
+          }
         }
         break;
       default:
