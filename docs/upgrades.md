@@ -14,6 +14,8 @@ This document serves as a guide for users who wish to upgrade an existing Mesos 
 
 * The `executorLost` callback in the Scheduler interface will now be called whenever the slave detects termination of a custom executor. This callback was never called in previous versions, so please make sure any framework schedulers can now safely handle this callback. Note that this callback may not be reliably delivered.
 
+* The slave isolator `prepare` interface has changed because provisioner is pulled out from linux filesystem isolator. See [MESOS-4240](https://issues.apache.org/jira/browse/MESOS-4240) and [MESOS-4282](https://issues.apache.org/jira/browse/MESOS-4282) for more information. If you have any private module using slave isolator, you have to update the interface and re-compile Mesos.
+
 ## Upgrading from 0.25.x to 0.26.x ##
 
 **NOTE** The names of some TaskStatus::Reason enums have been changed. But the tag numbers remain unchanged, so it is backwards compatible. Frameworks using the new version might need to do some compile time adjustments:
