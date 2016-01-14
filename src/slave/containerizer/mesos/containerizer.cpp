@@ -1213,7 +1213,7 @@ void MesosContainerizerProcess::destroy(
     // We need to wait for the isolators to finish preparing to prevent
     // a race that the destroy method calls isolators' cleanup before
     // it starts preparing.
-    container->prepareInfos
+    container->launchInfos
       .onAny(defer(
           self(),
           &Self::___destroy,
