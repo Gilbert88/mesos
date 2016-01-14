@@ -77,7 +77,7 @@ using namespace routing::queueing;
 
 using mesos::internal::master::Master;
 
-using mesos::slave::ContainerPrepareInfo;
+using mesos::slave::ContainerLaunchInfo;
 using mesos::slave::Isolator;
 
 using std::list;
@@ -299,7 +299,7 @@ protected:
       int pipes[2],
       const ContainerID& containerId,
       const string& command,
-      const Option<ContainerPrepareInfo>& preparation)
+      const Option<ContainerLaunchInfo>& launchInfo)
   {
     CommandInfo commandInfo;
     commandInfo.set_value(command);
@@ -316,13 +316,13 @@ protected:
     launchFlags.pipe_read = pipes[0];
     launchFlags.pipe_write = pipes[1];
 
-    if (preparation.get().commands().size() != 1) {
-      return Error("No valid commands inside ContainerPrepareInfo.");
+    if (launchInfo.get().commands().size() != 1) {
+      return Error("No valid commands inside ContainerLaunchInfo.");
     }
 
     JSON::Object commands;
     JSON::Array array;
-    array.values.push_back(JSON::protobuf(preparation.get().commands(0)));
+    array.values.push_back(JSON::protobuf(launchInfo.get().commands(0)));
     commands.values["commands"] = array;
 
     launchFlags.commands = commands;
@@ -455,16 +455,16 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_ContainerToContainerTCP)
   Try<string> dir1 = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir1);
 
-  Future<Option<ContainerPrepareInfo>> preparation1 =
+  Future<Option<ContainerLaunchInfo>> launchInfo1 =
     isolator.get()->prepare(
         containerId1,
         executorInfo,
         dir1.get(),
         None());
 
-  AWAIT_READY(preparation1);
-  ASSERT_SOME(preparation1.get());
-  ASSERT_EQ(1, preparation1.get().get().commands().size());
+  AWAIT_READY(launchInfo1);
+  ASSERT_SOME(launchInfo1.get());
+  ASSERT_EQ(1, launchInfo1.get().get().commands().size());
 
   ostringstream command1;
 
@@ -491,7 +491,7 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_ContainerToContainerTCP)
       pipes,
       containerId1,
       command1.str(),
-      preparation1.get());
+      launchInfo1.get());
   ASSERT_SOME(pid);
 
   // Reap the forked child.
@@ -522,16 +522,16 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_ContainerToContainerTCP)
   Try<string> dir2 = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir2);
 
-  Future<Option<ContainerPrepareInfo>> preparation2 =
+  Future<Option<ContainerLaunchInfo>> launchInfo2 =
     isolator.get()->prepare(
         containerId2,
         executorInfo,
         dir2.get(),
         None());
 
-  AWAIT_READY(preparation2);
-  ASSERT_SOME(preparation2.get());
-  ASSERT_EQ(1, preparation2.get().get().commands().size());
+  AWAIT_READY(launchInfo2);
+  ASSERT_SOME(launchInfo2.get());
+  ASSERT_EQ(1, launchInfo2.get().get().commands().size());
 
   ostringstream command2;
 
@@ -553,7 +553,7 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_ContainerToContainerTCP)
       pipes,
       containerId2,
       command2.str(),
-      preparation2.get());
+      launchInfo2.get());
   ASSERT_SOME(pid);
 
   // Reap the forked child.
@@ -614,16 +614,16 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_ContainerToContainerUDP)
   Try<string> dir1 = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir1);
 
-  Future<Option<ContainerPrepareInfo>> preparation1 =
+  Future<Option<ContainerLaunchInfo>> launchInfo1 =
     isolator.get()->prepare(
         containerId1,
         executorInfo,
         dir1.get(),
         None());
 
-  AWAIT_READY(preparation1);
-  ASSERT_SOME(preparation1.get());
-  ASSERT_EQ(1, preparation1.get().get().commands().size());
+  AWAIT_READY(launchInfo1);
+  ASSERT_SOME(launchInfo1.get());
+  ASSERT_EQ(1, launchInfo1.get().get().commands().size());
 
   ostringstream command1;
 
@@ -650,7 +650,7 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_ContainerToContainerUDP)
       pipes,
       containerId1,
       command1.str(),
-      preparation1.get());
+      launchInfo1.get());
   ASSERT_SOME(pid);
 
   // Reap the forked child.
@@ -681,16 +681,16 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_ContainerToContainerUDP)
   Try<string> dir2 = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir2);
 
-  Future<Option<ContainerPrepareInfo>> preparation2 =
+  Future<Option<ContainerLaunchInfo>> launchInfo2 =
     isolator.get()->prepare(
         containerId2,
         executorInfo,
         dir2.get(),
         None());
 
-  AWAIT_READY(preparation2);
-  ASSERT_SOME(preparation2.get());
-  ASSERT_EQ(1, preparation2.get().get().commands().size());
+  AWAIT_READY(launchInfo2);
+  ASSERT_SOME(launchInfo2.get());
+  ASSERT_EQ(1, launchInfo2.get().get().commands().size());
 
   ostringstream command2;
 
@@ -713,7 +713,7 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_ContainerToContainerUDP)
       pipes,
       containerId2,
       command2.str(),
-      preparation2.get());
+      launchInfo2.get());
 
   ASSERT_SOME(pid);
 
@@ -775,16 +775,16 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_HostToContainerUDP)
   Try<string> dir = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir);
 
-  Future<Option<ContainerPrepareInfo>> preparation1 =
+  Future<Option<ContainerLaunchInfo>> launchInfo1 =
     isolator.get()->prepare(
         containerId,
         executorInfo,
         dir.get(),
         None());
 
-  AWAIT_READY(preparation1);
-  ASSERT_SOME(preparation1.get());
-  ASSERT_EQ(1, preparation1.get().get().commands().size());
+  AWAIT_READY(launchInfo1);
+  ASSERT_SOME(launchInfo1.get());
+  ASSERT_EQ(1, launchInfo1.get().get().commands().size());
 
   ostringstream command1;
 
@@ -811,7 +811,7 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_HostToContainerUDP)
       pipes,
       containerId,
       command1.str(),
-      preparation1.get());
+      launchInfo1.get());
 
   ASSERT_SOME(pid);
 
@@ -891,16 +891,16 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_HostToContainerTCP)
   Try<string> dir = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir);
 
-  Future<Option<ContainerPrepareInfo>> preparation1 =
+  Future<Option<ContainerLaunchInfo>> launchInfo1 =
     isolator.get()->prepare(
         containerId,
         executorInfo,
         dir.get(),
         None());
 
-  AWAIT_READY(preparation1);
-  ASSERT_SOME(preparation1.get());
-  ASSERT_EQ(1, preparation1.get().get().commands().size());
+  AWAIT_READY(launchInfo1);
+  ASSERT_SOME(launchInfo1.get());
+  ASSERT_EQ(1, launchInfo1.get().get().commands().size());
 
   ostringstream command1;
 
@@ -927,7 +927,7 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_HostToContainerTCP)
       pipes,
       containerId,
       command1.str(),
-      preparation1.get());
+      launchInfo1.get());
 
   ASSERT_SOME(pid);
 
@@ -1015,16 +1015,16 @@ TEST_F(PortMappingIsolatorTest, ROOT_ContainerICMPExternal)
   Try<string> dir = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir);
 
-  Future<Option<ContainerPrepareInfo>> preparation1 =
+  Future<Option<ContainerLaunchInfo>> launchInfo1 =
     isolator.get()->prepare(
         containerId,
         executorInfo,
         dir.get(),
         None());
 
-  AWAIT_READY(preparation1);
-  ASSERT_SOME(preparation1.get());
-  ASSERT_EQ(1, preparation1.get().get().commands().size());
+  AWAIT_READY(launchInfo1);
+  ASSERT_SOME(launchInfo1.get());
+  ASSERT_EQ(1, launchInfo1.get().get().commands().size());
 
   ostringstream command1;
   for (unsigned int i = 0; i < nameServers.size(); i++) {
@@ -1044,7 +1044,7 @@ TEST_F(PortMappingIsolatorTest, ROOT_ContainerICMPExternal)
       pipes,
       containerId,
       command1.str(),
-      preparation1.get());
+      launchInfo1.get());
 
   ASSERT_SOME(pid);
 
@@ -1100,16 +1100,16 @@ TEST_F(PortMappingIsolatorTest, ROOT_ContainerICMPInternal)
   Try<string> dir = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir);
 
-  Future<Option<ContainerPrepareInfo>> preparation1 =
+  Future<Option<ContainerLaunchInfo>> launchInfo1 =
     isolator.get()->prepare(
         containerId,
         executorInfo,
         dir.get(),
         None());
 
-  AWAIT_READY(preparation1);
-  ASSERT_SOME(preparation1.get());
-  ASSERT_EQ(1, preparation1.get().get().commands().size());
+  AWAIT_READY(launchInfo1);
+  ASSERT_SOME(launchInfo1.get());
+  ASSERT_EQ(1, launchInfo1.get().get().commands().size());
 
   ostringstream command1;
   command1 << "ping -c1 127.0.0.1 && ping -c1 " << hostIP
@@ -1123,7 +1123,7 @@ TEST_F(PortMappingIsolatorTest, ROOT_ContainerICMPInternal)
       pipes,
       containerId,
       command1.str(),
-      preparation1.get());
+      launchInfo1.get());
 
   ASSERT_SOME(pid);
 
@@ -1188,16 +1188,16 @@ TEST_F(PortMappingIsolatorTest, ROOT_ContainerARPExternal)
   Try<string> dir = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir);
 
-  Future<Option<ContainerPrepareInfo>> preparation1 =
+  Future<Option<ContainerLaunchInfo>> launchInfo1 =
     isolator.get()->prepare(
         containerId,
         executorInfo,
         dir.get(),
         None());
 
-  AWAIT_READY(preparation1);
-  ASSERT_SOME(preparation1.get());
-  ASSERT_EQ(1, preparation1.get().get().commands().size());
+  AWAIT_READY(launchInfo1);
+  ASSERT_SOME(launchInfo1.get());
+  ASSERT_EQ(1, launchInfo1.get().get().commands().size());
 
   ostringstream command1;
   for (unsigned int i = 0; i < nameServers.size(); i++) {
@@ -1218,7 +1218,7 @@ TEST_F(PortMappingIsolatorTest, ROOT_ContainerARPExternal)
       pipes,
       containerId,
       command1.str(),
-      preparation1.get());
+      launchInfo1.get());
 
   ASSERT_SOME(pid);
 
@@ -1282,16 +1282,16 @@ TEST_F(PortMappingIsolatorTest, ROOT_DNS)
   Try<string> dir = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir);
 
-  Future<Option<ContainerPrepareInfo>> preparation1 =
+  Future<Option<ContainerLaunchInfo>> launchInfo1 =
     isolator.get()->prepare(
         containerId,
         executorInfo,
         dir.get(),
         None());
 
-  AWAIT_READY(preparation1);
-  ASSERT_SOME(preparation1.get());
-  ASSERT_EQ(1, preparation1.get().get().commands().size());
+  AWAIT_READY(launchInfo1);
+  ASSERT_SOME(launchInfo1.get());
+  ASSERT_EQ(1, launchInfo1.get().get().commands().size());
 
   ostringstream command1;
   for (unsigned int i = 0; i < nameServers.size(); i++) {
@@ -1311,7 +1311,7 @@ TEST_F(PortMappingIsolatorTest, ROOT_DNS)
       pipes,
       containerId,
       command1.str(),
-      preparation1.get());
+      launchInfo1.get());
 
   ASSERT_SOME(pid);
 
@@ -1372,16 +1372,16 @@ TEST_F(PortMappingIsolatorTest, ROOT_TooManyContainers)
   Try<string> dir1 = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir1);
 
-  Future<Option<ContainerPrepareInfo>> preparation1 =
+  Future<Option<ContainerLaunchInfo>> launchInfo1 =
     isolator.get()->prepare(
         containerId1,
         executorInfo,
         dir1.get(),
         None());
 
-  AWAIT_READY(preparation1);
-  ASSERT_SOME(preparation1.get());
-  ASSERT_EQ(1, preparation1.get().get().commands().size());
+  AWAIT_READY(launchInfo1);
+  ASSERT_SOME(launchInfo1.get());
+  ASSERT_EQ(1, launchInfo1.get().get().commands().size());
 
   ostringstream command1;
   command1 << "sleep 1000";
@@ -1394,7 +1394,7 @@ TEST_F(PortMappingIsolatorTest, ROOT_TooManyContainers)
       pipes,
       containerId1,
       command1.str(),
-      preparation1.get());
+      launchInfo1.get());
 
   ASSERT_SOME(pid);
 
@@ -1423,14 +1423,14 @@ TEST_F(PortMappingIsolatorTest, ROOT_TooManyContainers)
   Try<string> dir2 = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir2);
 
-  Future<Option<ContainerPrepareInfo>> preparation2 =
+  Future<Option<ContainerLaunchInfo>> launchInfo2 =
     isolator.get()->prepare(
         containerId2,
         executorInfo,
         dir2.get(),
         None());
 
-  AWAIT_FAILED(preparation2);
+  AWAIT_FAILED(launchInfo2);
 
   // Ensure all processes are killed.
   AWAIT_READY(launcher.get()->destroy(containerId1));
@@ -1487,16 +1487,16 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_SmallEgressLimit)
   Try<string> dir = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir);
 
-  Future<Option<ContainerPrepareInfo>> preparation1 =
+  Future<Option<ContainerLaunchInfo>> launchInfo1 =
     isolator.get()->prepare(
         containerId,
         executorInfo,
         dir.get(),
         None());
 
-  AWAIT_READY(preparation1);
-  ASSERT_SOME(preparation1.get());
-  ASSERT_EQ(1, preparation1.get().get().commands().size());
+  AWAIT_READY(launchInfo1);
+  ASSERT_SOME(launchInfo1.get());
+  ASSERT_EQ(1, launchInfo1.get().get().commands().size());
 
   // Fill 'size' bytes of data. The actual content does not matter.
   string data(size.bytes(), 'a');
@@ -1522,7 +1522,7 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_SmallEgressLimit)
       pipes,
       containerId,
       command2.str(),
-      preparation1.get());
+      launchInfo1.get());
 
   ASSERT_SOME(pid);
 
@@ -1640,16 +1640,16 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_PortMappingStatistics)
   Try<string> dir1 = os::mkdtemp(path::join(os::getcwd(), "XXXXXX"));
   ASSERT_SOME(dir1);
 
-  Future<Option<ContainerPrepareInfo>> preparation1 =
+  Future<Option<ContainerLaunchInfo>> launchInfo1 =
     isolator.get()->prepare(
         containerId,
         executorInfo,
         dir1.get(),
         None());
 
-  AWAIT_READY(preparation1);
-  ASSERT_SOME(preparation1.get());
-  ASSERT_EQ(1, preparation1.get().get().commands().size());
+  AWAIT_READY(launchInfo1);
+  ASSERT_SOME(launchInfo1.get());
+  ASSERT_EQ(1, launchInfo1.get().get().commands().size());
 
   // Fill 'size' bytes of data. The actual content does not matter.
   string data(size.bytes(), 'a');
@@ -1675,7 +1675,7 @@ TEST_F(PortMappingIsolatorTest, ROOT_NC_PortMappingStatistics)
       pipes,
       containerId,
       command2.str(),
-      preparation1.get());
+      launchInfo1.get());
 
   ASSERT_SOME(pid);
 
