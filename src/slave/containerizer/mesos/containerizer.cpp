@@ -668,6 +668,7 @@ Future<bool> MesosContainerizerProcess::launch(
                   slaveId,
                   slavePid,
                   checkpoint,
+                  None(),
                   lambda::_1));
   }
 
@@ -765,6 +766,7 @@ Future<bool> MesosContainerizerProcess::_launch(
                     slaveId,
                     slavePid,
                     checkpoint,
+                    provisionInfo,
                     lambda::_1));
     });
 }
@@ -868,6 +870,7 @@ Future<bool> MesosContainerizerProcess::__launch(
     const SlaveID& slaveId,
     const PID<Slave>& slavePid,
     bool checkpoint,
+    const Option<ProvisionInfo>& provisionInfo,
     const list<Option<ContainerLaunchInfo>>& launchInfos)
 {
   if (!containers_.contains(containerId)) {
@@ -899,6 +902,45 @@ Future<bool> MesosContainerizerProcess::__launch(
       slavePid,
       checkpoint,
       flags);
+
+  // TODO(gilbert): Refactor runtime configuration to docker runtime
+  // isolator. Remove method parameter `provisionInfo` if we move the
+  // following code to docker runtime isolator.
+  if (provisionInfo.isSome() &&
+      provisionInfo->dockerManifest.isSome() &&
+      provisionInfo->dockerManifest->has_container_config() &&
+      provisionInfo->dockerManifest->container_config().env_size() > 0) {
+      // Overwrite any duplicated environment variable that was
+      // succeeded from slave. We are expecting env variables
+      // from the protobuf as a list of pairs (e.g: name1=value1,
+      // name2=value2).
+      foreach(const string& env,
+              provisionInfo->dockerManifest->container_config().env()) {
+        // Use `find_first_of` to prevent to case that there are
+        // multiple '=' existing.
+        size_t position = env.find_first_of('=');
+        if (position == string::npos) {
+          VLOG(1) << "Skipping invalid environment variable: '"
+                  << env << "' in docker manifest for container '"
+                  << containerId << "'";
+
+          continue;
+        }
+
+        const string name = env.substr(0, position);
+        const string value = env.substr(position + 1);
+
+        if (environment.count(name)) {
+          VLOG(1) << "Overwriting environment variable '"
+                  << name << "', original: '"
+                  << environment[name] << "', new: '"
+                  << value << "', for container '"
+                  << containerId << "'";
+        }
+
+        environment[name] = value;
+      }
+  }
 
   // TODO(jieyu): Consider moving this to 'executorEnvironment' and
   // consolidating with docker containerizer.
