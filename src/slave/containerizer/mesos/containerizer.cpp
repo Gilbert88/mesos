@@ -668,6 +668,7 @@ Future<bool> MesosContainerizerProcess::launch(
                   slaveId,
                   slavePid,
                   checkpoint,
+                  None(),
                   lambda::_1));
   }
 
@@ -765,6 +766,7 @@ Future<bool> MesosContainerizerProcess::_launch(
                     slaveId,
                     slavePid,
                     checkpoint,
+                    provisionInfo,
                     lambda::_1));
     });
 }
@@ -868,6 +870,7 @@ Future<bool> MesosContainerizerProcess::__launch(
     const SlaveID& slaveId,
     const PID<Slave>& slavePid,
     bool checkpoint,
+    const Option<ProvisionInfo>& provisionInfo,
     const list<Option<ContainerLaunchInfo>>& launchInfos)
 {
   if (!containers_.contains(containerId)) {
@@ -899,6 +902,36 @@ Future<bool> MesosContainerizerProcess::__launch(
       slavePid,
       checkpoint,
       flags);
+
+  // TODO(gilbert): Refactor runtime configuration to docker runtime
+  // isolator. We pass `provisionInfo` to `__launch` for docker image
+  // runtime configuration.
+  if (provisionInfo.isSome() &&
+      provisionInfo->dockerManifest.isSome() &&
+      provisionInfo->dockerManifest->has_container_config() &&
+      provisionInfo->dockerManifest->container_config().env_size() > 0) {
+      // Overwrite any duplicated environment variable that was
+      // succeeded from slave.
+      foreach(const string& env,
+              provisionInfo->dockerManifest->container_config().env()) {
+        const vector<string> tokens = strings::tokenize(env, "=");
+        if (tokens.size() != 2) {
+          VLOG(1) << "Skipping invalid environment variable: '"
+                  << env << "'";
+
+          continue;
+        }
+
+        if (environment.count(tokens[0])) {
+          VLOG(1) << "Overwrting environment variable '"
+                  << tokens[0] << "', original: '"
+                  << environment[tokens[0]] << "', new: '"
+                  << tokens[1] << "'";
+        }
+
+        environment[tokens[0]] = tokens[1];
+      }
+  }
 
   // TODO(jieyu): Consider moving this to 'executorEnvironment' and
   // consolidating with docker containerizer.
