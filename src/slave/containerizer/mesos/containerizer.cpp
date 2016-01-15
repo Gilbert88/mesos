@@ -859,11 +859,11 @@ Future<bool> MesosContainerizerProcess::__launch(
   // isolator should return the container root filesystem.
   Option<string> rootfs;
   foreach (const Option<ContainerLaunchInfo>& launchInfo, launchInfos) {
-    if (launchInfo.isSome() && launchInfo.get().has_rootfs()) {
+    if (launchInfo.isSome() && launchInfo->has_rootfs()) {
       if (rootfs.isSome()) {
         return Failure("Only one isolator should return the container rootfs");
       } else {
-        rootfs = launchInfo.get().rootfs();
+        rootfs = launchInfo->rootfs();
       }
     }
   }
@@ -897,20 +897,20 @@ Future<bool> MesosContainerizerProcess::__launch(
 
     // Populate the list of additional commands to be run inside the container
     // context.
-    foreach (const CommandInfo& command, launchInfo.get().commands()) {
+    foreach (const CommandInfo& command, launchInfo->commands()) {
       commandArray.values.emplace_back(JSON::protobuf(command));
     }
 
     // Process additional environment variables returned by isolators.
-    if (launchInfo.get().has_environment()) {
+    if (launchInfo->has_environment()) {
       foreach (const Environment::Variable& variable,
-          launchInfo.get().environment().variables()) {
+          launchInfo->environment().variables()) {
         environment[variable.name()] = variable.value();
       }
     }
 
-    if (launchInfo.get().has_namespaces()) {
-      namespaces |= launchInfo.get().namespaces();
+    if (launchInfo->has_namespaces()) {
+      namespaces |= launchInfo->namespaces();
     }
   }
 

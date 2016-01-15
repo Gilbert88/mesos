@@ -215,7 +215,7 @@ private:
       const SlaveID& slaveId,
       const process::PID<Slave>& slavePid,
       bool checkpoint,
-      const std::list<Option<mesos::slave::ContainerLaunchInfo>>& scripts);
+      const std::list<Option<mesos::slave::ContainerLaunchInfo>>& launchInfos);
 
   process::Future<bool> isolate(
       const ContainerID& containerId,
