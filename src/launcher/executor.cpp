@@ -31,6 +31,7 @@
 #include <process/delay.hpp>
 #include <process/future.hpp>
 #include <process/io.hpp>
+#include <stout/json.hpp>
 #include <process/process.hpp>
 #include <process/protobuf.hpp>
 #include <process/subprocess.hpp>
@@ -81,7 +82,8 @@ public:
       const Option<char**>& override,
       const string& _healthCheckDir,
       const Option<string>& _sandboxDirectory,
-      const Option<string>& _user)
+      const Option<string>& _user,
+      const Option<string>& _task_command)
     : state(REGISTERING),
       launched(false),
       killed(false),
@@ -93,7 +95,8 @@ public:
       healthCheckDir(_healthCheckDir),
       override(override),
       sandboxDirectory(_sandboxDirectory),
-      user(_user) {}
+      user(_user),
+      task_command(_task_command) {}
 
   virtual ~CommandExecutorProcess() {}
 
@@ -137,6 +140,28 @@ public:
       return;
     }
 
+    CommandInfo taskCommand;
+    if (task.has_command()) {
+      taskCommand = task.command();
+    }
+
+    if (task_command.isSome()) {
+      // Get CommandInfo from a JSON string.
+      Try<JSON::Object> object =
+        JSON::parse<JSON::Object>(task_command.get());
+
+      if (object.isError()) {
+        cerr << "Failed to parse JSON: " << object.error() << endl;
+      }
+
+      Try<CommandInfo> parse = protobuf::parse<CommandInfo>(object.get());
+      if (parse.isError()) {
+        cerr << "Failed to parse protobuf: " << parse.error() << endl;
+      }
+
+      taskCommand = parse.get();
+    }
+
     // Skip sanity checks for TaskInfo if override is provided since
     // the executor will be running the override command.
     if (override.isNone()) {
@@ -149,12 +174,12 @@ public:
       // TASK_FAILED for the task, and will most likely find out the
       // cause with some debugging. This is a temporary solution. A more
       // correct solution is to perform this validation at master side.
-      if (task.command().shell()) {
-        CHECK(task.command().has_value())
+      if (taskCommand.shell()) {
+        CHECK(taskCommand.has_value())
           << "Shell command of task " << task.task_id()
           << " is not specified!";
       } else {
-        CHECK(task.command().has_value())
+        CHECK(taskCommand.has_value())
           << "Executable of task " << task.task_id()
           << " is not specified!";
       }
@@ -241,11 +266,11 @@ public:
     }
 
     // Prepare the argv before fork as it's not async signal safe.
-    char **argv = new char*[task.command().arguments().size() + 1];
-    for (int i = 0; i < task.command().arguments().size(); i++) {
-      argv[i] = (char*) task.command().arguments(i).c_str();
+    char **argv = new char*[taskCommand.arguments().size() + 1];
+    for (int i = 0; i < taskCommand.arguments().size(); i++) {
+      argv[i] = (char*) taskCommand.arguments(i).c_str();
     }
-    argv[task.command().arguments().size()] = NULL;
+    argv[taskCommand.arguments().size()] = NULL;
 
     // Prepare the command log message.
     string command;
@@ -256,12 +281,12 @@ public:
       for (int i = 0; argv[i] != NULL; i++) {
         command += string(argv[i]) + " ";
       }
-    } else if (task.command().shell()) {
-      command = "sh -c '" + task.command().value() + "'";
+    } else if (taskCommand.shell()) {
+      command = "sh -c '" + taskCommand.value() + "'";
     } else {
       command =
-        "[" + task.command().value() + ", " +
-        strings::join(", ", task.command().arguments()) + "]";
+        "[" + taskCommand.value() + ", " +
+        strings::join(", ", taskCommand.arguments()) + "]";
     }
 
     if ((pid = fork()) == -1) {
@@ -348,15 +373,15 @@ public:
 
       // The child has successfully setsid, now run the command.
       if (override.isNone()) {
-        if (task.command().shell()) {
+        if (taskCommand.shell()) {
           execlp(
               "sh",
               "sh",
               "-c",
-              task.command().value().c_str(),
+              taskCommand.value().c_str(),
               (char*) NULL);
         } else {
-          execvp(task.command().value().c_str(), argv);
+          execvp(taskCommand.value().c_str(), argv);
         }
       } else {
         char** argv = override.get();
@@ -624,6 +649,7 @@ private:
   Option<char**> override;
   Option<string> sandboxDirectory;
   Option<string> user;
+  Option<string> task_command;
 };
 
 
@@ -634,10 +660,11 @@ public:
       const Option<char**>& override,
       const string& healthCheckDir,
       const Option<string>& sandboxDirectory,
-      const Option<string>& user)
+      const Option<string>& user,
+      const Option<string>& task_command)
   {
     process = new CommandExecutorProcess(
-        override, healthCheckDir, sandboxDirectory, user);
+        override, healthCheckDir, sandboxDirectory, user, task_command);
     spawn(process);
   }
 
@@ -734,6 +761,12 @@ public:
         "user",
         "The user that the task should be running as.");
 
+    add(&task_command,
+        "task_command",
+        "Contains a merged CommandInfo that includes user defined command\n"
+        "and image default command, as a stringified JSON Object, which is\n"
+        "passed as an argument");
+
     // TODO(nnielsen): Add 'prefix' option to enable replacing
     // 'sh -c' with user specified wrapper.
   }
@@ -741,6 +774,7 @@ public:
   bool override;
   Option<string> sandbox_directory;
   Option<string> user;
+  Option<string> task_command;
 };
 
 
@@ -777,8 +811,14 @@ int main(int argc, char** argv)
   string path =
     envPath.isSome() ? envPath.get()
                      : os::realpath(Path(argv[0]).dirname()).get();
-  mesos::internal::CommandExecutor executor(
-      override, path, flags.sandbox_directory, flags.user);
+
+  mesos::internal::CommandExecutor executor(override,
+                                            path,
+                                            flags.sandbox_directory,
+                                            flags.user,
+                                            flags.task_command);
+
   mesos::MesosExecutorDriver driver(&executor);
+
   return driver.run() == mesos::DRIVER_STOPPED ? EXIT_SUCCESS : EXIT_FAILURE;
 }
