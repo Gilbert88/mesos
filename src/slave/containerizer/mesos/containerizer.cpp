@@ -1001,21 +1001,56 @@ Future<bool> MesosContainerizerProcess::__launch(
     // use CHECK.
     CHECK(pipe(pipes) == 0);
 
-    Try<CommandInfo> commandInfo =
+    Try<CommandInfo> info =
       getCommandInfo(taskInfo, executorInfo, provisionInfo);
 
-    if (commandInfo.isError()) {
-      return Failure("Failed to get CommandInfo: " + commandInfo.error());
+    if (info.isError()) {
+      return Failure("Failed to get CommandInfo: " + info.error());
+    }
+
+    // Keep a copy of CommandInfo, in case sandbox directory has
+    // to be mutated for command executor.
+    CommandInfo commandInfo = info.get();
+
+    Option<string> workDir;
+    if (provisionInfo.isSome() &&
+        provisionInfo->dockerManifest.isSome() &&
+        provisionInfo->dockerManifest->has_config() &&
+        provisionInfo->dockerManifest->config().has_workingdir()) {
+      workDir = provisionInfo->dockerManifest->config().workingdir();
     }
 
     // Prepare the flags to pass to the launch process.
     MesosContainerizerLaunch::Flags launchFlags;
 
-    launchFlags.command = JSON::protobuf(commandInfo.get());
-
-    launchFlags.directory = rootfs.isSome()
+    const string& launchDir = rootfs.isSome()
       ? flags.sandbox_directory
       : directory;
+
+    if (workDir.isSome()) {
+      if (taskInfo.isSome()) {
+        // Command executor.
+        for (int i = 0; i < commandInfo.arguments_size(); i++) {
+          if (strings::startsWith(commandInfo.arguments(i),
+                                  "--sandbox_directory")) {
+            commandInfo.set_arguments(
+                i, path::join(commandInfo.arguments(i), workDir.get()));
+
+            launchFlags.directory = launchDir;
+
+            break;
+          }
+        }
+      } else {
+        // Custom executor.
+        launchFlags.directory = path::join(launchDir, workDir.get());
+      }
+    } else {
+      launchFlags.directory = launchDir;
+    }
+
+    launchFlags.command = JSON::protobuf(commandInfo);
+
     launchFlags.rootfs = rootfs;
     launchFlags.user = user;
     launchFlags.pipe_read = pipes[0];
