@@ -14,6 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <mesos/docker/v1.hpp>
+
 #include <mesos/module/isolator.hpp>
 
 #include <mesos/slave/container_logger.hpp>
@@ -29,6 +31,7 @@
 #include <stout/adaptor.hpp>
 #include <stout/foreach.hpp>
 #include <stout/fs.hpp>
+#include <stout/json.hpp>
 #include <stout/lambda.hpp>
 #include <stout/os.hpp>
 #include <stout/path.hpp>
@@ -662,6 +665,7 @@ Future<bool> MesosContainerizerProcess::launch(
       .then(defer(self(),
                   &Self::__launch,
                   containerId,
+                  taskInfo,
                   executorInfo,
                   directory,
                   user,
@@ -760,6 +764,7 @@ Future<bool> MesosContainerizerProcess::_launch(
         .then(defer(self(),
                     &Self::__launch,
                     containerId,
+                    taskInfo,
                     *_executorInfo,
                     directory,
                     user,
@@ -864,6 +869,7 @@ Future<Nothing> MesosContainerizerProcess::fetch(
 
 Future<bool> MesosContainerizerProcess::__launch(
     const ContainerID& containerId,
+    const Option<TaskInfo>& taskInfo,
     const ExecutorInfo& executorInfo,
     const string& directory,
     const Option<string>& user,
@@ -995,10 +1001,17 @@ Future<bool> MesosContainerizerProcess::__launch(
     // use CHECK.
     CHECK(pipe(pipes) == 0);
 
+    Try<CommandInfo> commandInfo =
+      getCommandInfo(taskInfo, executorInfo, provisionInfo);
+
+    if (commandInfo.isError()) {
+      return Failure("Failed to get CommandInfo: " + commandInfo.error());
+    }
+
     // Prepare the flags to pass to the launch process.
     MesosContainerizerLaunch::Flags launchFlags;
 
-    launchFlags.command = JSON::protobuf(executorInfo.command());
+    launchFlags.command = JSON::protobuf(commandInfo.get());
 
     launchFlags.directory = rootfs.isSome()
       ? flags.sandbox_directory
@@ -1074,6 +1087,153 @@ Future<bool> MesosContainerizerProcess::__launch(
       .onAny(lambda::bind(&os::close, pipes[0]))
       .onAny(lambda::bind(&os::close, pipes[1]));
   }));
+}
+
+
+Try<CommandInfo> MesosContainerizerProcess::getCommandInfo(
+    const Option<TaskInfo>& taskInfo,
+    const ExecutorInfo& executorInfo,
+    const Option<ProvisionInfo>& provisionInfo)
+{
+  // We mutate the CommandInfo following the logic:
+  // 1. If shell is specified as true, the commandInfo value (has to
+  //    be provided) will be regarded as shell command.
+  // 2. If shell is specified as false, use the commandInfo value
+  //    as executable (not doing anything here).
+  // 3. If shell is specified as false and the commandInfo value is
+  //    not set, use the docker image specified runtime configuration.
+  //    i. If `Entrypoint` is specified, it is treated as executable,
+  //       then `Cmd` get appended as arguments to `Entrypoint`.
+  //    ii.If `Entrypoint` is not specified, use the first `Cmd` as
+  //       executable and the rest as arguments.
+  CommandInfo commandInfo = executorInfo.command();
+
+  if (commandInfo.shell()) {
+    if (!commandInfo.has_value()) {
+      return Error("Shell specified but no command value provided");
+    }
+  } else {
+    // Only possible for custom executor.
+    if (taskInfo.isNone() &&
+        !commandInfo.has_value() &&
+        provisionInfo.isSome() &&
+        provisionInfo->dockerManifest.isSome() &&
+        provisionInfo->dockerManifest->has_config()) {
+      // We keep the arguments of commandInfo while it does not have
+      // a value, so that arguments can be specified by user in custom
+      // executor, which is running with default image executable.
+      docker::spec::v1::ImageManifest::Config config =
+        provisionInfo->dockerManifest->config();
+
+      // Filter out executable for commandInfo value.
+      if (config.entrypoint_size() > 0) {
+        commandInfo.set_value(config.entrypoint(0));
+
+        // Put user defined argv after default entrypoint argv
+        // in sequence.
+        commandInfo.clear_arguments();
+
+        for (int i = 1; i < config.entrypoint_size(); i++) {
+          commandInfo.add_arguments(config.entrypoint(i));
+        }
+
+        commandInfo.mutable_arguments()->MergeFrom(
+            executorInfo.command().arguments());
+
+        // Overwrite default cmd arguments if CommandInfo arguments
+        // are set by user.
+        if (commandInfo.arguments_size() == 0) {
+          foreach (const string& cmd, config.cmd()) {
+            commandInfo.add_arguments(cmd);
+          }
+        }
+      } else if (config.cmd_size() > 0) {
+        commandInfo.set_value(config.cmd(0));
+
+        // Overwrite default cmd arguments if CommandInfo arguments
+        // are set by user.
+        if (commandInfo.arguments_size() == 0) {
+          for (int i = 1; i < config.cmd_size(); i++) {
+            commandInfo.add_arguments(config.cmd(i));
+          }
+        }
+      } else {
+        return Error(
+            "No executable found for executor: '" +
+            executorInfo.executor_id().value() + "'");
+      }
+    }
+
+    if (!commandInfo.has_value()) {
+      Error(
+          "No executable found for executor: '" +
+          executorInfo.executor_id().value() + "'");
+    }
+
+    // Only possible for command executor. Image specified entrypoint
+    // or cmd is passed as an argument to command executor's flag.
+    if (taskInfo.isSome() &&
+        provisionInfo.isSome() &&
+        provisionInfo->dockerManifest.isSome() &&
+        provisionInfo->dockerManifest->has_config()) {
+      // Exclude override case.
+      foreach (const string& argument, commandInfo.arguments()) {
+        if (strings::startsWith(argument, "--override")) {
+          return commandInfo;
+        }
+      }
+
+      CHECK(taskInfo->has_command());
+      CommandInfo taskCommand = taskInfo->command();
+
+      if (taskCommand.has_value()) {
+        return commandInfo;
+      }
+
+      // Merge image default entrypoing and cmd into task command.
+      docker::spec::v1::ImageManifest::Config config =
+        provisionInfo->dockerManifest->config();
+
+      if (config.entrypoint_size() > 0) {
+        taskCommand.set_value(config.entrypoint(0));
+
+        taskCommand.clear_arguments();
+
+        for (int i = 1; i < config.entrypoint_size(); i++) {
+          taskCommand.add_arguments(config.entrypoint(i));
+        }
+
+        taskCommand.mutable_arguments()->MergeFrom(
+            taskInfo->command().arguments());
+
+        if (taskCommand.arguments_size() == 0) {
+          foreach (const string& cmd, config.cmd()) {
+            taskCommand.add_arguments(cmd);
+          }
+        }
+      } else if (config.cmd_size() > 0) {
+        taskCommand.set_value(config.cmd(0));
+
+        if (taskCommand.arguments_size() == 0) {
+          for (int i = 1; i < config.cmd_size(); i++) {
+            taskCommand.add_arguments(config.cmd(i));
+          }
+        }
+      } else {
+        return Error(
+            "No executable found for task: '" +
+            taskInfo->task_id().value() + "'");
+      }
+
+      JSON::Object object = JSON::protobuf(taskCommand);
+
+      // Pass task command as a flag, which will be loaded
+      // by command executor.
+      commandInfo.add_arguments("--task_command=" + stringify(object));
+    }
+  }
+
+  return commandInfo;
 }
 
 
