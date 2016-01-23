@@ -2109,7 +2109,6 @@ PortMappingIsolatorProcess::_recover(pid_t pid)
 
 Future<Option<ContainerLaunchInfo>> PortMappingIsolatorProcess::prepare(
     const ContainerID& containerId,
-    const ExecutorInfo& executorInfo,
     const ContainerConfig& containerConfig)
 {
   if (unmanaged.contains(containerId)) {
@@ -2120,6 +2119,7 @@ Future<Option<ContainerLaunchInfo>> PortMappingIsolatorProcess::prepare(
     return Failure("Container has already been prepared");
   }
 
+  const ExecutorInfo& executorInfo = containerConfig.executorinfo();
   Resources resources(executorInfo.resources());
 
   IntervalSet<uint16_t> nonEphemeralPorts;

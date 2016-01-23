@@ -529,12 +529,10 @@ public:
       prepare,
       Future<Option<ContainerLaunchInfo>>(
           const ContainerID&,
-          const ExecutorInfo&,
           const ContainerConfig&));
 
   virtual Future<Option<ContainerLaunchInfo>> _prepare(
       const ContainerID& containerId,
-      const ExecutorInfo& executorInfo,
       const ContainerConfig& containerConfig)
   {
     return None();
@@ -645,7 +643,7 @@ TEST_F(MesosContainerizerDestroyTest, DestroyWhilePreparing)
   Promise<Option<ContainerLaunchInfo>> promise;
 
   // Simulate a long prepare from the isolator.
-  EXPECT_CALL(*isolator, prepare(_, _, _))
+  EXPECT_CALL(*isolator, prepare(_, _))
     .WillOnce(DoAll(FutureSatisfy(&prepare),
                     Return(promise.future())));
 

@@ -71,9 +71,9 @@ Future<Nothing> PosixFilesystemIsolatorProcess::recover(
 
 Future<Option<ContainerLaunchInfo>> PosixFilesystemIsolatorProcess::prepare(
     const ContainerID& containerId,
-    const ExecutorInfo& executorInfo,
     const ContainerConfig& containerConfig)
 {
+  const ExecutorInfo& executorInfo = containerConfig.executorinfo();
   if (infos.contains(containerId)) {
     return Failure("Container has already been prepared");
   }

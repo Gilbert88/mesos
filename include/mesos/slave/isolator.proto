@@ -71,18 +71,23 @@ message ContainerConfig {
   // The root filesystem for the container.
   optional string rootfs = 1;
 
+  // ExecutorInfo and TaskInfo are passed to isolators, so that
+  // CommandInfo is available if we have docker runtime isolator.
+  required ExecutorInfo executorInfo = 2;
+  optional TaskInfo taskInfo = 3;
+
   // The work directory for the container in the host filesystem.
-  required string directory = 2;
+  required string directory = 4;
 
   // The user the task will be run as.
-  optional string user = 3;
+  optional string user = 5;
 
   // Docker v1 image manifest.
   message Docker {
-    optional docker.spec.v1.ImageManifest manifest = 1;
+    optional docker.spec.v1.ImageManifest manifest = 6;
   }
 
-  optional Docker docker = 4;
+  optional Docker docker = 7;
 
   // TODO(gilbert): Add appc image manifest.
 }
