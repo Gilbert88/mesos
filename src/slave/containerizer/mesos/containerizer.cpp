@@ -796,7 +796,7 @@ Future<list<Option<ContainerLaunchInfo>>> MesosContainerizerProcess::prepare(
   containerConfig.mutable_executorinfo()->CopyFrom(executorInfo);
 
   if (taskInfo.isSome()) {
-    containerConfig.mutate_taskinfo()->CopyFrom(taskInfo.get());
+    containerConfig.mutable_taskinfo()->CopyFrom(taskInfo.get());
   }
 
   if (user.isSome()) {
