@@ -515,7 +515,7 @@ public:
     EXPECT_CALL(*this, cleanup(_))
       .WillRepeatedly(Return(Nothing()));
 
-    EXPECT_CALL(*this, prepare(_, _, _))
+    EXPECT_CALL(*this, prepare(_, _))
       .WillRepeatedly(Invoke(this, &MockIsolator::_prepare));
   }
 
