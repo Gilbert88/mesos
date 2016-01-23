@@ -525,7 +525,7 @@ public:
           const list<ContainerState>&,
           const hashset<ContainerID>&));
 
-  MOCK_METHOD3(
+  MOCK_METHOD2(
       prepare,
       Future<Option<ContainerLaunchInfo>>(
           const ContainerID&,
