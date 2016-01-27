@@ -82,7 +82,7 @@ message ContainerConfig {
 
   // Docker v1 image manifest.
   message Docker {
-    optional docker.spec.v1.ImageManifest manifest = 1;
+    required docker.spec.v1.ImageManifest manifest = 1;
   }
 
   optional Docker docker = 7;
@@ -101,12 +101,23 @@ message ContainerConfig {
 message ContainerLaunchInfo
 {
   repeated CommandInfo commands = 1;
+
+  // Docker image default environment variables.
   optional Environment environment = 2;
 
+  // Merged command for either custom executor or command executor.
+  // This command should merge user defined CommandInfo and docker
+  // image default Entrypoint/Cmd, so it is exectly what will be
+  // executed.
+  optional CommandInfo command = 3;
+
+  // Docker image default working directory.
+  optional string working_dir = 4;
+
   // The root filesystem for the container.
-  optional string rootfs = 3;
+  optional string rootfs = 5;
 
   // (Linux only) The namespaces required for the container.
   // The namespaces are created while launching the executor.
-  optional uint32 namespaces = 4 [default = 0];
+  optional uint32 namespaces = 6 [default = 0];
 }
