@@ -62,6 +62,57 @@ private:
   DockerRuntimeIsolatorProcess(
       const Flags& flags);
 
+  Option<Environment> getEnvironment(
+      const mesos::slave::ContainerConfig& containerConfig);
+
+  // The following logic table shows how mesos CommandInfo cooperate
+  // with docker image default config. `0` represents `isNone`, while
+  // `1` represents `isSome`. Except the first col and the first row,
+  // in all other cells, the first item is the executable, and the
+  // rest are arguments.
+  // +---------+--------------+--------------+--------------+--------------+
+  // |         | Entrypoint=0 | Entrypoint=0 | Entrypoint=1 | Entrypoint=1 |
+  // |         |     Cmd=0    |     Cmd=1    |     Cmd=0    |     Cmd=1    |
+  // +---------+--------------+--------------+--------------+--------------+
+  // |   sh=0  |     Error    |   ./Cmd[0]   | ./Entrypt[0] | ./Entrypt[0] |
+  // | value=0 |              |   Cmd[1]..   | Entrypt[1].. | Entrypt[1].. |
+  // |  argv=0 |              |              |              |     Cmd..    |
+  // +---------+--------------+--------------+--------------+--------------+
+  // |   sh=0  |     Error    |   ./Cmd[0]   | ./Entrypt[0] | ./Entrypt[0] |
+  // | value=0 |              |     argv     | Entrypt[1].. | Entrypt[1].. |
+  // |  argv=1 |              |              |     argv     |     argv     |
+  // +---------+--------------+--------------+--------------+--------------+
+  // |   sh=0  |    ./value   |    ./value   |    ./value   |    ./value   |
+  // | value=1 |              |              |              |              |
+  // |  argv=0 |              |              |              |              |
+  // +---------+--------------+--------------+--------------+--------------+
+  // |   sh=0  |    ./value   |    ./value   |    ./value   |    ./value   |
+  // | value=1 |     argv     |     argv     |     argv     |     argv     |
+  // |  argv=1 |              |              |              |              |
+  // +---------+--------------+--------------+--------------+--------------+
+  // |   sh=1  |     Error    |     Error    |     Error    |     Error    |
+  // | value=0 |              |              |              |              |
+  // |  argv=0 |              |              |              |              |
+  // +---------+--------------+--------------+--------------+--------------+
+  // |   sh=1  |     Error    |     Error    |     Error    |     Error    |
+  // | value=0 |              |              |              |              |
+  // |  argv=1 |              |              |              |              |
+  // +---------+--------------+--------------+--------------+--------------+
+  // |   sh=1  |  /bin/sh -c  |  /bin/sh -c  |  /bin/sh -c  |  /bin/sh -c  |
+  // | value=1 |     value    |     value    |     value    |     value    |
+  // |  argv=0 |              |              |              |              |
+  // +---------+--------------+--------------+--------------+--------------+
+  // |   sh=1  |  /bin/sh -c  |  /bin/sh -c  |  /bin/sh -c  |  /bin/sh -c  |
+  // | value=1 |     value    |     value    |     value    |     value    |
+  // |  argv=1 |              |              |              |              |
+  // +---------+--------------+--------------+--------------+--------------+
+  Try<CommandInfo> getCommandInfo(
+      const mesos::slave::ContainerConfig& containerConfig);
+
+  std::string getWorkingDir(
+      const mesos::slave::ContainerConfig& containerConfig,
+      CommandInfo& commandInfo);
+
   const Flags flags;
 };
 

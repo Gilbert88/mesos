@@ -82,7 +82,7 @@ message ContainerConfig {
 
   // Docker v1 image manifest.
   message Docker {
-    optional docker.spec.v1.ImageManifest manifest = 1;
+    required docker.spec.v1.ImageManifest manifest = 1;
   }
 
   optional Docker docker = 7;
