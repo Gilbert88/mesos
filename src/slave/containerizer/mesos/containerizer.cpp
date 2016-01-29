@@ -218,7 +218,6 @@ Try<MesosContainerizer*> MesosContainerizer::create(
 #ifdef WITH_NETWORK_ISOLATOR
     {"network/port_mapping", &PortMappingIsolatorProcess::create},
 #endif
-    {"docker/runtime", &DockerRuntimeIsolatorProcess::create},
   };
 
   vector<Owned<Isolator>> isolators;
