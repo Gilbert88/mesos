@@ -63,6 +63,8 @@
 #include "slave/containerizer/mesos/isolators/cgroups/perf_event.hpp"
 #endif
 
+#include "slave/containerizer/mesos/isolators/docker/runtime.hpp"
+
 #ifdef __linux__
 #include "slave/containerizer/mesos/isolators/filesystem/linux.hpp"
 #endif
@@ -216,6 +218,7 @@ Try<MesosContainerizer*> MesosContainerizer::create(
 #ifdef WITH_NETWORK_ISOLATOR
     {"network/port_mapping", &PortMappingIsolatorProcess::create},
 #endif
+    {"docker/runtime", &DockerRuntimeIsolatorProcess::create},
   };
 
   vector<Owned<Isolator>> isolators;
@@ -672,7 +675,6 @@ Future<bool> MesosContainerizerProcess::launch(
                   slaveId,
                   slavePid,
                   checkpoint,
-                  None(),
                   lambda::_1));
   }
 
@@ -771,7 +773,6 @@ Future<bool> MesosContainerizerProcess::_launch(
                     slaveId,
                     slavePid,
                     checkpoint,
-                    provisionInfo,
                     lambda::_1));
     });
 }
@@ -876,7 +877,6 @@ Future<bool> MesosContainerizerProcess::__launch(
     const SlaveID& slaveId,
     const PID<Slave>& slavePid,
     bool checkpoint,
-    const Option<ProvisionInfo>& provisionInfo,
     const list<Option<ContainerLaunchInfo>>& launchInfos)
 {
   if (!containers_.contains(containerId)) {
@@ -886,6 +886,15 @@ Future<bool> MesosContainerizerProcess::__launch(
   if (containers_[containerId]->state == DESTROYING) {
     return Failure("Container is currently being destroyed");
   }
+
+  // Prepare environment variables for the executor.
+  map<string, string> environment = executorEnvironment(
+      executorInfo,
+      directory,
+      slaveId,
+      slavePid,
+      checkpoint,
+      flags);
 
   // Determine the root filesystem for the container. Only one
   // isolator should return the container root filesystem.
@@ -898,45 +907,23 @@ Future<bool> MesosContainerizerProcess::__launch(
         rootfs = launchInfo->rootfs();
       }
     }
-  }
 
-  // Prepare environment variables for the executor.
-  map<string, string> environment = executorEnvironment(
-      executorInfo,
-      directory,
-      slaveId,
-      slavePid,
-      checkpoint,
-      flags);
+    if (launchInfo.isSome() && launchInfo->has_environment()) {
+      foreach (const Environment::Variable& variable,
+               launchInfo->environment().variables()) {
+        const string& name = variable.name();
+        const string& value = variable.value();
 
-  // TODO(gilbert): Refactor runtime configuration to docker runtime
-  // isolator. We pass `provisionInfo` to `__launch` for docker image
-  // runtime configuration.
-  if (provisionInfo.isSome() &&
-      provisionInfo->dockerManifest.isSome() &&
-      provisionInfo->dockerManifest->has_container_config() &&
-      provisionInfo->dockerManifest->container_config().env_size() > 0) {
-      // Overwrite any duplicated environment variable that was
-      // succeeded from slave.
-      foreach(const string& env,
-              provisionInfo->dockerManifest->container_config().env()) {
-        const vector<string> tokens = strings::tokenize(env, "=");
-        if (tokens.size() != 2) {
-          VLOG(1) << "Skipping invalid environment variable: '"
-                  << env << "'";
-
-          continue;
-        }
-
-        if (environment.count(tokens[0])) {
+        if (environment.count(name)) {
           VLOG(1) << "Overwrting environment variable '"
-                  << tokens[0] << "', original: '"
-                  << environment[tokens[0]] << "', new: '"
-                  << tokens[1] << "'";
+                  << name << "', original: '"
+                  << environment[name] << "', new: '"
+                  << value << "'";
         }
 
-        environment[tokens[0]] = tokens[1];
+        environment[name] = value;
       }
+    }
   }
 
   // TODO(jieyu): Consider moving this to 'executorEnvironment' and
@@ -992,56 +979,34 @@ Future<bool> MesosContainerizerProcess::__launch(
     // use CHECK.
     CHECK(pipe(pipes) == 0);
 
-    Try<CommandInfo> info =
-      getCommandInfo(taskInfo, executorInfo, provisionInfo);
-
-    if (info.isError()) {
-      return Failure("Failed to get CommandInfo: " + info.error());
-    }
-
-    // Keep a copy of CommandInfo, in case sandbox directory has
-    // to be mutated for command executor.
-    CommandInfo commandInfo = info.get();
-
-    Option<string> workDir;
-    if (provisionInfo.isSome() &&
-        provisionInfo->dockerManifest.isSome() &&
-        provisionInfo->dockerManifest->has_config() &&
-        provisionInfo->dockerManifest->config().has_workingdir()) {
-      workDir = provisionInfo->dockerManifest->config().workingdir();
-    }
-
     // Prepare the flags to pass to the launch process.
     MesosContainerizerLaunch::Flags launchFlags;
 
-    const string& launchDir = rootfs.isSome()
-      ? flags.sandbox_directory
-      : directory;
+    Option<CommandInfo> commandInfo;
+    Option<string> workDir;
 
-    if (workDir.isSome()) {
-      if (taskInfo.isSome()) {
-        // Command executor.
-        for (int i = 0; i < commandInfo.arguments_size(); i++) {
-          if (strings::startsWith(commandInfo.arguments(i),
-                                  "--sandbox_directory")) {
-            commandInfo.set_arguments(
-                i, path::join(commandInfo.arguments(i), workDir.get()));
-
-            launchFlags.directory = launchDir;
-
-            break;
-          }
+    foreach (const Option<ContainerLaunchInfo>& launchInfo, launchInfos) {
+      if (launchInfo.isSome() &&
+          launchInfo->has_command() &&
+          launchInfo->has_working_dir()) {
+        if (commandInfo.isSome() || workDir.isSome()) {
+          return Failure(
+              "Only one isolator should return the container"
+              "command and working directory");
+        } else {
+          commandInfo = launchInfo->command();
+          workDir = launchInfo->working_dir();
         }
-      } else {
-        // Custom executor.
-        launchFlags.directory = path::join(launchDir, workDir.get());
       }
-    } else {
-      launchFlags.directory = launchDir;
     }
 
-    launchFlags.command = JSON::protobuf(commandInfo);
+    if (commandInfo.isNone() || workDir.isNone()) {
+      return Failure(
+          "Neither command nor working directory is returned from isolators");
+    }
 
+    launchFlags.command = JSON::protobuf(commandInfo.get());
+    launchFlags.directory = workDir.get();
     launchFlags.rootfs = rootfs;
     launchFlags.user = user;
     launchFlags.pipe_read = pipes[0];
@@ -1113,153 +1078,6 @@ Future<bool> MesosContainerizerProcess::__launch(
       .onAny(lambda::bind(&os::close, pipes[0]))
       .onAny(lambda::bind(&os::close, pipes[1]));
   }));
-}
-
-
-Try<CommandInfo> MesosContainerizerProcess::getCommandInfo(
-    const Option<TaskInfo>& taskInfo,
-    const ExecutorInfo& executorInfo,
-    const Option<ProvisionInfo>& provisionInfo)
-{
-  // We mutate the CommandInfo following the logic:
-  // 1. If shell is specified as true, the commandInfo value (has to
-  //    be provided) will be regarded as shell command.
-  // 2. If shell is specified as false, use the commandInfo value
-  //    as executable (not doing anything here).
-  // 3. If shell is specified as false and the commandInfo value is
-  //    not set, use the docker image specified runtime configuration.
-  //    i. If `Entrypoint` is specified, it is treated as executable,
-  //       then `Cmd` get appended as arguments to `Entrypoint`.
-  //    ii.If `Entrypoint` is not specified, use the first `Cmd` as
-  //       executable and the rest as arguments.
-  CommandInfo commandInfo = executorInfo.command();
-
-  if (commandInfo.shell()) {
-    if (!commandInfo.has_value()) {
-      return Error("Shell specified but no command value provided");
-    }
-  } else {
-    // Only possible for custom executor.
-    if (taskInfo.isNone() &&
-        !commandInfo.has_value() &&
-        provisionInfo.isSome() &&
-        provisionInfo->dockerManifest.isSome() &&
-        provisionInfo->dockerManifest->has_config()) {
-      // We keep the arguments of commandInfo while it does not have
-      // a value, so that arguments can be specified by user in custom
-      // executor, which is running with default image executable.
-      docker::spec::v1::ImageManifest::Config config =
-        provisionInfo->dockerManifest->config();
-
-      // Filter out executable for commandInfo value.
-      if (config.entrypoint_size() > 0) {
-        commandInfo.set_value(config.entrypoint(0));
-
-        // Put user defined argv after default entrypoint argv
-        // in sequence.
-        commandInfo.clear_arguments();
-
-        for (int i = 1; i < config.entrypoint_size(); i++) {
-          commandInfo.add_arguments(config.entrypoint(i));
-        }
-
-        commandInfo.mutable_arguments()->MergeFrom(
-            executorInfo.command().arguments());
-
-        // Overwrite default cmd arguments if CommandInfo arguments
-        // are set by user.
-        if (commandInfo.arguments_size() == 0) {
-          foreach (const string& cmd, config.cmd()) {
-            commandInfo.add_arguments(cmd);
-          }
-        }
-      } else if (config.cmd_size() > 0) {
-        commandInfo.set_value(config.cmd(0));
-
-        // Overwrite default cmd arguments if CommandInfo arguments
-        // are set by user.
-        if (commandInfo.arguments_size() == 0) {
-          for (int i = 1; i < config.cmd_size(); i++) {
-            commandInfo.add_arguments(config.cmd(i));
-          }
-        }
-      } else {
-        return Error(
-            "No executable found for executor: '" +
-            executorInfo.executor_id().value() + "'");
-      }
-    }
-
-    if (!commandInfo.has_value()) {
-      Error(
-          "No executable found for executor: '" +
-          executorInfo.executor_id().value() + "'");
-    }
-
-    // Only possible for command executor. Image specified entrypoint
-    // or cmd is passed as an argument to command executor's flag.
-    if (taskInfo.isSome() &&
-        provisionInfo.isSome() &&
-        provisionInfo->dockerManifest.isSome() &&
-        provisionInfo->dockerManifest->has_config()) {
-      // Exclude override case.
-      foreach (const string& argument, commandInfo.arguments()) {
-        if (strings::startsWith(argument, "--override")) {
-          return commandInfo;
-        }
-      }
-
-      CHECK(taskInfo->has_command());
-      CommandInfo taskCommand = taskInfo->command();
-
-      if (taskCommand.has_value()) {
-        return commandInfo;
-      }
-
-      // Merge image default entrypoing and cmd into task command.
-      docker::spec::v1::ImageManifest::Config config =
-        provisionInfo->dockerManifest->config();
-
-      if (config.entrypoint_size() > 0) {
-        taskCommand.set_value(config.entrypoint(0));
-
-        taskCommand.clear_arguments();
-
-        for (int i = 1; i < config.entrypoint_size(); i++) {
-          taskCommand.add_arguments(config.entrypoint(i));
-        }
-
-        taskCommand.mutable_arguments()->MergeFrom(
-            taskInfo->command().arguments());
-
-        if (taskCommand.arguments_size() == 0) {
-          foreach (const string& cmd, config.cmd()) {
-            taskCommand.add_arguments(cmd);
-          }
-        }
-      } else if (config.cmd_size() > 0) {
-        taskCommand.set_value(config.cmd(0));
-
-        if (taskCommand.arguments_size() == 0) {
-          for (int i = 1; i < config.cmd_size(); i++) {
-            taskCommand.add_arguments(config.cmd(i));
-          }
-        }
-      } else {
-        return Error(
-            "No executable found for task: '" +
-            taskInfo->task_id().value() + "'");
-      }
-
-      JSON::Object object = JSON::protobuf(taskCommand);
-
-      // Pass task command as a flag, which will be loaded
-      // by command executor.
-      commandInfo.add_arguments("--task_command=" + stringify(object));
-    }
-  }
-
-  return commandInfo;
 }
 
 
