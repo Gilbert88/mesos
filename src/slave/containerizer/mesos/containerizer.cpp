@@ -1208,6 +1208,7 @@ Try<CommandInfo> MesosContainerizerProcess::getCommandInfo(
     // Only possible for command executor. Image specified entrypoint
     // or cmd is passed as an argument to command executor's flag.
     if (taskInfo.isSome() &&
+        !taskInfo->command().has_value() &&
         provisionInfo.isSome() &&
         provisionInfo->dockerManifest.isSome() &&
         provisionInfo->dockerManifest->has_config()) {
