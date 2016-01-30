@@ -68,6 +68,9 @@ message ContainerState
  * during `prepare`.
  */
 message ContainerConfig {
+  // TODO(gilbert): Deprecate the following two camel case protobuf
+  // field in 0.29.0, and use snake case only. We keep both to avoid
+  // breaking user's module at this moment.
   required ExecutorInfo executorInfo = 1;
   optional TaskInfo taskInfo = 2;
 
@@ -88,6 +91,9 @@ message ContainerConfig {
   optional Docker docker = 7;
 
   // TODO(gilbert): Add appc image manifest.
+
+  required ExecutorInfo executor_info = 8;
+  optional TaskInfo task_info = 9;
 }
 
 
