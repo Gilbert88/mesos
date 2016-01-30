@@ -68,8 +68,8 @@ message ContainerState
  * during `prepare`.
  */
 message ContainerConfig {
-  required ExecutorInfo executorInfo = 1;
-  optional TaskInfo taskInfo = 2;
+  required ExecutorInfo executor_info = 1;
+  optional TaskInfo task_info = 2;
 
   // The work directory for the container in the host filesystem.
   required string directory = 3;

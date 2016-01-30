@@ -804,10 +804,10 @@ Future<list<Option<ContainerLaunchInfo>>> MesosContainerizerProcess::prepare(
   // Construct ContainerConfig.
   ContainerConfig containerConfig;
   containerConfig.set_directory(directory);
-  containerConfig.mutable_executorinfo()->CopyFrom(executorInfo);
+  containerConfig.mutable_executor_info()->CopyFrom(executorInfo);
 
   if (taskInfo.isSome()) {
-    containerConfig.mutable_taskinfo()->CopyFrom(taskInfo.get());
+    containerConfig.mutable_task_info()->CopyFrom(taskInfo.get());
   }
 
   if (user.isSome()) {
