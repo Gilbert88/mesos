@@ -23,6 +23,7 @@
 #include <process/defer.hpp>
 #include <process/io.hpp>
 #include <process/metrics/metrics.hpp>
+#include <process/owned.hpp>
 #include <process/reap.hpp>
 #include <process/subprocess.hpp>
 
@@ -722,6 +723,7 @@ Future<bool> MesosContainerizerProcess::_launch(
   // paths to the provisioned root filesystems (by setting the
   // 'host_path') if the volume specifies an image as the source.
   Owned<ExecutorInfo> _executorInfo(new ExecutorInfo(executorInfo));
+  Owned<ProvisionInfo> _provisionInfo;
   list<Future<Nothing>> futures;
 
   for (int i = 0; i < _executorInfo->container().volumes_size(); i++) {
@@ -735,8 +737,16 @@ Future<bool> MesosContainerizerProcess::_launch(
 
     futures.push_back(
         provisioner->provision(containerId, image)
-          .then([volume](const ProvisionInfo& info) -> Future<Nothing> {
+          .then([=, &_provisionInfo](
+              const ProvisionInfo& info) -> Future<Nothing> {
             volume->set_host_path(info.rootfs);
+
+            if (taskInfo.isSome() &&
+                volume->container_path() ==
+                COMMAND_EXECUTOR_ROOTFS_CONTAINER_PATH) {
+              _provisionInfo.reset(new ProvisionInfo(info));
+            }
+
             return Nothing();
           }));
   }
@@ -745,6 +755,10 @@ Future<bool> MesosContainerizerProcess::_launch(
   // so that the user specified image will be mounted in as a volume.
   // However, we also need to figure out a way to support passing and
   // handling those runtime configurations in the image.
+  Option<ProvisionInfo> provisionOption = provisionInfo;
+  if (_provisionInfo.get() != NULL) {
+    provisionOption = *_provisionInfo;
+  }
 
   // We put `prepare` inside of a lambda expression, in order to get
   // _executorInfo object after host path set in volume.
@@ -755,7 +769,7 @@ Future<bool> MesosContainerizerProcess::_launch(
                      *_executorInfo,
                      directory,
                      user,
-                     provisionInfo)
+                     provisionOption)
         .then(defer(self(),
                     &Self::__launch,
                     containerId,
