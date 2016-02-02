@@ -102,8 +102,16 @@ Future<Option<ContainerLaunchInfo>> DockerRuntimeIsolatorProcess::prepare(
     launchInfo.mutable_environment()->CopyFrom(environment.get());
   }
 
+  Option<string> workingDir = getWorkingDir(containerConfig);
+  if (workingDir.isSome() && !containerConfig.has_task_info()) {
+    // Only set working directory for custom executor case, while
+    // working directory will be passed as a flag for command
+    // executor case.
+    launchInfo.set_working_directory(workingDir.get());
+  }
+
   Try<CommandInfo> command =
-    getExecutorLaunchCommand(containerId, containerConfig);
+    getExecutorLaunchCommand(containerId, containerConfig, workingDir);
   if (command.isError()) {
     return Failure("Failed to determine the executor launch command: " +
                    command.error());
@@ -161,7 +169,8 @@ Option<Environment> DockerRuntimeIsolatorProcess::getLaunchEnvironment(
 // the executor.
 Try<CommandInfo> DockerRuntimeIsolatorProcess::getExecutorLaunchCommand(
     const ContainerID& containerId,
-    const ContainerConfig& containerConfig)
+    const ContainerConfig& containerConfig,
+    const Option<string>& workingDir)
 {
   CHECK(containerConfig.docker().manifest().has_config());
 
@@ -298,10 +307,29 @@ Try<CommandInfo> DockerRuntimeIsolatorProcess::getExecutorLaunchCommand(
       executorCommand.add_arguments("--task_command=" + stringify(object));
     }
 
+    // Pass working directory to command executor as a flag, to
+    // distinguish it from sandbox directory.
+    if (workingDir.isSome()) {
+      executorCommand.add_arguments("--working_directory=" + workingDir.get());
+    }
+
     return executorCommand;
   }
 
   return command;
+}
+
+
+Option<string> DockerRuntimeIsolatorProcess::getWorkingDir(
+    const ContainerConfig& containerConfig)
+{
+  CHECK(containerConfig.docker().manifest().has_config());
+
+  if (!containerConfig.docker().manifest().config().has_workingdir()) {
+    return None();
+  }
+
+  return containerConfig.docker().manifest().config().workingdir();
 }
 
 

@@ -934,6 +934,7 @@ Future<bool> MesosContainerizerProcess::__launch(
   // At most one command can be returned from docker runtime
   // isolator if a docker image is specifed.
   Option<CommandInfo> executorLaunchCommand;
+  Option<string> workingDir;
 
   foreach (const Option<ContainerLaunchInfo>& launchInfo, launchInfos) {
     if (launchInfo.isSome() && launchInfo->has_rootfs()) {
@@ -967,6 +968,15 @@ Future<bool> MesosContainerizerProcess::__launch(
         return Failure("At most one command can be returned from isolators");
       } else {
         executorLaunchCommand = launchInfo->command();
+      }
+    }
+
+    if (launchInfo.isSome() && launchInfo->has_working_directory()) {
+      if (workingDir.isSome()) {
+        return Failure(
+            "At most one working directory can be returned from isolators");
+      } else {
+        workingDir = launchInfo->working_directory();
       }
     }
   }
@@ -1034,6 +1044,7 @@ Future<bool> MesosContainerizerProcess::__launch(
     launchFlags.sandbox = rootfs.isSome()
       ? flags.sandbox_directory
       : directory;
+    launchFlags.working_directory = workingDir;
     launchFlags.rootfs = rootfs;
     launchFlags.user = user;
     launchFlags.pipe_read = pipes[0];
