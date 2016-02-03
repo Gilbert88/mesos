@@ -56,6 +56,11 @@ MesosContainerizerLaunch::Flags::Flags()
       "The sandbox to chdir to. If rootfs is specified this must\n"
       "be relative to the new root.");
 
+  add(&working_directory,
+      "working_directory",
+      "The working directory relates to sandbox directory. It can\n"
+      "only be operated with chdir after chdir to sandbox directory.");
+
   add(&rootfs,
       "rootfs",
       "Absolute path to the container root filesystem.\n"
@@ -255,6 +260,26 @@ int MesosContainerizerLaunch::execute()
     cerr << "Failed to chdir into sandbox directory '"
          << flags.sandbox.get() << "': " << chdir.error() << endl;
     return 1;
+  }
+
+  // Determine whether or not to enter a working directory.
+  if (flags.working_directory.isSome()) {
+    const string& workingDir = flags.working_directory.get();
+
+    if (flags.rootfs.isSome()) {
+      Try<Nothing> changeWorkingDir = os::chdir(workingDir);
+      if (changeWorkingDir.isError()) {
+        cerr << "Failed to chdir into working directory '"
+             << workingDir << "': " << changeWorkingDir.error() << endl;
+      }
+    } else {
+      // NOTE: If the executor shares the host filesystem, we
+      // should not allow them to 'cd' into an arbitrary directory
+      // because that'll create security issues.
+      cout << "Ignore working directory '" << workingDir
+           << "' specified in container launch info since the"
+           << "executor is using the host filesystem";
+    }
   }
 
   // Relay the environment variables.
