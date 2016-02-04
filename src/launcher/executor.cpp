@@ -82,6 +82,7 @@ public:
       const Option<char**>& override,
       const string& _healthCheckDir,
       const Option<string>& _sandboxDirectory,
+      const Option<string>& _workingDirectory,
       const Option<string>& _user,
       const Option<string>& _taskCommand)
     : state(REGISTERING),
@@ -95,6 +96,7 @@ public:
       healthCheckDir(_healthCheckDir),
       override(override),
       sandboxDirectory(_sandboxDirectory),
+      workingDirectory(_workingDirectory),
       user(_user),
       taskCommand(_taskCommand) {}
 
@@ -209,6 +211,8 @@ public:
     }
 
     Option<string> rootfs;
+    // NOTE: This is a hacky way to detect if root filesystem is
+    // specified for the command task.
     if (sandboxDirectory.isSome()) {
       // If 'sandbox_diretory' is specified, that means the user
       // task specifies a root filesystem, and that root filesystem has
@@ -345,10 +349,19 @@ public:
           abort();
         }
 
-        Try<Nothing> chdir = os::chdir(sandboxDirectory.get());
+        // Determine the current working directory for the executor.
+        string cwd;
+        if (workingDirectory.isSome()) {
+          cwd = workingDirectory.get();
+        } else {
+          CHECK_SOME(sandboxDirectory);
+          cwd = sandboxDirectory.get();
+        }
+
+        Try<Nothing> chdir = os::chdir(cwd);
         if (chdir.isError()) {
-          cerr << "Failed to change directory to sandbox dir '"
-               << sandboxDirectory.get() << "': " << chdir.error();
+          cerr << "Failed to chdir into current working directory '"
+               << cwd << "': " << chdir.error() << endl;
           abort();
         }
 
@@ -646,6 +659,7 @@ private:
   string healthCheckDir;
   Option<char**> override;
   Option<string> sandboxDirectory;
+  Option<string> workingDirectory;
   Option<string> user;
   Option<string> taskCommand;
 };
@@ -658,11 +672,17 @@ public:
       const Option<char**>& override,
       const string& healthCheckDir,
       const Option<string>& sandboxDirectory,
+      const Option<string>& workingDirectory,
       const Option<string>& user,
       const Option<string>& taskCommand)
   {
-    process = new CommandExecutorProcess(
-        override, healthCheckDir, sandboxDirectory, user, taskCommand);
+    process = new CommandExecutorProcess(override,
+                                         healthCheckDir,
+                                         sandboxDirectory,
+                                         workingDirectory,
+                                         user,
+                                         taskCommand);
+
     spawn(process);
   }
 
@@ -757,14 +777,19 @@ public:
         "The absolute path for the directory in the container where the\n"
         "sandbox is mapped to");
 
+    add(&working_directory,
+        "working_directory",
+        "The working directory relates to sandbox directory. It can\n"
+        "only be operated with chdir after chdir to sandbox directory.");
+
     add(&user,
         "user",
         "The user that the task should be running as.");
 
     add(&task_command,
         "task_command",
-        "If specified, this is the overrided command for launching the\n"
-        "task (instead of the command from TaskInfo).");
+        "The working directory for the executor. It will be ignored if\n"
+        "container root filesystem is not specified.");
 
     // TODO(nnielsen): Add 'prefix' option to enable replacing
     // 'sh -c' with user specified wrapper.
@@ -772,6 +797,7 @@ public:
 
   bool override;
   Option<string> sandbox_directory;
+  Option<string> working_directory;
   Option<string> user;
   Option<string> task_command;
 };
@@ -816,6 +842,7 @@ int main(int argc, char** argv)
       override,
       path,
       flags.sandbox_directory,
+      flags.working_directory,
       flags.user,
       flags.task_command);
 
