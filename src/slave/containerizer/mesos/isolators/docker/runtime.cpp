@@ -311,7 +311,7 @@ Try<CommandInfo> DockerRuntimeIsolatorProcess::getExecutorLaunchCommand(
     // Only pass the mutated command to command executor as a flag if image
     // default config is included (see logic table above: row 1-2).
     if (!containerConfig.task_info().command().shell() &&
-        !contaienrConfig.task_info().command().has_value()) {
+        !containerConfig.task_info().command().has_value()) {
       JSON::Object object = JSON::protobuf(command);
 
       // Pass task command as a flag, which will be loaded by
