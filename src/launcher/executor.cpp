@@ -82,6 +82,7 @@ public:
       const Option<char**>& override,
       const string& _healthCheckDir,
       const Option<string>& _sandboxDirectory,
+      const Option<string>& _workingDirectory,
       const Option<string>& _user,
       const Option<string>& _taskCommand)
     : state(REGISTERING),
@@ -95,6 +96,7 @@ public:
       healthCheckDir(_healthCheckDir),
       override(override),
       sandboxDirectory(_sandboxDirectory),
+      workingDirectory(_workingDirectory),
       user(_user),
       taskCommand(_taskCommand) {}
 
@@ -351,6 +353,14 @@ public:
           cerr << "Failed to change directory to sandbox dir '"
                << sandboxDirectory.get() << "': " << chdir.error();
           abort();
+        }
+
+        if (workingDirectory.isSome()) {
+          Try<Nothing> changeWorkingDir = os::chdir(workingDirectory.get());
+          if (changeWorkingDir.isError()) {
+            cerr << "Failed to change directory to working directory '"
+                 << workingDirectory.get() << "': " << changeWorkingDir.error();
+          }
         }
 
         if (user.isSome()) {
@@ -647,6 +657,7 @@ private:
   string healthCheckDir;
   Option<char**> override;
   Option<string> sandboxDirectory;
+  Option<string> workingDirectory;
   Option<string> user;
   Option<string> taskCommand;
 };
@@ -659,11 +670,17 @@ public:
       const Option<char**>& override,
       const string& healthCheckDir,
       const Option<string>& sandboxDirectory,
+      const Option<string>& workingDirectory,
       const Option<string>& user,
       const Option<string>& taskCommand)
   {
-    process = new CommandExecutorProcess(
-        override, healthCheckDir, sandboxDirectory, user, taskCommand);
+    process = new CommandExecutorProcess(override,
+                                         healthCheckDir,
+                                         sandboxDirectory,
+                                         workingDirectory,
+                                         user,
+                                         taskCommand);
+
     spawn(process);
   }
 
@@ -758,6 +775,11 @@ public:
         "The absolute path for the directory in the container where the\n"
         "sandbox is mapped to");
 
+    add(&working_directory,
+        "working_directory",
+        "The working directory relates to sandbox directory. It can\n"
+        "only be operated with chdir after chdir to sandbox directory.");
+
     add(&user,
         "user",
         "The user that the task should be running as.");
@@ -773,6 +795,7 @@ public:
 
   bool override;
   Option<string> sandbox_directory;
+  Option<string> working_directory;
   Option<string> user;
   Option<string> task_command;
 };
@@ -811,8 +834,15 @@ int main(int argc, char** argv)
   string path =
     envPath.isSome() ? envPath.get()
                      : os::realpath(Path(argv[0]).dirname()).get();
-  mesos::internal::CommandExecutor executor(
-      override, path, flags.sandbox_directory, flags.user, flags.task_command);
+
+  mesos::internal::CommandExecutor executor(override,
+                                            path,
+                                            flags.sandbox_directory,
+                                            flags.working_directory,
+                                            flags.user,
+                                            flags.task_command);
+
   mesos::MesosExecutorDriver driver(&executor);
+
   return driver.run() == mesos::DRIVER_STOPPED ? EXIT_SUCCESS : EXIT_FAILURE;
 }
