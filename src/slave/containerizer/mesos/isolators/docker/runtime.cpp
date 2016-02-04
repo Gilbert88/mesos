@@ -268,12 +268,19 @@ Try<CommandInfo> DockerRuntimeIsolatorProcess::getExecutorLaunchCommand(
           command.add_arguments(config.entrypoint(i));
         }
 
-        command.mutable_arguments()->MergeFrom(
-            containerConfig.executor_info().command().arguments());
+        if (!containerConfig.has_task_info()) {
+          // Custom executor case.
+          command.mutable_arguments()->MergeFrom(
+              containerConfig.executor_info().command().arguments());
+        } else {
+          // Command task case.
+          command.mutable_arguments()->MergeFrom(
+              containerConfig.task_info().command().arguments());
+        }
 
         // Overwrite default cmd arguments if CommandInfo arguments
         // are set by user.
-        if (command.arguments_size() == 0) {
+        if (command.arguments_size() == config.entrypoint_size() - 1) {
           foreach (const string& cmd, config.cmd()) {
             command.add_arguments(cmd);
           }
