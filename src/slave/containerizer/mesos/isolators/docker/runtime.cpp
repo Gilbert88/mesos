@@ -268,6 +268,7 @@ Try<CommandInfo> DockerRuntimeIsolatorProcess::getExecutorLaunchCommand(
           command.add_arguments(config.entrypoint(i));
         }
 
+        // Append all possible user argv after entrypoint arguments.
         if (!containerConfig.has_task_info()) {
           // Custom executor case.
           command.mutable_arguments()->MergeFrom(
@@ -279,7 +280,8 @@ Try<CommandInfo> DockerRuntimeIsolatorProcess::getExecutorLaunchCommand(
         }
 
         // Overwrite default cmd arguments if CommandInfo arguments
-        // are set by user.
+        // are set by user. The logic below is the case that no
+        // argument is set by user.
         if (command.arguments_size() == config.entrypoint_size() - 1) {
           foreach (const string& cmd, config.cmd()) {
             command.add_arguments(cmd);
@@ -306,7 +308,10 @@ Try<CommandInfo> DockerRuntimeIsolatorProcess::getExecutorLaunchCommand(
     // For command executor, with command value as 'mesos-executor'.
     CommandInfo executorCommand = containerConfig.executor_info().command();
 
-    if (!command.shell() && !command.has_value()) {
+    // Only pass the mutated command to command executor as a flag if image
+    // default config is included (see logic table above: row 1-2).
+    if (!containerConfig.task_info().command().shell() &&
+        !contaienrConfig.task_info().command().has_value()) {
       JSON::Object object = JSON::protobuf(command);
 
       // Pass task command as a flag, which will be loaded by
