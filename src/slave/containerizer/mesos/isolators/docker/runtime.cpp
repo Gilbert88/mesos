@@ -104,7 +104,7 @@ Future<Option<ContainerLaunchInfo>> DockerRuntimeIsolatorProcess::prepare(
     launchInfo.mutable_environment()->CopyFrom(environment.get());
   }
 
-  Option<string> workingDir = getWorkingDir(containerConfig);
+  Option<string> workingDir = getWorkingDirectory(containerConfig);
   if (workingDir.isSome() && !containerConfig.has_task_info()) {
     // Only set working directory for custom executor case, while
     // working directory will be passed as a flag for command
@@ -333,7 +333,7 @@ Try<CommandInfo> DockerRuntimeIsolatorProcess::getExecutorLaunchCommand(
 }
 
 
-Option<string> DockerRuntimeIsolatorProcess::getWorkingDir(
+Option<string> DockerRuntimeIsolatorProcess::getWorkingDirectory(
     const ContainerConfig& containerConfig)
 {
   CHECK(containerConfig.docker().manifest().has_config());

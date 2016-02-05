@@ -1039,6 +1039,17 @@ Future<bool> MesosContainerizerProcess::__launch(
     launchFlags.sandbox = rootfs.isSome()
       ? flags.sandbox_directory
       : directory;
+
+    // NOTE: If the executor shares the host filesystem, we
+    // should not allow them to 'cd' into an arbitrary directory
+    // because that'll create security issues.
+    if (rootfs.isSome() && workingDir.isSome()) {
+       LOG(WARNING) << "Ignore working directory '" << workingDir.get()
+                    << "' specified in container launch info for container '"
+                    << containerId << "' since the executor is using the "
+                    << "host filesystem";
+    }
+
     launchFlags.working_directory = workingDir;
     launchFlags.rootfs = rootfs;
     launchFlags.user = user;

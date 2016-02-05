@@ -70,7 +70,7 @@ private:
       const mesos::slave::ContainerConfig& containerConfig,
       const Option<std::string>& workingDir);
 
-  Option<std::string> getWorkingDir(
+  Option<std::string> getWorkingDirectory(
       const mesos::slave::ContainerConfig& containerConfig);
 
   const Flags flags;
