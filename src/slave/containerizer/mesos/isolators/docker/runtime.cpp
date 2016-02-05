@@ -92,34 +92,61 @@ Future<Option<ContainerLaunchInfo>> DockerRuntimeIsolatorProcess::prepare(
     return None();
   }
 
-  // Contains docker image default environment variables, merged
-  // command, and working directory.
-  ContainerLaunchInfo launchInfo;
-
   Option<Environment> environment = getLaunchEnvironment(
       containerId,
       containerConfig);
 
-  if (environment.isSome()) {
-    launchInfo.mutable_environment()->CopyFrom(environment.get());
-  }
+  Option<string> workingDirectory = getWorkingDirectory(containerConfig);
 
-  Option<string> workingDir = getWorkingDirectory(containerConfig);
-  if (workingDir.isSome() && !containerConfig.has_task_info()) {
-    // Only set working directory for custom executor case, while
-    // working directory will be passed as a flag for command
-    // executor case.
-    launchInfo.set_working_directory(workingDir.get());
-  }
-
-  Try<CommandInfo> command =
-    getExecutorLaunchCommand(containerId, containerConfig, workingDir);
+  Result<CommandInfo> command =
+    getExecutorLaunchCommand(containerId, containerConfig);
   if (command.isError()) {
     return Failure("Failed to determine the executor launch command: " +
                    command.error());
   }
 
-  launchInfo.mutable_command()->CopyFrom(command.get());
+  // Set 'launchInfo'.
+  ContainerLaunchInfo launchInfo;
+
+  if (environment.isSome()) {
+    launchInfo.mutable_environment()->CopyFrom(environment.get());
+  }
+
+  // If working directory or command exists, operation has to be
+  // distinguished for either custom executor or command task. For
+  // custom executor case, info will be included in 'launchInfo',
+  // and will be passed back to containerizer. For command task
+  // case, info will be passed to command executor as flags.
+  if (!containerConfig.has_task_info()) {
+    // Custom executor case.
+    if (workingDirectory.isSome()) {
+      launchInfo.set_working_directory(workingDirectory.get());
+    }
+
+    if (command.isSome()) {
+      launchInfo.mutable_command()->CopyFrom(command.get());
+    }
+  } else {
+    // Command task case. The 'executorCommand' below is the
+    // command with value as 'mesos-executor'.
+    CommandInfo executorCommand = containerConfig.executor_info().command();
+
+    // Pass working directory to command executor as a flag.
+    if (workingDirectory.isSome()) {
+      executorCommand.add_arguments(
+          "--working_directory=" + workingDirectory.get());
+    }
+
+    // Pass task command as a flag, which will be loaded by
+    // command executor.
+    if (command.isSome()) {
+      executorCommand.add_arguments(
+          "--task_command=" +
+          stringify(JSON::protobuf(command.get())));
+    }
+
+    launchInfo.mutable_command()->CopyFrom(executorCommand);
+  }
 
   return launchInfo;
 }
@@ -168,11 +195,11 @@ Option<Environment> DockerRuntimeIsolatorProcess::getLaunchEnvironment(
 // This method reads the CommandInfo form ExecutorInfo and optional
 // TaskInfo, and merge them with docker image default Entrypoint and
 // Cmd. It returns a merged CommandInfo which will be used to launch
-// the executor.
-Try<CommandInfo> DockerRuntimeIsolatorProcess::getExecutorLaunchCommand(
+// the executor. If no need to modify the command, this method will
+// return none.
+Result<CommandInfo> DockerRuntimeIsolatorProcess::getExecutorLaunchCommand(
     const ContainerID& containerId,
-    const ContainerConfig& containerConfig,
-    const Option<string>& workingDir)
+    const ContainerConfig& containerConfig)
 {
   CHECK(containerConfig.docker().manifest().has_config());
 
@@ -246,8 +273,14 @@ Try<CommandInfo> DockerRuntimeIsolatorProcess::getExecutorLaunchCommand(
     if (!command.has_value()) {
       return Error("Shell specified but no command value provided");
     }
+
+    // No need to mutate command (row 7-8).
+    return None();
   } else {
-    if (!command.has_value()) {
+    if (command.has_value()) {
+      // No need to mutate command (row 3-4).
+      return None();
+    } else {
       // TODO(gilbert): Deprecate 'override' flag option in command
       // task. We do not exclude override case here.
 
@@ -303,30 +336,6 @@ Try<CommandInfo> DockerRuntimeIsolatorProcess::getExecutorLaunchCommand(
                      containerId.value() + "'");
       }
     }
-  }
-
-  if (containerConfig.has_task_info()) {
-    // For command executor, with command value as 'mesos-executor'.
-    CommandInfo executorCommand = containerConfig.executor_info().command();
-
-    // Only pass the mutated command to command executor as a flag if
-    // image default config is included (see table above: row 1-2).
-    if (!containerConfig.task_info().command().shell() &&
-        !containerConfig.task_info().command().has_value()) {
-      JSON::Object object = JSON::protobuf(command);
-
-      // Pass task command as a flag, which will be loaded by
-      // command executor.
-      executorCommand.add_arguments("--task_command=" + stringify(object));
-    }
-
-    // Pass working directory to command executor as a flag, to
-    // distinguish it from sandbox directory.
-    if (workingDir.isSome()) {
-      executorCommand.add_arguments("--working_directory=" + workingDir.get());
-    }
-
-    return executorCommand;
   }
 
   return command;
