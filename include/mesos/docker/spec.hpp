@@ -50,6 +50,24 @@ namespace spec {
 Try<ImageReference> parseImageReference(const std::string& s);
 
 
+inline std::ostream& operator<<(
+    std::ostream& stream,
+    const ImageReference& name)
+{
+  if (!name.has_registry()) {
+    stream << name.repository();
+  } else {
+    stream << name.registry() << "/" << name.repository();
+  }
+
+  if (name.has_tag()) {
+    stream << ":" << name.tag();
+  }
+
+  return stream;
+}
+
+
 namespace v1 {
 
 /**
