@@ -76,14 +76,11 @@ private:
 Try<Owned<Puller>> LocalPuller::create(const Flags& flags)
 {
   // This should already been verified at puller.cpp.
-  if (!strings::startsWith(flags.docker_registry, "file://")) {
-    return Error("Expecting registry url to have file:// scheme");
+  if (!strings::startsWith(flags.docker_registry, "/")) {
+    return Error("Expecting registry url starting with '/'");
   }
 
-  const string archivesDir = strings::remove(
-      flags.docker_registry,
-      "file://",
-      strings::Mode::PREFIX);
+  const string& archivesDir = flags.docker_registry;
 
   Owned<LocalPullerProcess> process(new LocalPullerProcess(archivesDir));
 
