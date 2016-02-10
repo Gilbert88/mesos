@@ -869,7 +869,9 @@ Future<list<Option<ContainerLaunchInfo>>> MesosContainerizerProcess::prepare(
   }
 
   if (provisionInfo.isSome()) {
-    containerConfig.set_rootfs(provisionInfo->rootfs);
+    if (taskInfo.isNone()) {
+      containerConfig.set_rootfs(provisionInfo->rootfs);
+    }
 
     if (provisionInfo->dockerManifest.isSome()) {
       ContainerConfig::Docker* docker = containerConfig.mutable_docker();
