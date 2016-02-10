@@ -331,6 +331,8 @@ public:
       os::close(pipes[1]);
 
       if (rootfs.isSome()) {
+        cout << "Debug rootfs !!!! : " << rootfs.get() << endl;
+
 #ifdef __linux__
         if (user.isSome()) {
           // This is a work around to fix the problem that after we chroot
