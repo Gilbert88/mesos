@@ -168,8 +168,6 @@ public:
         << "' to have a command!";
     }
 
-    cout << "!!!!!" << command.DebugString() << endl;
-
     if (override.isNone()) {
       // TODO(jieyu): For now, we just fail the executor if the task's
       // CommandInfo is not valid. The framework will receive
@@ -183,7 +181,7 @@ public:
       } else {
         CHECK(command.has_value())
           << "Executable of task '" << task.task_id()
-          << "' is not specified!";
+          << "' is not specified!" << command.DebugString();
       }
     }
 
