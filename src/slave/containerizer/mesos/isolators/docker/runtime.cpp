@@ -149,6 +149,8 @@ Future<Option<ContainerLaunchInfo>> DockerRuntimeIsolatorProcess::prepare(
     launchInfo.mutable_command()->CopyFrom(executorCommand);
   }
 
+  LOG(INFO) << launchInfo.DebugString();
+
   return launchInfo;
 }
 
