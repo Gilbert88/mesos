@@ -722,7 +722,12 @@ Future<bool> MesosContainerizerProcess::_launch(
     const Option<ProvisionInfo>& provisionInfo)
 {
   if (provisionInfo.isSome()) {
-    LOG(INFO) << provisionInfo->DebugString();
+    LOG(INFO) << "$$$$$$rootfs!!!!!: " << provisionInfo->rootfs;
+
+    if (provisionInfo->dockerManifest.isSome()) {
+      LOG(INFO) << "$$$$$$$dockerManifest!!!!: "
+                << provisionInfo->dockerManifest->DebugString();
+    }
   }
 
   CHECK(executorInfo.has_container());
@@ -754,7 +759,12 @@ Future<bool> MesosContainerizerProcess::_launch(
 
     futures.push_back(provisioner->provision(containerId, image)
       .then([=](const ProvisionInfo& info) mutable -> Future<Nothing> {
-        LOG(INFO) << info.DebugString();
+    LOG(INFO) << "@@@@@rootfs!!!!!: " << info.rootfs;
+
+    if (info.dockerManifest.isSome()) {
+      LOG(INFO) << "@@@@@dockerManifest!!!!: "
+                << info.dockerManifest->DebugString();
+    }
 
         volume->set_host_path(info.rootfs);
 
@@ -826,7 +836,7 @@ Future<list<Option<ContainerLaunchInfo>>> MesosContainerizerProcess::prepare(
     const Option<string>& user,
     const Option<ProvisionInfo>& provisionInfo)
 {
-  if (provisionInfo.isSome) {
+  if (provisionInfo.isSome()) {
     LOG(INFO) << "!!!!rootfs!!!!!: " << provisionInfo->rootfs;
 
     if (provisionInfo->dockerManifest.isSome()) {
