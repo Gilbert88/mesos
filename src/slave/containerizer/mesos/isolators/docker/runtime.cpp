@@ -77,6 +77,8 @@ Future<Option<ContainerLaunchInfo>> DockerRuntimeIsolatorProcess::prepare(
     const ContainerID& containerId,
     const ContainerConfig& containerConfig)
 {
+  LOG(INFO) << containerConfig.DebugString();
+
   const ExecutorInfo& executorInfo = containerConfig.executor_info();
 
   if (!executorInfo.has_container()) {
