@@ -80,9 +80,8 @@ Try<Owned<Puller>> LocalPuller::create(const Flags& flags)
     return Error("Expecting registry url starting with '/'");
   }
 
-  const string& archivesDir = flags.docker_registry;
-
-  Owned<LocalPullerProcess> process(new LocalPullerProcess(archivesDir));
+  Owned<LocalPullerProcess> process(
+      new LocalPullerProcess(flags.docker_registry));
 
   return Owned<Puller>(new LocalPuller(process));
 }
