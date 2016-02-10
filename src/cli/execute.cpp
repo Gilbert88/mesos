@@ -456,7 +456,7 @@ int main(int argc, char** argv)
       flags.resources,
       uri,
       dockerImage,
-      flags.containerizer
+      flags.containerizer,
       flags.shell);
 
   FrameworkInfo framework;
