@@ -366,7 +366,7 @@ int main(int argc, char** argv)
     return EXIT_FAILURE;
   }
 
-  if (flag.shell && flags.command.isNone()) {
+  if (flags.shell && flags.command.isNone()) {
     cerr << flags.usage("Missing required option --command") << endl;
     return EXIT_FAILURE;
   }
@@ -456,7 +456,8 @@ int main(int argc, char** argv)
       flags.resources,
       uri,
       dockerImage,
-      flags.containerizer);
+      flags.containerizer
+      flags.shell);
 
   FrameworkInfo framework;
   framework.set_user(user.get());
