@@ -46,7 +46,13 @@ message ImageManifest {
     optional string User = 4;
     repeated string Cmd = 5;
     optional string WorkingDir = 6;
-    optional string Volumes = 7;
+
+    // Volumes is defined as string->object mappping in docker,
+    // but actually it is the list of volumes. Protobuf parse
+    // cannot support parsing unknown JSON field (i.e., the
+    // string key in volumes mapping), so we define 'Volume_',
+    // which should be parsed manually.
+    repeated string Volumes_ = 7;
 
     // Name of the image as it was passed by the operator.
     optional string Image = 8;
