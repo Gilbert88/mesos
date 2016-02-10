@@ -324,7 +324,7 @@ Result<CommandInfo> DockerRuntimeIsolatorProcess::getExecutorLaunchCommand(
     // Overwrite default cmd arguments if CommandInfo arguments are
     // set by user. The logic below is the case that no argument is
     // set by user.
-    if (command.arguments_size() == config.entrypoint_size() - 1) {
+    if (command.arguments_size() == config.entrypoint_size()) {
       foreach (const string& cmd, config.cmd()) {
         command.add_arguments(cmd);
       }
@@ -335,7 +335,7 @@ Result<CommandInfo> DockerRuntimeIsolatorProcess::getExecutorLaunchCommand(
 
     // Overwrite default cmd arguments if CommandInfo arguments
     // are set by user.
-    if (command.arguments_size() == 0) {
+    if (command.arguments_size() == 1) {
       for (int i = 1; i < config.cmd_size(); i++) {
         command.add_arguments(config.cmd(i));
       }
