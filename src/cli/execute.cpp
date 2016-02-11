@@ -206,7 +206,7 @@ public:
         CommandInfo* commandInfo = task.mutable_command();
 
         if (shell) {
-          CHECK_SOME(commang);
+          CHECK_SOME(command);
 
           commandInfo->set_shell(true);
           commandInfo->set_value(command.get());
