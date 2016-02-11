@@ -67,8 +67,8 @@ public:
 
     add(&shell,
         "shell",
-        "Default to be true. If it is set false explicitly, docker_image has\n"
-        "to be specified, and image default entrypoint/cmd will be executed",
+        "Determine the command is a shell or not. If not, 'command' will be\n"
+        "treated as executable value and arguments (TODO).",
         true);
 
     add(&command,
@@ -127,13 +127,13 @@ public:
 
   Option<string> master;
   Option<string> name;
+  bool shell;
   Option<string> command;
   Option<hashmap<string, string>> environment;
   string resources;
   string hadoop;
   string hdfs;
   Option<string> package;
-  bool shell;
   bool overwrite;
   bool checkpoint;
   Option<string> docker_image;
@@ -146,21 +146,21 @@ class CommandScheduler : public Scheduler
 public:
   CommandScheduler(
       const string& _name,
+      const bool& _shell,
       const Option<string>& _command,
       const Option<hashmap<string, string>>& _environment,
       const string& _resources,
       const Option<string>& _uri,
       const Option<string>& _dockerImage,
-      const string& _containerizer,
-      const bool& _shell)
+      const string& _containerizer)
     : name(_name),
+      shell(_shell),
       command(_command),
       environment(_environment),
       resources(_resources),
       uri(_uri),
       dockerImage(_dockerImage),
       containerizer(_containerizer),
-      shell(_shell),
       launched(false) {}
 
   virtual ~CommandScheduler() {}
@@ -205,16 +205,13 @@ public:
 
         CommandInfo* commandInfo = task.mutable_command();
 
-        if (shell && command.isSome()) {
-          // Explicitly set 'shell' to true since we want to use the shell
-          // for running the command (and even though this is the
-          // default we want to be explicit).
-          commandInfo->set_shell(true);
+        if (shell) {
+          CHECK_SOME(commang);
 
+          commandInfo->set_shell(true);
           commandInfo->set_value(command.get());
         } else {
-          // Only possible when 'docker_image' is specified. The image's
-          // default entrypoint/cmd will be executed.
+          // TODO(gilbert): Treat 'command' as executable value and arguments.
           commandInfo->set_shell(false);
         }
 
@@ -317,13 +314,13 @@ public:
 
 private:
   const string name;
+  bool shell;
   const Option<string> command;
   const Option<hashmap<string, string>> environment;
   const string resources;
   const Option<string> uri;
   const Option<string> dockerImage;
   const string containerizer;
-  bool shell;
   bool launched;
 };
 
@@ -451,13 +448,13 @@ int main(int argc, char** argv)
 
   CommandScheduler scheduler(
       flags.name.get(),
+      flags.shell,
       flags.command,
       environment,
       flags.resources,
       uri,
       dockerImage,
-      flags.containerizer,
-      flags.shell);
+      flags.containerizer);
 
   FrameworkInfo framework;
   framework.set_user(user.get());
