@@ -37,6 +37,7 @@
 #include "tests/mesos.hpp"
 #include "tests/utils.hpp"
 
+namespace master = mesos::internal::master;
 namespace paths = mesos::internal::slave::docker::paths;
 namespace slave = mesos::internal::slave;
 namespace spec = ::docker::spec;
@@ -46,9 +47,13 @@ using std::vector;
 
 using process::Future;
 using process::Owned;
+using process::PID;
 using process::Promise;
 
+using master::Master;
+
 using slave::ImageInfo;
+using slave::Slave;
 
 using slave::docker::Puller;
 using slave::docker::RegistryPuller;
@@ -307,28 +312,78 @@ TEST_F(ProvisionerDockerLocalStoreTest, PullingSameImageSimutanuously)
 }
 
 
-class ProvisionerDockerRegistryPullerTest : public TemporaryDirectoryTest {};
+#ifdef __linux__
+class ProvisionerDockerRegistryPullerTest : public MesosTest {};
 
 
-TEST_F(ProvisionerDockerRegistryPullerTest, INTERNET_CURL_Pull)
+// TODO(jieyu): This is a ROOT test because of MESOS-4757. Remove the
+// ROOT restriction after MESOS-4757 is resolved.
+TEST_F(ProvisionerDockerRegistryPullerTest, ROOT_INTERNET_CURL_ShellCommand)
 {
-  slave::Flags flags;
-  flags.docker_registry = "https://registry-1.docker.io";
-  flags.docker_store_dir = os::getcwd();
+  Try<PID<Master>> master = StartMaster();
+  ASSERT_SOME(master);
 
-  Try<Owned<slave::Store>> store = Store::create(flags);
-  ASSERT_SOME(store);
+  slave::Flags flags = CreateSlaveFlags();
+  flags.isolation = "docker/runtime,filesystem/linux";
+  flags.image_providers = "docker";
+  flags.docker_registry = "https://registry-1.docker.io";
+
+  Try<PID<Slave>> slave = StartSlave(flags);
+  ASSERT_SOME(slave);
+
+  MockScheduler sched;
+  MesosSchedulerDriver driver(
+      &sched, DEFAULT_FRAMEWORK_INFO, master.get(), DEFAULT_CREDENTIAL);
+
+  EXPECT_CALL(sched, registered(&driver, _, _));
+
+  Future<vector<Offer>> offers;
+  EXPECT_CALL(sched, resourceOffers(&driver, _))
+    .WillOnce(FutureArg<1>(&offers))
+    .WillRepeatedly(Return());        // Ignore subsequent offers.
+
+  driver.start();
+
+  AWAIT_READY(offers);
+  EXPECT_FALSE(offers.get().empty());
+
+  const Offer& offer = offers.get()[0];
+
+  TaskInfo task = createTask(
+      offer.slave_id(),
+      Resources::parse("cpus:1;mem:128").get(),
+      "ls -al /");
 
   Image image;
   image.set_type(Image::DOCKER);
-  image.mutable_docker()->set_name("library/alpine");
+  image.mutable_docker()->set_name("library/busybox");
 
-  Future<ImageInfo> imageInfo = store.get()->get(image);
-  AWAIT_READY_FOR(imageInfo, Seconds(60));
+  ContainerInfo* container = task.mutable_container();
+  container->set_type(ContainerInfo::MESOS);
+  container->mutable_mesos()->mutable_image()->CopyFrom(image);
 
-  EXPECT_LE(1u, imageInfo->layers.size());
-  EXPECT_SOME(imageInfo->dockerManifest);
+  Future<TaskStatus> status1;
+  Future<TaskStatus> status2;
+  EXPECT_CALL(sched, statusUpdate(&driver, _))
+    .WillOnce(FutureArg<1>(&status1))
+    .WillOnce(FutureArg<1>(&status2));
+
+  driver.launchTasks(offer.id(), {task});
+
+  AWAIT_READY_FOR(status1, Seconds(60));
+  EXPECT_EQ(task.task_id(), status1.get().task_id());
+  EXPECT_EQ(TASK_RUNNING, status1.get().state());
+
+  AWAIT_READY(status2);
+  EXPECT_EQ(task.task_id(), status2.get().task_id());
+  EXPECT_EQ(TASK_FINISHED, status2.get().state());
+
+  driver.stop();
+  driver.join();
+
+  Shutdown();
 }
+#endif
 
 } // namespace tests {
 } // namespace internal {
