@@ -679,6 +679,7 @@ Future<bool> MesosContainerizerProcess::launch(
       .then(defer(self(),
                   &Self::__launch,
                   containerId,
+                  taskInfo,
                   executorInfo,
                   directory,
                   user,
@@ -790,6 +791,7 @@ Future<bool> MesosContainerizerProcess::_launch(
         .then(defer(self(),
                     &Self::__launch,
                     containerId,
+                    taskInfo,
                     *_executorInfo,
                     directory,
                     user,
@@ -906,6 +908,7 @@ Future<Nothing> MesosContainerizerProcess::fetch(
 
 Future<bool> MesosContainerizerProcess::__launch(
     const ContainerID& containerId,
+    const Option<TaskInfo>& taskInfo,
     const ExecutorInfo& executorInfo,
     const string& directory,
     const Option<string>& user,
@@ -929,7 +932,8 @@ Future<bool> MesosContainerizerProcess::__launch(
       slaveId,
       slavePid,
       checkpoint,
-      flags);
+      flags,
+      taskInfo.isNone() ? true : false);
 
   // Determine the root filesystem for the container. Only one
   // isolator should return the container root filesystem.
