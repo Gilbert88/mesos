@@ -78,16 +78,16 @@ public:
         path::join(imagePath, "repositories"),
         stringify(repositories));
 
-    if (writeRepo.isError()) {
+    if (write.isError()) {
       return Error("Failed to save docker test image 'repositories': " +
-                   writeRepo.error());
+                   write.error());
     }
 
     // Create layer1.
     mkdir = os::mkdir(layerPath1);
-    if (mkdirLayer1.isError()) {
+    if (mkdir.isError()) {
       return Error("Failed to create docker test image layer '" +
-                   layerId1 + "': " + mkdirLayer1.error());
+                   layerId1 + "': " + mkdir.error());
     }
 
     JSON::Value manifest1 = JSON::parse(
@@ -158,17 +158,17 @@ public:
         path::join(layerPath1, "json"),
         stringify(manifest1));
 
-    if (writeManifest1.isError()) {
+    if (write.isError()) {
       return Error("Failed to save docker test image layer '" + layerId1 +
-                   "': " + writeManifest1.error());
+                   "': " + write.error());
     }
 
     const std::string rootfs1 = path::join(layerPath1, "layer");
 
     mkdir = os::mkdir(rootfs1);
-    if (mkdirRootfs1.isError()) {
+    if (mkdir.isError()) {
       return Error("Failed to create layer rootfs directory '" +
-                   rootfs1 + "': " + mkdirRootfs1.error());
+                   rootfs1 + "': " + mkdir.error());
     }
 
     // Only create one linux rootfs for the first layer1.
@@ -192,8 +192,8 @@ public:
         path::join(layerPath1, "VERSION"),
         "1.0");
 
-    if (writeVersion1.isError()) {
-      return Error("Failed to save layer version: " + writeVersion1.error());
+    if (write.isError()) {
+      return Error("Failed to save layer version: " + write.error());
     }
 
     // Create layer2.
@@ -274,17 +274,17 @@ public:
         path::join(layerPath2, "json"),
         stringify(manifest2));
 
-    if (writeManifest2.isError()) {
+    if (write.isError()) {
       return Error("Failed to save docker test image layer '" + layerId2 +
-                   "': " + writeManifest2.error());
+                   "': " + write.error());
     }
 
     const std::string rootfs2 = path::join(layerPath2, "layer");
 
     mkdir = os::mkdir(rootfs2);
-    if (mkdirRootfs2.isError()) {
+    if (mkdir.isError()) {
       return Error("Failed to create layer rootfs directory '" +
-                   rootfs2 + "': " + mkdirRootfs2.error());
+                   rootfs2 + "': " + mkdir.error());
     }
 
     // Tar the rootfs for layer2.
@@ -302,8 +302,8 @@ public:
         path::join(layerPath2, "VERSION"),
         "1.0");
 
-    if (writeVersion2.isError()) {
-      return Error("Failed to save layer version: " + writeVersion2.error());
+    if (write.isError()) {
+      return Error("Failed to save layer version: " + write.error());
     }
 
     tar = os::tar(imagePath, path::join(directory, name + ".tar"));

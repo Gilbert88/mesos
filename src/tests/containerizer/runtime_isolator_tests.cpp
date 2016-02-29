@@ -35,12 +35,12 @@ using std::string;
 using process::Owned;
 
 #ifdef __linux__
-class DockerLocalTarTest : public ::testing::Test {};
+class DockerArchiveTest : public ::testing::Test {};
 
 
-TEST_F(DockerLocalTarTest, ROOT_RUNTIME_CreateDockerLocalTar)
+TEST_F(DockerArchiveTest, ROOT_RUNTIME_CreateDockerLocalTar)
 {
-  Owned<DockerLocalTar> dockerTar(new DockerLocalTar());
+  Owned<DockerArchive> dockerTar(new DockerArchive());
 
   const string archivesDir = path::join(os::getcwd(), "archives");
 
