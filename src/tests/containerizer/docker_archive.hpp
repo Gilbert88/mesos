@@ -198,9 +198,9 @@ public:
 
     // Create layer2.
     mkdir = os::mkdir(layerPath2);
-    if (mkdirLayer2.isError()) {
+    if (mkdir.isError()) {
       return Error("Failed to create docker test image layer '" +
-                   layerId2 + "': " + mkdirLayer2.error());
+                   layerId2 + "': " + mkdir.error());
     }
 
     JSON::Value manifest2 = JSON::parse(
