@@ -23,7 +23,8 @@
 #include <process/owned.hpp>
 
 #include "tests/mesos.hpp"
-#include "tests/containerizer/docker_local_tar.hpp"
+
+#include "tests/containerizer/docker_archive.hpp"
 
 namespace mesos {
 namespace internal {

@@ -802,7 +802,7 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   tests/utils.hpp							\
   tests/zookeeper.hpp							\
   tests/zookeeper_test_server.hpp					\
-  tests/containerizer/docker_local_tar.hpp				\
+  tests/containerizer/docker_archive.hpp				\
   tests/containerizer/isolator.hpp					\
   tests/containerizer/launcher.hpp					\
   tests/containerizer/memory_test_helper.hpp				\
