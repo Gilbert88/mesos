@@ -42,15 +42,6 @@ Try<hashmap<Image::Type, Owned<Store>>> Store::create(const Flags& flags)
     return hashmap<Image::Type, Owned<Store>>();
   }
 
-  if (strings::contains(strings::upper(
-      flags.image_providers.get()), "DOCKER") &&
-      !strings::contains(flags.isolation, "docker/runtime")) {
-    EXIT(1)
-      << "Docker runtime isolator has to be specified if 'DOCKER' is included "
-      << "in 'image_providers'. Please add 'docker/runtime' to '--isolation' "
-      << "flags";
-  }
-
   hashmap<Image::Type, Try<Owned<Store>>(*)(const Flags&)> creators;
   creators.put(Image::APPC, &appc::Store::create);
   creators.put(Image::DOCKER, &docker::Store::create);
@@ -76,6 +67,14 @@ Try<hashmap<Image::Type, Owned<Store>>> Store::create(const Flags& flags)
     }
 
     stores.put(imageType, store.get());
+  }
+
+  if (stores.contains(Image::DOCKER) &&
+      !strings::contains(flags.isolation, "docker/runtime") {
+    EXIT(1)
+      << "Docker runtime isolator has to be specified if 'DOCKER' is included "
+      << "in 'image_providers'. Please add 'docker/runtime' to '--isolation' "
+      << "flags";
   }
 
   return stores;
