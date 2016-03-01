@@ -183,11 +183,6 @@ public:
       return Error("Failed to tar layer rootfs: " + tar.error());
     }
 
-    Try<Nothing> rmdir = os::rmdir(rootfs1);
-    if (rmdir.isError()) {
-      return Error("Failed to remove layer rootfs directory: " + rmdir.error());
-    }
-
     write = os::write(
         path::join(layerPath1, "VERSION"),
         "1.0");
@@ -293,7 +288,7 @@ public:
       return Error("Failed to tar layer rootfs: " + tar.error());
     }
 
-    rmdir = os::rmdir(rootfs2);
+    Try<Nothing> rmdir = os::rmdir(rootfs2);
     if (rmdir.isError()) {
       return Error("Failed to remove layer rootfs directory: " + rmdir.error());
     }
@@ -309,12 +304,6 @@ public:
     tar = os::tar(imagePath, path::join(directory, name + ".tar"));
     if (tar.isError()) {
       return Error("Failed to create image tarball: " + tar.error());
-    }
-
-    rmdir = os::rmdir(imagePath);
-    if (rmdir.isError()) {
-      return Error("Failed to remove image directory: '" + imagePath + "': " +
-                   rmdir.error());
     }
 
     return Nothing();
