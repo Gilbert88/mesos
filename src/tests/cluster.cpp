@@ -56,6 +56,8 @@
 #include <stout/strings.hpp>
 #include <stout/try.hpp>
 
+#include <stout/os/ls.hpp>
+
 #ifdef __linux__
 #include "linux/cgroups.hpp"
 #endif
@@ -81,6 +83,7 @@
 
 #include "slave/flags.hpp"
 #include "slave/gc.hpp"
+#include "slave/paths.hpp"
 #include "slave/slave.hpp"
 #include "slave/status_update_manager.hpp"
 
@@ -515,6 +518,12 @@ Try<process::Owned<Slave>> Slave::start(
 
 Slave::~Slave()
 {
+  if (::testing::Test::HasFatalFailure()) {
+    // A gtest macro has terminated the test prematurely.
+    // Output additional info for debugging.
+    dumpSandboxes();
+  }
+
   // Remove any libprocess authorization callbacks that were installed.
   if (authorizationCallbacksSet) {
     process::http::authorization::unsetCallbacks();
@@ -566,6 +575,82 @@ Slave::~Slave()
   }();
 
   terminate();
+}
+
+
+void Slave::dumpSandboxes() const
+{
+  if (!slave->getInfo().has_id()) {
+    std::cout << "Agent has not registered" << std::endl;
+    return;
+  }
+
+  const SlaveID slaveId = slave->getInfo().id();
+  std::cout << "Listing sandboxes for agent: " << slaveId << std::endl;
+
+  Try<std::list<std::string>> frameworks =
+    slave::paths::getFrameworkPaths(flags.work_dir, slaveId);
+
+  if (frameworks.isError()) {
+    std::cout << "Error listing frameworks: "
+              << frameworks.error() << std::endl;
+    return;
+  }
+
+  // This loop is nested per the top level comment in slave/paths.hpp.
+  foreach (const std::string& framework, frameworks.get()) {
+    // We retrive the framework ID via the path's basename.
+    FrameworkID frameworkId;
+    frameworkId.set_value(Path(framework).basename());
+
+    Try<std::list<std::string>> executors =
+      slave::paths::getExecutorPaths(flags.work_dir, slaveId, frameworkId);
+
+    if (executors.isError()) {
+      std::cout << "Error listing executors for framework '" << frameworkId
+                << "': " << executors.error() << std::endl;
+      continue;
+    }
+
+    foreach (const std::string& executor, executors.get()) {
+      // We retrive the executor ID via the path's basename.
+      ExecutorID executorId;
+      executorId.set_value(Path(executor).basename());
+
+      // TODO(josephw): Consider looking at other runs (other than the last).
+      std::string sandboxDirectory = slave::paths::getExecutorLatestRunPath(
+          flags.work_dir,
+          slaveId,
+          frameworkId,
+          executorId);
+
+      Try<std::list<std::string>> filenames = os::ls(sandboxDirectory);
+
+      if (filenames.isError()) {
+        std::cout << "Could not list sandbox '" << sandboxDirectory
+                  << "': " << filenames.error() << std::endl;
+        continue;
+      }
+
+      std::cout << "Begin listing sandbox: " << sandboxDirectory << std::endl;
+      foreach (const std::string& filename, filenames.get()) {
+        std::string filePath = path::join(sandboxDirectory, filename);
+        Try<std::string> text = os::read(filePath);
+
+        if (text.isSome()) {
+          std::cout << "Begin contents of file: " << filename << std::endl;
+          std::cout << text.get() << std::endl;
+          std::cout << "End file" << std::endl;
+        } else {
+          std::cout << "File '" << filename << "' not readable: "
+                    << text.error() << std::endl;
+        }
+      }
+      std::cout << "End sandbox" << std::endl;
+    }
+  }
+
+  std::cout << "End sandboxes for agent: " << slaveId << std::endl;
 }
 
 

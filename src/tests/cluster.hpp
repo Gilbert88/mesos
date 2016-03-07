@@ -157,6 +157,9 @@ public:
 
   ~Slave();
 
+  // Prints the content of this slave's sandboxes to stdout.
+  void dumpSandboxes() const;
+
   // Stops this slave by either dispatching a shutdown call to the underlying
   // slave process or terminating it. If either of these methods are called,
   // this wrapper object will not clean up containers during its destruction.

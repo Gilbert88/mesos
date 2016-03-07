@@ -410,6 +410,12 @@ public:
       const ExecutorID& executorId,
       const ContainerID& containerId);
 
+  // Exposed so tests can inspect the slave's info.
+  SlaveInfo getInfo() const
+  {
+    return info;
+  }
+
 private:
   void _authenticate();
   void authenticationTimeout(process::Future<bool> future);
