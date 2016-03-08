@@ -81,8 +81,6 @@ using process::Promise;
 using process::Queue;
 using process::Subprocess;
 
-using std::cout;
-using std::endl;
 using std::list;
 using std::string;
 using std::vector;
@@ -175,10 +173,6 @@ private:
   Owned<Fetcher> fetcher;
 
   FrameworkID frameworkId;
-
-  // If this test did not succeed as indicated by the above variable,
-  // the contents of these sandboxes will be dumped during tear down.
-  vector<Path> sandboxes;
 };
 
 
@@ -221,54 +215,8 @@ void FetcherCacheTest::SetUp()
 }
 
 
-// Dumps the contents of a text file to cout, assuming
-// there are only text files.
-static void logFile(const Path& path, const string& filename)
-{
-  string filePath = path::join(path.string(), filename);
-  Try<string> text = os::read(filePath);
-  if (text.isSome()) {
-    cout << "Begin file contents of `" << filename << "`:" << endl;
-    cout << text.get() << endl;
-    cout << "End file" << endl;
-  } else {
-    cout << "File `" << filename << "` not readable: " << text.error() << endl;
-  }
-}
-
-
-// Dumps the contents of all files in the sandbox to cout, assuming
-// there are only text files.
-static void logSandbox(const Path& path)
-{
-  Try<list<string>> entries = os::ls(path.string());
-  if (entries.isSome()) {
-    cout << "Begin listing sandbox `" << path.string() << "`:" << endl;
-    foreach (const string& entry, entries.get()) {
-      logFile(path, entry);
-    }
-    cout << "End sandbox" << endl;
-  } else {
-    cout << "Could not list sandbox `" << path.string()
-         << "`: " << entries.error() << endl;
-  }
-}
-
-
 void FetcherCacheTest::TearDown()
 {
-  if (HasFatalFailure()) {
-    // A gtest macro has terminated the test prematurely. Now stream
-    // additional info that might help debug the situation to where
-    // gtest writes its output: cout.
-
-    cout << "Begin listing sandboxes" << endl;
-    foreach (const Path& path, sandboxes) {
-      logSandbox(path);
-    }
-    cout << "End sandboxes" << endl;
-  }
-
   driver->stop();
   driver->join();
 
@@ -461,8 +409,6 @@ Try<FetcherCacheTest::Task> FetcherCacheTest::launchTask(
       offer.framework_id(),
       executorId));
 
-  sandboxes.push_back(sandboxPath);
-
   return Task{sandboxPath, taskStatusQueue};
 }
 
@@ -572,8 +518,6 @@ Try<vector<FetcherCacheTest::Task>> FetcherCacheTest::launchTasks(
         slaveId,
         frameworkId,
         executorId));
-
-    sandboxes.push_back(sandboxPath);
 
     // Grabbing task status futures to wait for. We make a queue of futures
     // for each task. We can then wait until the front element indicates
