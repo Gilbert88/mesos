@@ -116,6 +116,7 @@ public:
       const Option<string>& _workingDirectory,
       const Option<string>& _user,
       const Option<string>& _taskCommand,
+      const Option<string>& _taskEnvironment,
       const FrameworkID& _frameworkId,
       const ExecutorID& _executorId,
       const Duration& _shutdownGracePeriod)
@@ -136,6 +137,7 @@ public:
       workingDirectory(_workingDirectory),
       user(_user),
       taskCommand(_taskCommand),
+      taskEnvironment(_taskEnvironment),
       frameworkId(_frameworkId),
       executorId(_executorId),
       task(None()) {}
@@ -413,6 +415,44 @@ protected:
     }
     argv[command.arguments().size()] = nullptr;
 
+    // Like above, construct the environment before fork as it might
+    // not be async-safe.
+    char** envp = os::raw::environment();
+    Option<Environment> environment;
+
+    if (taskEnvironment.isSome()) {
+      // Get Environment from a JSON string.
+      Try<JSON::Object> object =
+        JSON::parse<JSON::Object>(taskEnvironment.get());
+
+      if (object.isError()) {
+        cerr << "Failed to parse JSON: " << object.error() << endl;
+        abort();
+      }
+
+      Try<Environment> parse = protobuf::parse<Environment>(object.get());
+      if (parse.isError()) {
+        cerr << "Failed to parse protobuf: " << parse.error() << endl;
+        abort();
+      }
+
+      CHECK_GT(parse.get().variables_size(), 0);
+      environment = parse.get();
+
+      // NOTE: add 1 to the size for a NULL terminator.
+      envp = new char*[parse.get().variables_size() + 1];
+
+      size_t index = 0;
+      foreach (const Environment::Variable& variable, parse.get().variables()) {
+        string entry = variable.name() + "=" + variable.value();
+        envp[index] = new char[entry.size() + 1];
+        strncpy(envp[index], entry.c_str(), entry.size() + 1);
+        ++index;
+      }
+
+      envp[index] = NULL;
+    }
+
     // Prepare the command log message.
     string commandString;
     if (override.isSome()) {
@@ -530,7 +570,11 @@ protected:
               command.value().c_str(),
               (char*) nullptr);
         } else {
+#ifdef __linux__
+          execvpe(command.value().c_str(), argv, envp);
+#else
           execvp(command.value().c_str(), argv);
+#endif // __linux__
         }
       } else {
         char** argv = override.get();
@@ -542,6 +586,16 @@ protected:
     }
 
     delete[] argv;
+
+    if (environment.isSome()) {
+      CHECK_NE(os::raw::environment(), envp);
+
+      for (int index = 0; index < environment.get().variables_size(); index++) {
+        delete[] envp[index];
+      }
+
+      delete[] envp;
+    }
 
     // In parent process.
     os::close(pipes[1]);
@@ -920,11 +974,105 @@ private:
   Option<string> workingDirectory;
   Option<string> user;
   Option<string> taskCommand;
+  Option<string> taskEnvironment;
   const FrameworkID frameworkId;
   const ExecutorID executorId;
   Owned<MesosBase> mesos;
   LinkedHashMap<UUID, Call::Update> updates; // Unacknowledged updates.
   Option<TaskInfo> task; // Unacknowledged task.
+};
+
+
+class CommandExecutor: public Executor
+{
+public:
+  CommandExecutor(
+      const Option<char**>& override,
+      const string& healthCheckDir,
+      const Option<string>& sandboxDirectory,
+      const Option<string>& workingDirectory,
+      const Option<string>& user,
+      const Option<string>& taskCommand,
+      const Option<string>& taskEnvironment,
+      const Duration& shutdownGracePeriod)
+  {
+    process = new CommandExecutorProcess(
+        override,
+        healthCheckDir,
+        sandboxDirectory,
+        workingDirectory,
+        user,
+        taskCommand,
+        taskEnvironment,
+        shutdownGracePeriod);
+
+    spawn(process);
+  }
+
+  virtual ~CommandExecutor()
+  {
+    terminate(process);
+    wait(process);
+    delete process;
+  }
+
+  virtual void registered(
+        ExecutorDriver* driver,
+        const ExecutorInfo& executorInfo,
+        const FrameworkInfo& frameworkInfo,
+        const SlaveInfo& slaveInfo)
+  {
+    dispatch(process,
+             &CommandExecutorProcess::registered,
+             driver,
+             executorInfo,
+             frameworkInfo,
+             slaveInfo);
+  }
+
+  virtual void reregistered(
+      ExecutorDriver* driver,
+      const SlaveInfo& slaveInfo)
+  {
+    dispatch(process,
+             &CommandExecutorProcess::reregistered,
+             driver,
+             slaveInfo);
+  }
+
+  virtual void disconnected(ExecutorDriver* driver)
+  {
+    dispatch(process, &CommandExecutorProcess::disconnected, driver);
+  }
+
+  virtual void launchTask(ExecutorDriver* driver, const TaskInfo& task)
+  {
+    dispatch(process, &CommandExecutorProcess::launchTask, driver, task);
+  }
+
+  virtual void killTask(ExecutorDriver* driver, const TaskID& taskId)
+  {
+    dispatch(process, &CommandExecutorProcess::killTask, driver, taskId);
+  }
+
+  virtual void frameworkMessage(ExecutorDriver* driver, const string& data)
+  {
+    dispatch(process, &CommandExecutorProcess::frameworkMessage, driver, data);
+  }
+
+  virtual void shutdown(ExecutorDriver* driver)
+  {
+    dispatch(process, &CommandExecutorProcess::shutdown, driver);
+  }
+
+  virtual void error(ExecutorDriver* driver, const string& data)
+  {
+    dispatch(process, &CommandExecutorProcess::error, driver, data);
+  }
+
+private:
+  CommandExecutorProcess* process;
+>>>>>>> 9a6d535... Added task_environment flag/used execvpe for command executor.
 };
 
 } // namespace internal {
@@ -971,6 +1119,11 @@ public:
         "If specified, this is the overrided command for launching the\n"
         "task (instead of the command from TaskInfo).");
 
+    add(&task_environment,
+        "task_environment",
+        "This is used for passing clean environment variables for command\n"
+        "task.");
+
     // TODO(nnielsen): Add 'prefix' option to enable replacing
     // 'sh -c' with user specified wrapper.
   }
@@ -981,6 +1134,7 @@ public:
   Option<string> working_directory;
   Option<string> user;
   Option<string> task_command;
+  Option<string> task_environment;
 };
 
 
@@ -1068,6 +1222,7 @@ int main(int argc, char** argv)
           flags.working_directory,
           flags.user,
           flags.task_command,
+          flags.task_environment,
           frameworkId,
           executorId,
           shutdownGracePeriod));
