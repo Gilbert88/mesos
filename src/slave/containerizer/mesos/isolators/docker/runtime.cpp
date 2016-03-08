@@ -31,6 +31,7 @@
 #include "slave/containerizer/mesos/isolators/docker/runtime.hpp"
 
 using std::list;
+using std::map;
 using std::string;
 
 using process::Failure;
@@ -144,6 +145,59 @@ Future<Option<ContainerLaunchInfo>> DockerRuntimeIsolatorProcess::prepare(
       executorCommand.add_arguments(
           "--task_command=" +
           stringify(JSON::protobuf(command.get())));
+    }
+
+    // Pass environment variables to command task. Using a map to
+    // temporary holding environment variables to check duplication.
+    map<string, string> taskEnvironment;
+
+    if (environment.isSome()) {
+      foreach (const Environment::Variable& variable,
+               environment.get().variables()) {
+        const string& name = variable.name();
+        const string& value = variable.value();
+
+        if (taskEnvironment.count(name)) {
+          VLOG(1) << "Overwriting environment variable '"
+                  << name << "', original: '"
+                  << taskEnvironment[name] << "', new: '"
+                  << value << "', for command task";
+        }
+
+        taskEnvironment[name] = value;
+      }
+    }
+
+    if (containerConfig.task_info().command().has_environment()) {
+      foreach (
+          const Environment::Variable& variable,
+          containerConfig.task_info().command().environment().variables()) {
+        const string& name = variable.name();
+        const string& value = variable.value();
+
+        if (taskEnvironment.count(name)) {
+          VLOG(1) << "Overwriting environment variable '"
+                  << name << "', original: '"
+                  << taskEnvironment[name] << "', new: '"
+                  << value << "', for command task";
+        }
+
+        taskEnvironment[name] = value;
+      }
+    }
+
+    if (!taskEnvironment.empty()) {
+      Environment env;
+
+      foreachpair (const string& name, const string& value, taskEnvironment) {
+        Environment::Variable* variable = env.add_variables();
+        variable->set_name(name);
+        variable->set_value(value);
+      }
+
+      executorCommand.add_arguments(
+          "--task_environment=" +
+          stringify(JSON::protobuf(env)));
     }
 
     launchInfo.mutable_command()->CopyFrom(executorCommand);
