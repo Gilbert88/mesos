@@ -201,12 +201,31 @@ Future<vector<string>> RegistryPullerProcess::pull(
 
   URI manifestUri;
   if (reference.has_registry()) {
-    // TODO(jieyu): The user specified registry might contain port. We
-    // need to parse it and set the 'scheme' and 'port' accordingly.
+    vector<string> split = strings::split(reference.registry(), ":", 2);
+
+    Option<string> scheme = Option<string>();
+    Option<int> port = Option<int>();
+    if (split.size() != 1) {
+      Try<int> numified = numify<int>(split[1]);
+      if (numified.isError()) {
+        return Failure("Failed to numify '" + split[1] + "'");
+      }
+
+      port = numified.get();
+
+      // 'https' is default scheme. Only set scheme as 'http' if using
+      // the port 80.
+      if (port.get() == 80) {
+        scheme = "http";
+      }
+    }
+
     manifestUri = uri::docker::manifest(
         reference.repository(),
         (reference.has_tag() ? reference.tag() : "latest"),
-        reference.registry());
+        split[0],
+        scheme,
+        port);
   } else {
     const string registry = defaultRegistryUrl.domain.isSome()
       ? defaultRegistryUrl.domain.get()
@@ -370,12 +389,34 @@ Future<hashset<string>> RegistryPullerProcess::fetchBlobs(
     URI blobUri;
 
     if (reference.has_registry()) {
-      // TODO(jieyu): The user specified registry might contain port. We
-      // need to parse it and set the 'scheme' and 'port' accordingly.
+      vector<string> split = strings::split(reference.registry(), ":", 2);
+
+      Option<string> scheme = Option<string>();
+      Option<int> port = Option<int>();
+      if (split.size() != 1) {
+        Try<int> numified = numify<int>(split[1]);
+        if (numified.isError()) {
+          return Failure("Failed to numify '" + split[1] + "'");
+        }
+
+        port = numified.get();
+
+        // 'https' is default scheme. Only set scheme as 'http' if using
+        // the port 80.
+        if (port.get() == 80) {
+          scheme = "http";
+        }
+      }
+
+      // If users want to use the registry specified in '--docker_image',
+      // an URL scheme must be specified in '--docker_registry', because
+      // there is no scheme allowed in docker image name.
       blobUri = uri::docker::blob(
           reference.repository(),
           blobSum,
-          reference.registry());
+          split[0],
+          scheme,
+          port);
     } else {
       const string registry = defaultRegistryUrl.domain.isSome()
         ? defaultRegistryUrl.domain.get()
