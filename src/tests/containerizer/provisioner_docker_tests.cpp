@@ -340,7 +340,7 @@ TEST_F(ProvisionerDockerPullerTest, ROOT_LocalPullerShellCommand)
   flags.isolation = "docker/runtime,filesystem/linux";
   flags.image_providers = "docker";
   flags.docker_registry = directory;
-  flags.docker_store_dir = path::join(flags.work_dir, "docker");
+  flags.docker_store_dir = path::join(os::getcwd(), "store");
 
   Try<PID<Slave>> slave = StartSlave(flags);
   ASSERT_SOME(slave);

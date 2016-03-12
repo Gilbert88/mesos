@@ -96,7 +96,7 @@ TEST_F(DockerRuntimeIsolatorTest, ROOT_DockerDefaultCmdLocalPuller)
   // Make docker store directory as a temparary directory. Because the
   // manifest of the test image is changeable, the image cached on
   // previous tests should never be used.
-  flags.docker_store_dir = path::join(flags.work_dir, "docker");
+  flags.docker_store_dir = path::join(os::getcwd(), "store");
 
   Try<PID<Slave>> slave = StartSlave(flags);
   ASSERT_SOME(slave);
@@ -183,7 +183,7 @@ TEST_F(DockerRuntimeIsolatorTest, ROOT_DockerDefaultEntryptLocalPuller)
   flags.isolation = "docker/runtime,filesystem/linux";
   flags.image_providers = "docker";
   flags.docker_registry = directory;
-  flags.docker_store_dir = path::join(flags.work_dir, "docker");
+  flags.docker_store_dir = path::join(os::getcwd(), "store");
 
   Try<PID<Slave>> slave = StartSlave(flags);
   ASSERT_SOME(slave);
@@ -258,7 +258,7 @@ TEST_F(DockerRuntimeIsolatorTest,
   flags.isolation = "docker/runtime,filesystem/linux";
   flags.image_providers = "docker";
   flags.docker_registry = "https://registry-1.docker.io";
-  flags.docker_store_dir = path::join(flags.work_dir, "docker");
+  flags.docker_store_dir = path::join(os::getcwd(), "store");
 
   Try<PID<Slave>> slave = StartSlave(flags);
   ASSERT_SOME(slave);
