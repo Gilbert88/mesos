@@ -326,10 +326,7 @@ TEST_F(ProvisionerDockerPullerTest, ROOT_LocalPullerShellCommand)
   Try<PID<Master>> master = StartMaster();
   ASSERT_SOME(master);
 
-  Try<string> mkdtemp = environment->mkdtemp();
-  ASSERT_SOME(mkdtemp);
-
-  const string directory = path::join(mkdtemp.get(), "archives");
+  const string directory = path::join(os::getcwd(), "archives");
 
   Future<Nothing> testImage = DockerArchive::create(directory, "alpine");
   AWAIT_READY(testImage);
