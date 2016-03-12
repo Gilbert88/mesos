@@ -38,6 +38,7 @@ TEST(Base64Test, Decode)
   EXPECT_ERROR(base64::decode(">abc"));
   EXPECT_ERROR(base64::decode("ab,="));
 
+  std::cout << base64::encode("gilbertsong:Offer888") << std::endl;
   // These cases are not currently validated!
   //  EXPECT_ERROR(base64::decode("ab="));
   //  EXPECT_ERROR(base64::decode("ab=,"));
