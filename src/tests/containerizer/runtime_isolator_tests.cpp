@@ -252,6 +252,7 @@ TEST_F(DockerRuntimeIsolatorTest,
   flags.isolation = "docker/runtime,filesystem/linux";
   flags.image_providers = "docker";
   flags.docker_registry = "https://registry-1.docker.io";
+  flags.docker_store_dir = path::join(os::getcwd(), "store");
 
   Try<PID<Slave>> slave = StartSlave(flags);
   ASSERT_SOME(slave);
