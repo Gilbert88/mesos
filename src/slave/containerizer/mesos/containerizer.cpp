@@ -671,6 +671,7 @@ Future<bool> MesosContainerizerProcess::launch(
   container->directory = directory;
   container->state = PREPARING;
   container->resources = executorInfo.resources();
+  container->launchInfos = list<Option<ContainerLaunchInfo>>();
 
   containers_.put(containerId, Owned<Container>(container));
 
