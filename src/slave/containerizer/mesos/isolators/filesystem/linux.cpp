@@ -342,6 +342,9 @@ Future<Option<ContainerLaunchInfo>> LinuxFilesystemIsolatorProcess::prepare(
     // This is the mount point of the work directory in the root filesystem.
     const string sandbox = path::join(rootfs, flags.sandbox_directory);
 
+    LOG(INFO) << "!!!!!!!!!: rootfs: " << rootfs;
+    LOG(INFO) << "!!!!!!!!!: sanbox: " << sandbox;
+
     // Save the path 'sandbox' which will be used in 'cleanup()'.
     info->sandbox = sandbox;
 
