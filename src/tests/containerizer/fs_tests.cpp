@@ -261,6 +261,28 @@ TEST_F(FsTest, ROOT_SlaveMount)
   EXPECT_SOME(fs::unmount(directory));
 }
 
+
+TEST_F(FsTest, ROOT_FileMount)
+{
+  string directory = os::getcwd();
+
+  ASSERT_SOME(
+      os::write(path::join(directory, "source"), "source file"));
+
+  ASSERT_SOME(
+      os::write(path::join(directory, "target"), "target file"));
+
+  ASSERT_SOME(fs::mount(path::join(directory, "source"),
+                        path::join(directory, "target"),
+                        None(),
+                        MS_BIND,
+                        None()));
+
+  EXPECT_SOME_EQ("source file", os::read(path::join(directory, "target")));
+
+  EXPECT_SOME(fs::unmount(path::join(directory, "target")));
+}
+
 } // namespace tests {
 } // namespace internal {
 } // namespace mesos {
