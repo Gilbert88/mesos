@@ -199,6 +199,28 @@ Try<string> DockerRuntimeIsolatorProcess::script(
     }
   }
 
+  if (flags.system_config_files.isSome()) {
+    foreach (const string& file,
+             strings::split(flags.system_config_files.get(), ",")) {
+      // System config file has to be an absolute path.
+      if (!strings::startsWith(file, "/")) {
+        VLOG(1) << "Skipping user specified system config file '"
+                << file << "'";
+
+        continue;
+      }
+
+      const string path = path::join(rootfs, file);
+
+      if (os::exists(path)) {
+        LOG(INFO) << "Mounting a host system config file '" << file
+                  << "' into container existing file '" << path << "'";
+      }
+
+      systemConfig.insert(file);
+    }
+  }
+
   ostringstream out;
 
   foreach (const string& file, systemConfig) {
