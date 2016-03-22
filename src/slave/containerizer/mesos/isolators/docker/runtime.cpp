@@ -21,6 +21,7 @@
 
 #include <stout/error.hpp>
 #include <stout/foreach.hpp>
+#include <stout/os.hpp>
 #include <stout/stringify.hpp>
 #include <stout/strings.hpp>
 
@@ -31,7 +32,9 @@
 #include "slave/containerizer/mesos/isolators/docker/runtime.hpp"
 
 using std::list;
+using std::ostringstream;
 using std::string;
+using std::vector;
 
 using process::Failure;
 using process::Future;
@@ -147,9 +150,80 @@ Future<Option<ContainerLaunchInfo>> DockerRuntimeIsolatorProcess::prepare(
     }
 
     launchInfo.mutable_command()->CopyFrom(executorCommand);
+
+    // Mount necessary system config files from the host into container.
+    Try<string> _script = script(containerId, containerConfig);
+    if (_script.isError()) {
+      return Failure("Failed to generate system configuration files mounting "
+                     "script: " + _script.error());
+    }
+
+    launchInfo.add_commands()->set_value(_script.get());
   }
 
   return launchInfo;
+}
+
+
+Try<string> DockerRuntimeIsolatorProcess::script(
+    const ContainerID& containerId,
+    const ContainerConfig& containerConfig)
+{
+  CHECK(containerConfig.has_task_info());
+  CHECK(containerConfig.has_rootfs());
+
+  const string& rootfs = containerConfig.rootfs();
+
+  const vector<string> defaultSystemConfig = {
+      "/etc/hosts",
+      "/etc/resolv.conf",
+      "/etc/hostname",
+      "/etc/localtime"
+  };
+
+  // The system configuration files to be mounted. Use a hashset
+  // to prevent the case that dulplicate mounting happen.
+  hashset<string> systemConfig;
+
+  foreach (const string& file, defaultSystemConfig) {
+    const string path = path::join(rootfs, file);
+
+    // TODO(gilbert): Support handling the case that if system config
+    // files exist in rootfs, but they are empty.
+    if (!os::exists(path)) {
+      VLOG(1) << "System configuration file '" << file
+              << "' will be mounted to the container '" << containerId
+              << "' from the host";
+
+      systemConfig.insert(file);
+    }
+  }
+
+  ostringstream out;
+
+  foreach (const string& file, systemConfig) {
+    const string& source = file;
+    const string target = path::join(rootfs, file);
+
+    if (!os::exists(source)) {
+      VLOG(1) << "Skipping the non-exsiting host system config file '"
+              << source << "'";
+
+      continue;
+    }
+
+    if (!os::exists(target)) {
+      Try<Nothing> touch = os::touch(target);
+      if (touch.isError()) {
+        return Error("Failed to create bind mount target file '" + target +
+                     "': " + touch.error());
+      }
+    }
+
+    out << "mount -n --bind '" << source << "' '" << target << "'\n";
+  }
+
+  return out.str();
 }
 
 
@@ -210,7 +284,7 @@ Result<CommandInfo> DockerRuntimeIsolatorProcess::getLaunchCommand(
   // need to change the launch command for the user task, we do not do
   // anything and return the CommandInfo from ExecutorInfo. We only
   // add a flag `--task_command` to carry command as a JSON object if
-  // it is neccessary to mutate.
+  // it is necessary to mutate.
   CommandInfo command;
 
   if (!containerConfig.has_task_info()) {

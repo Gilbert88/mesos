@@ -61,6 +61,10 @@ public:
 private:
   DockerRuntimeIsolatorProcess(const Flags& flags);
 
+  Try<std::string> script(
+      const ContainerID& containerId,
+      const mesos::slave::ContainerConfig& containerConfig);
+
   Option<Environment> getLaunchEnvironment(
       const ContainerID& containerId,
       const mesos::slave::ContainerConfig& containerConfig);
