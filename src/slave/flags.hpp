@@ -47,6 +47,7 @@ public:
   std::string isolation;
   Option<std::string> launcher;
 
+  Option<std::string> system_config_files;
   Option<std::string> image_providers;
   std::string image_provisioner_backend;
 

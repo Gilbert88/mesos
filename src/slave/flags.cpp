@@ -103,6 +103,13 @@ mesos::internal::slave::Flags::Flags()
       "network, pid, etc. If unspecified, the slave will choose the Linux\n"
       "launcher if it's running as root on Linux.");
 
+  add(&Flags::system_config_files,
+      "system_config_files",
+      "The system default configuration files to be mounted from the host\n"
+      "into the container. All files should be formatted as comma-separated\n"
+      "list,\n"
+      "e.g., `/etc/host,/etc/resolv.conf`.");
+
   add(&Flags::image_providers,
       "image_providers",
       "Comma-separated list of supported image providers,\n"

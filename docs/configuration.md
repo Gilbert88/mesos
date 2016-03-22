@@ -1247,6 +1247,16 @@ environment or find hadoop on <code>PATH</code>) (default: )
 </tr>
 <tr>
   <td>
+    --system_config_files=VALUE
+  </td>
+  <td>
+The system default configuration files to be mounted from the host into
+the container. All files should be formatted as comma-separated list,
+e.g., <code>/etc/host,/etc/resolv.conf</code>.
+  </td>
+</tr>
+<tr>
+  <td>
     --image_providers=VALUE
   </td>
   <td>
