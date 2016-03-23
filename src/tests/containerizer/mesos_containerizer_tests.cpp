@@ -58,6 +58,7 @@ using mesos::internal::slave::MesosContainerizer;
 using mesos::internal::slave::MesosContainerizerProcess;
 using mesos::internal::slave::PosixLauncher;
 using mesos::internal::slave::Provisioner;
+using mesos::internal::slave::ProvisionInfo;
 using mesos::internal::slave::Slave;
 
 using mesos::internal::slave::state::ExecutorState;
@@ -818,7 +819,7 @@ TEST_F(MesosContainerizerProvisionerTest, ProvisionFailed)
 
 
 // This test verifies that there is no race (or leaked provisioned
-// directories)if the containerizer destroy a container while it
+// directories) if the containerizer destroy a container while it
 // is provisioning an image.
 TEST_F(MesosContainerizerProvisionerTest, DestroyWhileProvisioning)
 {
@@ -832,7 +833,7 @@ TEST_F(MesosContainerizerProvisionerTest, DestroyWhileProvisioning)
   MockProvisioner* provisioner = new MockProvisioner();
 
   Future<Nothing> provision;
-  Promise<mesos::internal::slave::ProvisionInfo> promise;
+  Promise<ProvisionInfo> promise;
 
   EXPECT_CALL(*provisioner, provision(_, _))
     .WillOnce(DoAll(FutureSatisfy(&provision),
@@ -860,7 +861,7 @@ TEST_F(MesosContainerizerProvisionerTest, DestroyWhileProvisioning)
   MesosContainerizer containerizer((Owned<MesosContainerizerProcess>(process)));
 
   ContainerID containerId;
-  containerId.set_value("test_container");
+  containerId.set_value(UUID::random().toString());
 
   TaskInfo taskInfo;
   CommandInfo commandInfo;
@@ -899,7 +900,7 @@ TEST_F(MesosContainerizerProvisionerTest, DestroyWhileProvisioning)
   containerizer.destroy(containerId);
 
   ASSERT_TRUE(wait.isPending());
-  promise.set(mesos::internal::slave::ProvisionInfo{"rootfs", None()});
+  promise.set(ProvisionInfo{"rootfs", None()});
 
   AWAIT_FAILED(launch);
   AWAIT_READY(wait);
