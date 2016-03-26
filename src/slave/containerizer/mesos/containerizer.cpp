@@ -711,15 +711,15 @@ Future<bool> MesosContainerizerProcess::launch(
 
   const Image& image = executorInfo.container().mesos().image();
 
-  Future<ProvisionInfo> future =
+  Future<ProvisionInfo> provisionInfo =
     provisioner->provision(containerId, image);
 
-  Future<list<ProvisionInfo>> collect = collect(
-      list<Future<ProvisionInfo>>({future}));
+  Future<list<ProvisionInfo>> future = collect(
+      list<Future<ProvisionInfo>>({provisionInfo}));
 
-  container->provisionInfos = collect;
+  container->provisionInfos = future;
 
-  return future
+  return provisionInfo
     .then(defer(PID<MesosContainerizerProcess>(this),
                 &MesosContainerizerProcess::_launch,
                 containerId,
