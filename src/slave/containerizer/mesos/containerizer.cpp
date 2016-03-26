@@ -746,10 +746,13 @@ Future<bool> MesosContainerizerProcess::_launch(
   CHECK_EQ(executorInfo.container().type(), ContainerInfo::MESOS);
 
   // This is because even if a 'destroy' happens after 'launch' and
-  // before '_launch', the 'destroy' will wait for the 'provision' in
-  // 'launch' to finish. Since we register the '_launch' callback
-  // first, it is guaranteed to be called before '__destroy'.
-  CHECK(containers_.contains(containerId));
+  // before '_launch', the '___destroy' will wait for the 'provision' in
+  // 'launch' to finish. There is a chance that '___destroy' and its
+  // dependencies finish before '_launch' starts. If 'containerId'
+  // does not exist in the hashmap, it means 'destroy' finishes.
+  if (!containers_.contains(containerId)) {
+    return Failure("Container has been destroyed");
+  }
 
   // Make sure containerizer is not in DESTROYING state, to avoid
   // a possible race that containerizer is destroying the container
