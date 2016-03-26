@@ -714,7 +714,10 @@ Future<bool> MesosContainerizerProcess::launch(
   Future<ProvisionInfo> future =
     provisioner->provision(containerId, image);
 
-  container->provisionInfos.push_back(future);
+  Future<list<ProvisionInfo>> collect = collect(
+      list<Future<ProvisionInfo>>({future}));
+
+  container->provisionInfos = collect;
 
   return future
     .then(defer(PID<MesosContainerizerProcess>(this),
@@ -758,6 +761,10 @@ Future<bool> MesosContainerizerProcess::_launch(
     return Failure("Container is currently being destroyed");
   }
 
+  // Clear the possibly loaded provisionInfos.
+  Promise<list<ProvisionInfo>> promise;
+  containers_[containerId]->provisionInfos = promise.future();
+
   // We will provision the images specified in ContainerInfo::volumes
   // as well. We will mutate ContainerInfo::volumes to include the
   // paths to the provisioned root filesystems (by setting the
@@ -771,7 +778,7 @@ Future<bool> MesosContainerizerProcess::_launch(
   Owned<Option<ProvisionInfo>> _provisionInfo(
       new Option<ProvisionInfo>(provisionInfo));
 
-  list<Future<Nothing>> futures;
+  list<Future<ProvisionInfo>> futures;
 
   for (int i = 0; i < _executorInfo->container().volumes_size(); i++) {
     Volume* volume = _executorInfo->mutable_container()->mutable_volumes(i);
@@ -782,11 +789,8 @@ Future<bool> MesosContainerizerProcess::_launch(
 
     const Image& image = volume->image();
 
-    Future<ProvisionInfo> future = provisioner->provision(containerId, image);
-    containers_[containerId]->provisionInfos.push_back(future);
-
-    futures.push_back(future
-      .then([=](const ProvisionInfo& info) -> Future<Nothing> {
+    futures.push_back(provisioner->provision(containerId, image)
+      .then([=](const ProvisionInfo& info) -> Future<ProvisionInfo> {
         volume->set_host_path(info.rootfs);
 
         if (taskInfo.isSome() &&
@@ -795,7 +799,7 @@ Future<bool> MesosContainerizerProcess::_launch(
           *_provisionInfo = info;
         }
 
-        return Nothing();
+        return info;
       }));
   }
 
@@ -804,9 +808,12 @@ Future<bool> MesosContainerizerProcess::_launch(
   // However, we also need to figure out a way to support passing and
   // handling those runtime configurations in the image.
 
+  Future<list<ProvisionInfo>> future = collect(futures);
+  promise.associate(future);
+
   // We put `prepare` inside of a lambda expression, in order to get
   // _executorInfo object after host path set in volume.
-  return collect(futures)
+  return future
     .then(defer([=]() -> Future<bool> {
       return prepare(containerId,
                      taskInfo,
@@ -1428,7 +1435,7 @@ void MesosContainerizerProcess::destroy(
 
     // Wait for the provisioner to finish provisioning before we
     // start destroying the container.
-    await(container->provisionInfos)
+    container->provisionInfos
       .onAny(defer(
           self(),
           &Self::___destroy,
