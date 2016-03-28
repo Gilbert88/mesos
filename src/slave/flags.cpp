@@ -133,6 +133,22 @@ mesos::internal::slave::Flags::Flags()
       "(result of `docker save`) are stored.",
       "https://registry-1.docker.io");
 
+  add(&Flags::docker_registry_credentials,
+      "docker_registry_credentials",
+      "Path to a JSON-formatted file containing docker private registry\n"
+      "credentials. Path could be of the form `file:///path/to/file` or\n"
+      "`/path/to/file`.\n"
+      "Example:\n"
+      "{\n"
+      "  \"credentials\": [\n"
+      "    {\n"
+      "      \"registry\": \"https://index.docker.io/v1/\",\n"
+      "      \"principal\": \"username\",\n"
+      "      \"secret\": \"password\"\n"
+      "    }\n"
+      "  ]\n"
+      "}");
+
   add(&Flags::docker_store_dir,
       "docker_store_dir",
       "Directory the Docker provisioner will store images in",

@@ -54,6 +54,7 @@ public:
   std::string appc_store_dir;
 
   std::string docker_registry;
+  Option<std::string> docker_registry_credentials;
   std::string docker_store_dir;
 
   std::string default_role;
