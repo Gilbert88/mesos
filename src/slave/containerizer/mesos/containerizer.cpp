@@ -946,10 +946,6 @@ Future<bool> MesosContainerizerProcess::__launch(
     bool checkpoint,
     const list<Option<ContainerLaunchInfo>>& launchInfos)
 {
-  if (!containers_.contains(containerId)) {
-    return Failure("Container has been destroyed");
-  }
-
   if (containers_[containerId]->state == DESTROYING) {
     return Failure("Container is currently being destroyed");
   }
