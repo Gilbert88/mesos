@@ -109,7 +109,6 @@ TEST_F(DockerSpecTest, GetRegistrySpec)
   string host = spec::getRegistryHost(registry);
 
   ASSERT_NONE(port);
-  ASSERT_SOME(scheme);
   EXPECT_SOME_EQ("https", scheme);
   EXPECT_TRUE(host.empty());
 
@@ -146,7 +145,6 @@ TEST_F(DockerSpecTest, GetRegistrySpec)
   host = spec::getRegistryHost(registry);
 
   ASSERT_NONE(port);
-  ASSERT_SOME(scheme);
   EXPECT_SOME_EQ("https", scheme);
   EXPECT_EQ("index.docker.io", host);
 
@@ -155,8 +153,7 @@ TEST_F(DockerSpecTest, GetRegistrySpec)
   scheme = spec::getRegistryScheme(registry);
   host = spec::getRegistryHost(registry);
 
-  ASSERT_SOME(port);
-  ASSERT_SOME(scheme);
+  EXPECT_SOME_EQ("80", port);
   EXPECT_SOME_EQ("http", scheme);
   EXPECT_EQ("localhost", host);
 
@@ -165,8 +162,7 @@ TEST_F(DockerSpecTest, GetRegistrySpec)
   scheme = spec::getRegistryScheme(registry);
   host = spec::getRegistryHost(registry);
 
-  ASSERT_SOME(port);
-  ASSERT_SOME(scheme);
+  EXPECT_SOME_EQ("443", port);
   EXPECT_SOME_EQ("https", scheme);
   EXPECT_EQ("registry-1.docker.io", host);
 }
