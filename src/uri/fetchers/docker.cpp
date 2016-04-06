@@ -304,7 +304,9 @@ private:
     const URI& blobUri);
 
   Future<string> getAuthToken(const http::Response& response);
-  http::Headers getAuthHeader(const Option<string>& authToken);
+  http::Headers getAuthHeader(
+      const Option<string>& authToken,
+      const Option<string>& credential = None());
 
   URI getManifestUri(const URI& uri);
   URI getBlobUri(const URI& uri);
@@ -606,7 +608,9 @@ Future<string> DockerFetcherPluginProcess::getAuthToken(
     "service=" + attributes.at("service") + "&" +
     "scope=" + attributes.at("scope");
 
-  return curl(uri)
+  Option<string> auth;
+
+  return curl(uri, getAuthHeader(None(), auth))
     .then([uri](const http::Response& response) -> Future<string> {
       if (response.code != http::Status::OK) {
         return Failure(
@@ -634,12 +638,15 @@ Future<string> DockerFetcherPluginProcess::getAuthToken(
 
 
 http::Headers DockerFetcherPluginProcess::getAuthHeader(
-    const Option<string>& authToken)
+    const Option<string>& authToken,
+    const Option<string>& credential)
 {
   http::Headers headers;
 
   if (authToken.isSome()) {
     headers["Authorization"] = "Bearer " + authToken.get();
+  } else if (credential.isSome()) {
+    headers["Authorization"] = "Basic " + credential.get();
   }
 
   return headers;
