@@ -276,7 +276,9 @@ static Future<int> download(
 class DockerFetcherPluginProcess : public Process<DockerFetcherPluginProcess>
 {
 public:
-  DockerFetcherPluginProcess() {}
+  DockerFetcherPluginProcess(
+      const Option<JSON::Object>& _config)
+    : config(_config) {}
 
   Future<Nothing> fetch(const URI& uri, const string& directory);
 
@@ -303,14 +305,25 @@ private:
     const string& directory,
     const URI& blobUri);
 
-  Future<string> getAuthToken(const http::Response& response);
+  Future<string> getAuthToken(const http::Response& response, const URI& uri);
   http::Headers getAuthHeader(
       const Option<string>& authToken,
       const Option<string>& credential = None());
 
   URI getManifestUri(const URI& uri);
   URI getBlobUri(const URI& uri);
+
+  // Default docker config file.
+  Option<JSON::Object> config;
 };
+
+
+DockerFetcherPlugin::Flags::Flags()
+{
+  add(&Flags::docker_config,
+      "docker_config",
+      "The default docker config file.");
+}
 
 
 Try<Owned<Fetcher::Plugin>> DockerFetcherPlugin::create(const Flags& flags)
@@ -318,7 +331,7 @@ Try<Owned<Fetcher::Plugin>> DockerFetcherPlugin::create(const Flags& flags)
   // TODO(jieyu): Make sure curl is available.
 
   Owned<DockerFetcherPluginProcess> process(
-      new DockerFetcherPluginProcess());
+      new DockerFetcherPluginProcess(flags.docker_config));
 
   return Owned<Fetcher::Plugin>(new DockerFetcherPlugin(process));
 }
@@ -406,7 +419,7 @@ Future<Nothing> DockerFetcherPluginProcess::_fetch(
     const http::Response& response)
 {
   if (response.code == http::Status::UNAUTHORIZED) {
-    return getAuthToken(response)
+    return getAuthToken(response, manifestUri)
       .then(defer(self(), [=](const string& authToken) -> Future<Nothing> {
         return curl(manifestUri, getAuthHeader(authToken))
           .then(defer(self(),
@@ -528,7 +541,7 @@ Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
           "but get '" + response.status + "' instead");
       }
 
-      return getAuthToken(response)
+      return getAuthToken(response, blobUri)
         .then(defer(self(),
                     &Self::fetchBlob,
                     uri,
@@ -548,7 +561,8 @@ Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
 // See details here:
 // https://docs.docker.com/registry/spec/auth/token/
 Future<string> DockerFetcherPluginProcess::getAuthToken(
-    const http::Response& response)
+    const http::Response& response,
+    const URI& _uri)
 {
   // The expected HTTP response here is:
   //
@@ -601,14 +615,25 @@ Future<string> DockerFetcherPluginProcess::getAuthToken(
 
   // TODO(jieyu): Currently, we don't expect the auth server to return
   // a service or a scope that needs encoding.
-  // TODO(jieyu): Getting auth token here might require HTTP
-  // authentication. We need to support that later.
   string uri =
     attributes.at("realm") + "?" +
     "service=" + attributes.at("service") + "&" +
     "scope=" + attributes.at("scope");
 
   Option<string> auth;
+  if (config.isSome()) {
+    Result<string> _auth = spec::getCredential(config.get(), _uri.host());
+    if (_auth.isError()) {
+      return Failure(
+          "Failed to get auth credential for host '" + _uri.host() + "' "
+          "from default docker config file: " + _auth.error());
+    }
+
+    // Found a matched credential from the config file.
+    if (_auth.isSome()) {
+      auth = _auth.get();
+    }
+  }
 
   return curl(uri, getAuthHeader(None(), auth))
     .then([uri](const http::Response& response) -> Future<string> {
