@@ -14,6 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <process/http.hpp>
+
 #include <stout/foreach.hpp>
 #include <stout/json.hpp>
 #include <stout/none.hpp>
@@ -21,6 +23,8 @@
 #include <stout/strings.hpp>
 
 #include <mesos/docker/spec.hpp>
+
+namespace http = process::http;
 
 using std::ostream;
 using std::string;
@@ -142,6 +146,50 @@ string getRegistryHost(const string& registry)
   vector<string> split = strings::split(registry, ":", 2);
 
   return split[0];
+}
+
+
+Result<string> getCredential(
+    const JSON::Object& _config,
+    const string& registry)
+{
+  Result<JSON::Object> auths = _config.find<JSON::Object>("auths");
+  if (auths.isError()) {
+    return Error("Failed to find 'auths' in docker config file: " +
+                 auths.error());
+  }
+
+  const JSON::Object config = auths.isSome()
+    ? auths.get()
+    : _config;
+
+  foreachpair (const string& key, const JSON::Value& value, config.values) {
+    // Handle domains including 'docker.io' as a special case.
+    const bool isDocker =
+      strings::contains(registry, "docker.io") &&
+      strings::contains(key, "docker.io");
+
+    // Should not use http url to parse the key, since many
+    // registry domain recorded in docker config file does
+    // not start with 'https://' or 'http://'. They are pure
+    // domain only (e.g., 'quay.io', 'localhost:5000').
+    if (strings::contains(key, registry) || isDocker) {
+      if (!value.is<JSON::Object>()) {
+        return Error("Invalid JSON object '" + stringify(value) + "'");
+      }
+
+      const JSON::Object auths = value.as<JSON::Object>();
+
+      Result<JSON::String> auth = auths.find<JSON::String>("auth");
+      if (auth.isError() || auth.isNone()) {
+        return Error("Failed to find auth base64 encode credential");
+      }
+
+      return auth.get().value;
+    }
+  }
+
+  return None();
 }
 
 

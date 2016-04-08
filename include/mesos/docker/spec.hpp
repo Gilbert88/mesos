@@ -71,6 +71,13 @@ Try<std::string> getRegistryScheme(const std::string& registry);
  */
 std::string getRegistryHost(const std::string& registry);
 
+/**
+ * Returns base64 encode auth credential.
+ */
+Result<std::string> getCredential(
+    const JSON::Object& _config,
+    const std::string& _registry);
+
 
 namespace v1 {
 
