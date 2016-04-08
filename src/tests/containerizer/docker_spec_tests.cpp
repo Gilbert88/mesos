@@ -168,6 +168,79 @@ TEST_F(DockerSpecTest, GetRegistrySpec)
 }
 
 
+TEST_F(DockerSpecTest, GetCredential)
+{
+  Try<JSON::Object> config = JSON::parse<JSON::Object>(
+      R"~(
+      {
+        "auths": {
+          "https://index.docker.io/v1/": {
+            "auth": "bWVzb3M6dGVzdA==",
+            "email": "user@example.com"
+          },
+          "localhost:5000": {
+            "auth": "dW5pZmllZDpjb250YWluZXJpemVy",
+            "email": "user@example.com"
+          }
+        },
+        "HttpHeaders": {
+          "User-Agent": "Docker-Client/1.10.2 (linux)"
+        }
+      })~");
+
+  ASSERT_SOME(config);
+
+  Result<string> auth =
+    spec::getCredential(config.get(), "registry-1.docker.io");
+
+  ASSERT_SOME(auth);
+  EXPECT_EQ("bWVzb3M6dGVzdA==", auth.get());
+
+  auth = spec::getCredential(config.get(), "index.docker.io");
+  ASSERT_SOME(auth);
+  EXPECT_EQ("bWVzb3M6dGVzdA==", auth.get());
+
+  auth = spec::getCredential(config.get(), "localhost");
+  ASSERT_SOME(auth);
+  EXPECT_EQ("dW5pZmllZDpjb250YWluZXJpemVy", auth.get());
+
+  Try<JSON::Object> dockercfg = JSON::parse<JSON::Object>(
+      R"~(
+      {
+        "quay.io": {
+          "auth": "cXVheTp0ZXN0",
+          "email": "user@example.com"
+        },
+        "https://index.docker.io/v1/": {
+          "auth": "cHJpdmF0ZTpyZWdpc3RyeQ==",
+          "email": "user@example.com"
+        },
+        "https://192.168.0.1:5050": {
+          "auth": "aXA6YWRkcmVzcw==",
+          "email": "user@example.com"
+        }
+      })~");
+
+  ASSERT_SOME(dockercfg);
+
+  auth = spec::getCredential(dockercfg.get(), "quay.io");
+  ASSERT_SOME(auth);
+  EXPECT_EQ("cXVheTp0ZXN0", auth.get());
+
+  auth = spec::getCredential(dockercfg.get(), "registry-1.docker.io");
+  ASSERT_SOME(auth);
+  EXPECT_EQ("cHJpdmF0ZTpyZWdpc3RyeQ==", auth.get());
+
+  auth = spec::getCredential(dockercfg.get(), "index.docker.io");
+  ASSERT_SOME(auth);
+  EXPECT_EQ("cHJpdmF0ZTpyZWdpc3RyeQ==", auth.get());
+
+  auth = spec::getCredential(dockercfg.get(), "192.168.0.1");
+  ASSERT_SOME(auth);
+  EXPECT_EQ("aXA6YWRkcmVzcw==", auth.get());
+}
+
+
 TEST_F(DockerSpecTest, ParseV1ImageManifest)
 {
   Try<JSON::Object> json = JSON::parse<JSON::Object>(
