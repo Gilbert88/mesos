@@ -46,7 +46,7 @@ public:
   static Try<mesos::slave::Isolator*> create(const Flags& flags);
 
   // This allows the driver client to be mock for testing.
-  static Try<mesos::slave::Isolator*> create(
+  static Try<mesos::slave::Isolator*> _create(
       const Flags& flags,
       const process::Owned<docker::volume::DriverClient>& client);
 

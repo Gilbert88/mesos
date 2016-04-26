@@ -81,7 +81,7 @@ Try<Isolator*> DockerVolumeIsolatorProcess::create(const Flags& flags)
   }
 
   Try<Isolator*> isolator =
-    DockerVolumeIsolatorProcess::create(flags, client.get());
+    DockerVolumeIsolatorProcess::_create(flags, client.get());
 
   if (isolator.isError()) {
     return Error(
@@ -92,7 +92,7 @@ Try<Isolator*> DockerVolumeIsolatorProcess::create(const Flags& flags)
 }
 
 
-Try<Isolator*> DockerVolumeIsolatorProcess::create(
+Try<Isolator*> DockerVolumeIsolatorProcess::_create(
     const Flags& flags,
     const Owned<DriverClient>& client)
 {
