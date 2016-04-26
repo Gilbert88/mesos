@@ -121,7 +121,7 @@ Try<Isolator*> DockerVolumeIsolatorProcess::_create(
       new DockerVolumeIsolatorProcess(
           flags,
           rootDir.get(),
-          client.get()));
+          client));
 
   return new MesosIsolator(process);
 }
