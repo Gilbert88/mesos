@@ -80,6 +80,22 @@ Try<Isolator*> DockerVolumeIsolatorProcess::create(const Flags& flags)
         "Unable to create docker volume driver client: " + client.error());
   }
 
+  Try<Isolator*> isolator =
+    DockerVolumeIsolatorProcess::create(flags, client.get());
+
+  if (isolator.isError()) {
+    return Error(
+        "Failed to create docker volume isolator: " + isolator.error());
+  }
+
+  return isolator.get();
+}
+
+
+Try<Isolator*> DockerVolumeIsolatorProcess::create(
+    const Flags& flags,
+    const Owned<DriverClient>& client)
+{
   // Create the docker volume information root directory if it does
   // not exist, this directory is used to checkpoint the docker
   // volumes used by containers.
