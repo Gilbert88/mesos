@@ -103,7 +103,6 @@ public:
 
     std::vector<std::string> directories = {
       "/bin",
-      "/lib",
       "/lib64",
       "/etc"
     };
@@ -135,6 +134,7 @@ public:
     }
 
     directories = {
+      "/lib",
       "/proc",
       "/sys",
       "/dev",
