@@ -103,7 +103,11 @@ public:
 
     std::vector<std::string> directories = {
       "/bin",
-      "/lib",
+      "/lib/modules",
+      "/lib/rpm",
+      "/lib/dracut",
+      "/lib/firmware",
+      "/lib/systemd",
       "/etc"
     };
 
