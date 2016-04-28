@@ -102,10 +102,24 @@ public:
     }
 
     std::vector<std::string> directories = {
-      "/bin",
-      "/lib",
-      "/lib64",
-      "/etc"
+      "/bin/echo",
+      "/bin/ls",
+      "/bin/sh",
+      "/usr/bin/sh",
+      "/lib/x86_64-linux-gnu",
+      "/lib64/ld-linux-x86-64.so.2",
+      "/lib64/libc.so.6",
+      "/lib64/libdl.so.2",
+      "/lib64/libtinfo.so.5",
+      "/lib64/libselinux.so.1",
+      "/lib64/libpcre.so.1",
+      "/lib64/liblzma.so.5",
+      "/lib64/libpthread.so.0",
+      "/lib64/libcap.so.2",
+      "/lib64/libacl.so.1",
+      "/lib64/libattr.so.1",
+      "/lib64/librt.so.1",
+      "/etc/passwd"
     };
 
     foreach (const std::string& directory, directories) {
@@ -113,23 +127,19 @@ public:
       // /usr, in which case /bin, /lib, and /lib64 will be symlinks
       // to their equivalent directories in /usr.
       Result<std::string> realpath = os::realpath(directory);
-      if (!realpath.isSome()) {
-        return Error("Failed to get realpath for '" +
-                     directory + "': " + (realpath.isError() ?
-                     realpath.error() : "No such directory"));
-      }
-
-      Try<Nothing> result = rootfs->add(realpath.get());
-      if (result.isError()) {
-        return Error("Failed to add '" + realpath.get() +
-                     "' to rootfs: " + result.error());
-      }
-
-      if (os::stat::islink(directory)) {
-        result = rootfs->add(directory);
+      if (realpath.isSome()) {
+        Try<Nothing> result = rootfs->add(realpath.get());
         if (result.isError()) {
-          return Error("Failed to add '" + directory + "' to rootfs: " +
-                       result.error());
+          return Error("Failed to add '" + realpath.get() +
+                       "' to rootfs: " + result.error());
+        }
+
+        if (os::stat::islink(directory)) {
+          result = rootfs->add(directory);
+          if (result.isError()) {
+            return Error("Failed to add '" + directory + "' to rootfs: " +
+                         result.error());
+          }
         }
       }
     }
