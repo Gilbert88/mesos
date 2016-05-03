@@ -47,6 +47,8 @@
 
 #include "internal/devolve.hpp"
 
+using google::protobuf::RepeatedPtrField;
+
 using std::cerr;
 using std::cout;
 using std::endl;
@@ -72,6 +74,7 @@ using mesos::v1::TaskID;
 using mesos::v1::TaskInfo;
 using mesos::v1::TaskState;
 using mesos::v1::TaskStatus;
+using mesos::v1::Volume;
 
 using mesos::v1::scheduler::Call;
 using mesos::v1::scheduler::Event;
@@ -182,6 +185,36 @@ public:
     add(&secret,
         "secret",
         "The secret to use for framework authentication.");
+
+    add(&volumes,
+        "volumes",
+        "The file path containing the JSON-formatted volumes used by\n"
+        "container. Path could be of the form `file:///path/to/file`\n"
+        " or `/path/to/file`.\n"
+        "\n"
+        "Example:\n"
+        "[\n"
+        "  {\n"
+        "    \"container_path\":\"/path/to/container\"\n"
+        "    \"mode\":\"RW\"\n"
+        "    \"source\":\n"
+        "    {\n"
+        "      \"docker_volume\":\n"
+        "        {\n"
+        "          \"driver\": \"volume_driver\",\n"
+        "          \"docker_options\":\n"
+        "            {\"parameter\":[\n"
+        "              {\n"
+        "                \"key\": \"key\",\n"
+        "                \"value\": \"value\"\n"
+        "              }\n"
+        "            ]},\n"
+        "            \"name\": \"volume_name\"\n"
+        "        },\n"
+        "      \"type\": \"DOCKER_VOLUME\"\n"
+        "    }\n"
+        "  }\n"
+        "]");
   }
 
   Option<string> master;
@@ -203,6 +236,7 @@ public:
   Option<string> networks;
   Option<string> principal;
   Option<string> secret;
+  Option<string> volumes;
 };
 
 
@@ -223,6 +257,7 @@ public:
       const string& _containerizer,
       const Option<Duration>& _killAfter,
       const Option<string>& _networks,
+      const Option<string>& _volumes,
       const Option<Credential> _credential)
     : state(DISCONNECTED),
       frameworkInfo(_frameworkInfo),
@@ -238,6 +273,7 @@ public:
       containerizer(_containerizer),
       killAfter(_killAfter),
       networks(_networks),
+      volumes(_volumes),
       credential(_credential),
       launched(false) {}
 
@@ -529,7 +565,8 @@ private:
     // Mesos containerizer supports 'appc' and 'docker' images.
     if (containerizer == "mesos") {
       if (dockerImage.isNone() && appcImage.isNone() &&
-          (networks.isNone() || networks->empty())) {
+          (networks.isNone() || networks->empty()) &&
+          (volumes.isNone() || volumes->empty())) {
         return None();
       }
 
@@ -569,6 +606,35 @@ private:
         foreach (const string& network,
                  strings::tokenize(networks.get(), ",")) {
           containerInfo.add_network_infos()->set_name(network);
+        }
+      }
+
+      // Load volumes.
+      if (volumes.isSome() && !volumes->empty()) {
+        Try<string> read = os::read(volumes.get());
+        if (read.isError()) {
+          return Error(
+              "Failed to read docker volumes JSON file '" +
+              volumes.get() + "': " + read.error());
+        }
+
+        Try<JSON::Array> volumesJSON = JSON::parse<JSON::Array>(read.get());
+        if (volumesJSON.isError()) {
+          return Error(
+              "Failed to parse docker volume JSON ('" +
+              read.get() + "'): " + volumesJSON.error());
+        }
+
+        Try<RepeatedPtrField<Volume>> volumesProtobuf =
+          ::protobuf::parse<RepeatedPtrField<Volume>>(volumesJSON.get());
+        if (volumesProtobuf.isError()) {
+          return Error(
+              "Failed to convert docker volume JSON array to protobuf ('" +
+              read.get() + "'): " + volumesProtobuf.error());
+        }
+
+        for (const Volume& volume : volumesProtobuf.get()) {
+          containerInfo.add_volumes()->CopyFrom(volume);
         }
       }
 
@@ -613,6 +679,7 @@ private:
   const string containerizer;
   const Option<Duration> killAfter;
   const Option<string> networks;
+  const Option<string> volumes;
   const Option<Credential> credential;
   bool launched;
   Owned<Mesos> mesos;
@@ -785,6 +852,7 @@ int main(int argc, char** argv)
         flags.containerizer,
         flags.kill_after,
         flags.networks,
+        flags.volumes,
         credential));
 
   process::spawn(scheduler.get());
