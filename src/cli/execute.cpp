@@ -38,6 +38,8 @@
 
 #include "hdfs/hdfs.hpp"
 
+using google::protobuf::RepeatedPtrField;
+
 using namespace mesos;
 using namespace mesos::internal;
 
