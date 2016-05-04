@@ -123,6 +123,36 @@ public:
         "containerizer",
         "Containerizer to be used (ie: docker, mesos)",
         "mesos");
+
+    add(&volumes,
+        "volumes",
+        "The file path containing the JSON-formatted volumes used by\n"
+        "container. Path could be of the form `file:///path/to/file`\n"
+        " or `/path/to/file`.\n"
+        "\n"
+        "Example:\n"
+        "[\n"
+        "  {\n"
+        "    \"container_path\":\"/path/to/container\"\n"
+        "    \"mode\":\"RW\"\n"
+        "    \"source\":\n"
+        "    {\n"
+        "      \"docker_volume\":\n"
+        "        {\n"
+        "          \"driver\": \"volume_driver\",\n"
+        "          \"docker_options\":\n"
+        "            {\"parameter\":[\n"
+        "              {\n"
+        "                \"key\": \"key\",\n"
+        "                \"value\": \"value\"\n"
+        "              }\n"
+        "            ]},\n"
+        "            \"name\": \"volume_name\"\n"
+        "        },\n"
+        "      \"type\": \"DOCKER_VOLUME\"\n"
+        "    }\n"
+        "  }\n"
+        "]");
   }
 
   Option<string> master;
@@ -152,7 +182,8 @@ public:
       const string& _resources,
       const Option<string>& _uri,
       const Option<string>& _dockerImage,
-      const string& _containerizer)
+      const string& _containerizer,
+      const Option<string>& _volumes)
     : name(_name),
       shell(_shell),
       command(_command),
@@ -161,6 +192,7 @@ public:
       uri(_uri),
       dockerImage(_dockerImage),
       containerizer(_containerizer),
+      volumes(_volumes),
       launched(false) {}
 
   virtual ~CommandScheduler() {}
@@ -244,6 +276,36 @@ public:
             mesosInfo.mutable_image()->CopyFrom(mesosImage);
 
             containerInfo.mutable_mesos()->CopyFrom(mesosInfo);
+
+            if (volumes.isSome() && !volumes->empty()) {
+              Try<string> read = os::read(volumes.get());
+              if (read.isError()) {
+                return Error(
+                    "Failed to read docker volumes JSON file '" +
+                    volumes.get() + "': " + read.error());
+              }
+
+              Try<JSON::Array> volumesJSON =
+                JSON::parse<JSON::Array>(read.get());
+
+              if (volumesJSON.isError()) {
+                return Error(
+                    "Failed to parse docker volume JSON ('" +
+                    read.get() + "'): " + volumesJSON.error());
+              }
+
+              Try<RepeatedPtrField<Volume>> volumesProtobuf =
+                ::protobuf::parse<RepeatedPtrField<Volume>>(volumesJSON.get());
+              if (volumesProtobuf.isError()) {
+                return Error(
+                    "Failed to convert docker volume JSON array to protobuf ('"+
+                    read.get() + "'): " + volumesProtobuf.error());
+              }
+
+              for (const Volume& volume : volumesProtobuf.get()) {
+                containerInfo.add_volumes()->CopyFrom(volume);
+              }
+            }
           } else if (containerizer == "docker") {
             containerInfo.set_type(ContainerInfo::DOCKER);
 
@@ -321,6 +383,7 @@ private:
   const Option<string> uri;
   const Option<string> dockerImage;
   const string containerizer;
+  const Option<string> volumes;
   bool launched;
 };
 
@@ -454,7 +517,8 @@ int main(int argc, char** argv)
       flags.resources,
       uri,
       dockerImage,
-      flags.containerizer);
+      flags.containerizer,
+      flags.volumes);
 
   FrameworkInfo framework;
   framework.set_user(user.get());
