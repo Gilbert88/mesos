@@ -285,7 +285,7 @@ public:
               if (read.isError()) {
                 cerr <<
                     "Failed to read docker volumes JSON file '" <<
-                    volumes.get() << "': " << read.error());
+                    volumes.get() << "': " << read.error();
               }
 
               Try<JSON::Array> volumesJSON =
@@ -294,7 +294,7 @@ public:
               if (volumesJSON.isError()) {
                 cerr <<
                     "Failed to parse docker volume JSON ('" <<
-                    read.get() << "'): " << volumesJSON.error());
+                    read.get() << "'): " << volumesJSON.error();
               }
 
               Try<RepeatedPtrField<Volume>> volumesProtobuf =
@@ -302,7 +302,7 @@ public:
               if (volumesProtobuf.isError()) {
                 cerr <<
                     "Failed to convert docker volume JSON array to protobuf ('"
-                    << read.get() << "'): " << volumesProtobuf.error());
+                    << read.get() << "'): " << volumesProtobuf.error();
               }
 
               for (const Volume& volume : volumesProtobuf.get()) {
