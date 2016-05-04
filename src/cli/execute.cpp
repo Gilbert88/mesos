@@ -170,6 +170,7 @@ public:
   bool checkpoint;
   Option<string> docker_image;
   string containerizer;
+  Option<string> volumes;
 };
 
 
@@ -282,26 +283,26 @@ public:
             if (volumes.isSome() && !volumes->empty()) {
               Try<string> read = os::read(volumes.get());
               if (read.isError()) {
-                return Error(
-                    "Failed to read docker volumes JSON file '" +
-                    volumes.get() + "': " + read.error());
+                cerr <<
+                    "Failed to read docker volumes JSON file '" <<
+                    volumes.get() << "': " << read.error());
               }
 
               Try<JSON::Array> volumesJSON =
                 JSON::parse<JSON::Array>(read.get());
 
               if (volumesJSON.isError()) {
-                return Error(
-                    "Failed to parse docker volume JSON ('" +
-                    read.get() + "'): " + volumesJSON.error());
+                cerr <<
+                    "Failed to parse docker volume JSON ('" <<
+                    read.get() << "'): " << volumesJSON.error());
               }
 
               Try<RepeatedPtrField<Volume>> volumesProtobuf =
                 ::protobuf::parse<RepeatedPtrField<Volume>>(volumesJSON.get());
               if (volumesProtobuf.isError()) {
-                return Error(
-                    "Failed to convert docker volume JSON array to protobuf ('"+
-                    read.get() + "'): " + volumesProtobuf.error());
+                cerr <<
+                    "Failed to convert docker volume JSON array to protobuf ('"
+                    << read.get() << "'): " << volumesProtobuf.error());
               }
 
               for (const Volume& volume : volumesProtobuf.get()) {
