@@ -14,6 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <fts.h>
+
 #include <mesos/type_utils.hpp>
 
 #include <process/collect.hpp>
@@ -260,12 +262,13 @@ Future<ProvisionInfo> ProvisionerProcess::provision(
 
   // Get and then provision image layers from the store.
   return stores.get(image.type()).get()->get(image)
-    .then(defer(self(), &Self::_provision, containerId, lambda::_1));
+    .then(defer(self(), &Self::_provision, containerId, image, lambda::_1));
 }
 
 
 Future<ProvisionInfo> ProvisionerProcess::_provision(
     const ContainerID& containerId,
+    const Image& image,
     const ImageInfo& imageInfo)
 {
   // TODO(jieyu): Choose a backend smartly. For instance, if there is
@@ -302,9 +305,90 @@ Future<ProvisionInfo> ProvisionerProcess::_provision(
       imageInfo.layers,
       rootfs,
       backendDir)
-    .then([rootfs, imageInfo]() -> Future<ProvisionInfo> {
-      return ProvisionInfo{rootfs, imageInfo.dockerManifest};
-    });
+    .then(defer(self(), &Self::__provision, rootfs, image, imageInfo));
+}
+
+
+// This function is docker image specific. Depending on docker v1
+// spec, a docker image may include filesystem changeset, which
+// may need to delete directories or files. The file/dir to be
+// deleted will be labeled by creating a 'whiteout' file, which
+// is at the same location and with the basename of the deleted
+// file or directory prefixed with '.wh.'. Please see:
+// https://github.com/docker/docker/blob/master/image/spec/v1.md
+Future<ProvisionInfo> ProvisionerProcess::__provision(
+    const string& rootfs,
+    const Image& image,
+    const ImageInfo& imageInfo)
+{
+  CHECK(os::stat::isdir(rootfs));
+
+  // Skip single-layered images since no 'whiteout' files needs
+  // to be handled, and this excludes any image using the bind
+  // backend.
+  if (imageInfo.layers.size() == 1 || image.type() != Image::DOCKER) {
+    return ProvisionInfo{ rootfs, imageInfo.dockerManifest };
+  }
+
+  char* _rootfs[] = { const_cast<char*>(rootfs.c_str()), nullptr };
+
+  FTS* tree = ::fts_open(_rootfs, FTS_NOCHDIR | FTS_PHYSICAL, nullptr);
+  if (tree == nullptr) {
+    return Failure("Failed to open '" + rootfs + "'");
+  }
+
+  vector<string> whitelist;
+
+  for (FTSENT *node = ::fts_read(tree);
+       node != nullptr; node = ::fts_read(tree)) {
+    if (node->fts_info == FTS_F &&
+        strings::startsWith(node->fts_name, ".wh.")) {
+      Path path = Path(node->fts_path);
+
+      const string _path =
+        path::join(path.dirname(), path.basename().substr(4));
+
+      whitelist.push_back(_path);
+
+      Try<Nothing> rm = os::rm(path.value);
+      if (rm.isError()) {
+        ::fts_close(tree);
+        return Failure(
+            "Failed to remove the whitelist '.wh.' file '" +
+            path.value + "': " + rm.error());
+      }
+    }
+  }
+
+  if (errno != 0) {
+    Error error = ErrnoError();
+    ::fts_close(tree);
+    return Failure(error);
+  }
+
+  if (::fts_close(tree) != 0) {
+    return Failure("Failed to stop traversing file system");
+  }
+
+  foreach (const string& path, whitelist) {
+    if (os::stat::isdir(path)) {
+      Try<Nothing> rmdir = os::rmdir(path);
+      if (rmdir.isError()) {
+        return Failure(
+            "Failed to remove whitelist directory '" +
+            path + "': " + rmdir.error());
+      }
+    } else {
+      Try<Nothing> rm = os::rm(path);
+      if (rm.isError()) {
+        return Failure(
+            "Failed to remove whitelist file '" +
+            path + "': " + rm.error());
+      }
+    }
+  }
+
+  return ProvisionInfo{ rootfs, imageInfo.dockerManifest };
 }
 
 
