@@ -1038,9 +1038,14 @@ Future<bool> MesosContainerizerProcess::__launch(
   // isolator if a docker image is specified.
   Option<CommandInfo> executorLaunchCommand;
   Option<string> workingDirectory;
+  Option<string> imageUser;
 
   foreach (const Option<ContainerLaunchInfo>& launchInfo, launchInfos) {
-    if (launchInfo.isSome() && launchInfo->has_environment()) {
+    if (launchInfo.isNone()) {
+      continue;
+    }
+
+    if (launchInfo->has_environment()) {
       foreach (const Environment::Variable& variable,
                launchInfo->environment().variables()) {
         const string& name = variable.name();
@@ -1058,7 +1063,7 @@ Future<bool> MesosContainerizerProcess::__launch(
       }
     }
 
-    if (launchInfo.isSome() && launchInfo->has_command()) {
+    if (launchInfo->has_command()) {
       if (executorLaunchCommand.isSome()) {
         return Failure("At most one command can be returned from isolators");
       } else {
@@ -1066,12 +1071,21 @@ Future<bool> MesosContainerizerProcess::__launch(
       }
     }
 
-    if (launchInfo.isSome() && launchInfo->has_working_directory()) {
+    if (launchInfo->has_working_directory()) {
       if (workingDirectory.isSome()) {
         return Failure(
             "At most one working directory can be returned from isolators");
       } else {
         workingDirectory = launchInfo->working_directory();
+      }
+    }
+
+    if (launchInfo->has_image_user()) {
+      if (imageUser.isSome()) {
+        return Failure(
+            "At most one image user can be returned from isolators");
+      } else {
+        imageUser = launchInfo->image_user();
       }
     }
   }
@@ -1178,9 +1192,15 @@ Future<bool> MesosContainerizerProcess::__launch(
           "`su` is not supported on Windows, but the executor "
           "specifies a user.");
     }
+
+    if (imageUser.isSome()) {
+      return Failure(
+          "Mapping to image user is not supported on Windows.");
+    }
 #else
     launchFlags.rootfs = executorRootfs;
     launchFlags.user = user;
+    launchFlags.image_user = imageUser;
 #endif // __WINDOWS__
     launchFlags.pipe_read = pipes[0];
     launchFlags.pipe_write = pipes[1];
