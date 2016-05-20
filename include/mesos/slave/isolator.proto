@@ -127,4 +127,8 @@ message ContainerLaunchInfo
   // The working directory for the container.
   // NOTE: This is different than Mesos sandbox.
   optional string working_directory = 6;
+
+  // The username or UID which the process in the container
+  // should run as.
+  optional string image_user = 7;
 }
