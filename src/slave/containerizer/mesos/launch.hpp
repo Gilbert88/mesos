@@ -40,6 +40,7 @@ public:
 #ifndef __WINDOWS__
     Option<std::string> rootfs;
     Option<std::string> user;
+    Option<std::string> image_user;
 #endif // __WINDOWS__
     Option<int> pipe_read;
     Option<int> pipe_write;

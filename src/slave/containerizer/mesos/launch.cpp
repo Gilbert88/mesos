@@ -71,6 +71,10 @@ MesosContainerizerLaunch::Flags::Flags()
   add(&user,
       "user",
       "The user to change to.");
+
+  add(&image_user,
+      "image_user",
+      "The username or UID which the process in the container should run as.");
 #endif // __WINDOWS__
 
   add(&pipe_read,
