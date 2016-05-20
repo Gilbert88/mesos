@@ -115,6 +115,7 @@ public:
       const Option<string>& _sandboxDirectory,
       const Option<string>& _workingDirectory,
       const Option<string>& _user,
+      const Option<string>& _imageUser,
       const Option<string>& _taskCommand,
       const FrameworkID& _frameworkId,
       const ExecutorID& _executorId,
@@ -135,6 +136,7 @@ public:
       sandboxDirectory(_sandboxDirectory),
       workingDirectory(_workingDirectory),
       user(_user),
+      imageUser(_imageUser),
       taskCommand(_taskCommand),
       frameworkId(_frameworkId),
       executorId(_executorId),
@@ -919,6 +921,7 @@ private:
   Option<string> sandboxDirectory;
   Option<string> workingDirectory;
   Option<string> user;
+  Option<string> imageUser;
   Option<string> taskCommand;
   const FrameworkID frameworkId;
   const ExecutorID executorId;
@@ -966,6 +969,11 @@ public:
         "user",
         "The user that the task should be running as.");
 
+    add(&image_user,
+        "image_user",
+        "The username or UID which the process in the container should run\n"
+        "as.");
+
     add(&task_command,
         "task_command",
         "If specified, this is the overrided command for launching the\n"
@@ -980,6 +988,7 @@ public:
   Option<string> sandbox_directory;
   Option<string> working_directory;
   Option<string> user;
+  Option<string> image_user;
   Option<string> task_command;
 };
 
@@ -1067,6 +1076,7 @@ int main(int argc, char** argv)
           flags.sandbox_directory,
           flags.working_directory,
           flags.user,
+          flags.image_user,
           flags.task_command,
           frameworkId,
           executorId,
