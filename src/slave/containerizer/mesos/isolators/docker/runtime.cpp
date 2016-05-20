@@ -98,6 +98,8 @@ Future<Option<ContainerLaunchInfo>> DockerRuntimeIsolatorProcess::prepare(
   Option<string> workingDirectory =
     getWorkingDirectory(containerConfig);
 
+  Option<string> user = getImageUser(containerConfig);
+
   Result<CommandInfo> command =
     getLaunchCommand(containerId, containerConfig);
 
@@ -124,6 +126,10 @@ Future<Option<ContainerLaunchInfo>> DockerRuntimeIsolatorProcess::prepare(
       launchInfo.set_working_directory(workingDirectory.get());
     }
 
+    if (user.isSome()) {
+      launchInfo.set_image_user(user.get());
+    }
+
     if (command.isSome()) {
       launchInfo.mutable_command()->CopyFrom(command.get());
     }
@@ -136,6 +142,10 @@ Future<Option<ContainerLaunchInfo>> DockerRuntimeIsolatorProcess::prepare(
     if (workingDirectory.isSome()) {
       executorCommand.add_arguments(
           "--working_directory=" + workingDirectory.get());
+    }
+
+    if (user.isSome()) {
+      executorCommand.add_arguments("--image_user=" + user.get());
     }
 
     // Pass task command as a flag, which will be loaded by
@@ -371,6 +381,20 @@ Option<string> DockerRuntimeIsolatorProcess::getWorkingDirectory(
   }
 
   return containerConfig.docker().manifest().config().workingdir();
+}
+
+
+Option<string> DockerRuntimeIsolatorProcess::getImageUser(
+    const ContainerConfig& containerConfig)
+{
+  // NOTE: In docker manifest, if an image user is none, it may be
+  // set as `"User": ""`.
+  if (!containerConfig.docker().manifest().config().has_user() ||
+      containerConfig.docker().manifest().config().user() == "") {
+    return None();
+  }
+
+  return containerConfig.docker().manifest().config().user();
 }
 
 
