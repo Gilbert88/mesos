@@ -85,6 +85,7 @@ public:
       const Option<string>& _sandboxDirectory,
       const Option<string>& _workingDirectory,
       const Option<string>& _user,
+      const Option<string>& _imageUser,
       const Option<string>& _taskCommand,
       const Duration& _shutdownGracePeriod)
     : state(REGISTERING),
@@ -104,6 +105,7 @@ public:
       sandboxDirectory(_sandboxDirectory),
       workingDirectory(_workingDirectory),
       user(_user),
+      imageUser(_imageUser),
       taskCommand(_taskCommand) {}
 
   virtual ~CommandExecutorProcess() {}
@@ -724,6 +726,7 @@ private:
   Option<string> sandboxDirectory;
   Option<string> workingDirectory;
   Option<string> user;
+  Option<string> imageUser;
   Option<string> taskCommand;
 };
 
@@ -738,6 +741,7 @@ public:
       const Option<string>& sandboxDirectory,
       const Option<string>& workingDirectory,
       const Option<string>& user,
+      const Option<string>& imageUser,
       const Option<string>& taskCommand,
       const Duration& shutdownGracePeriod)
   {
@@ -748,6 +752,7 @@ public:
         sandboxDirectory,
         workingDirectory,
         user,
+        imageUser,
         taskCommand,
         shutdownGracePeriod);
 
@@ -857,6 +862,11 @@ public:
         "user",
         "The user that the task should be running as.");
 
+    add(&image_user,
+        "image_user",
+        "The username or UID which the process in the container should run\n"
+        "as.");
+
     add(&task_command,
         "task_command",
         "If specified, this is the overrided command for launching the\n"
@@ -871,6 +881,7 @@ public:
   Option<string> sandbox_directory;
   Option<string> working_directory;
   Option<string> user;
+  Option<string> image_user;
   Option<string> task_command;
 };
 
@@ -941,6 +952,7 @@ int main(int argc, char** argv)
       flags.sandbox_directory,
       flags.working_directory,
       flags.user,
+      flags.image_user,
       flags.task_command,
       shutdownGracePeriod);
 
