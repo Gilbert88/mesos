@@ -22,6 +22,8 @@
 #include <grp.h>
 #include <pwd.h>
 
+#include <sys/syscall.h>
+
 #include <stout/error.hpp>
 #include <stout/nothing.hpp>
 #include <stout/try.hpp>
@@ -156,6 +158,79 @@ inline Try<Nothing> setgid(gid_t gid)
   if (::setgid(gid) == -1) {
     return ErrnoError();
   }
+
+  return Nothing();
+}
+
+
+inline Try<std::vector<gid_t>> getgrouplist(const std::string& user)
+{
+  // TODO(jieyu): Consider adding a 'gid' parameter and avoid calling
+  // getgid here. In some cases, the primary gid might be known.
+  Result<gid_t> gid = os::getgid(user);
+  if (!gid.isSome()) {
+    return Error("Failed to get the gid of the user: " +
+                 (gid.isError() ? gid.error() : "group not found"));
+  }
+
+#ifdef __APPLE__
+  int gids[NGROUPS_MAX];
+#else
+  gid_t gids[NGROUPS_MAX];
+#endif
+  int ngroups = NGROUPS_MAX;
+
+  if (::getgrouplist(user.c_str(), gid.get(), gids, &ngroups) == -1) {
+    return ErrnoError();
+  }
+
+  std::vector<gid_t> result(gids, gids + ngroups);
+
+  return result;
+}
+
+
+inline Try<Nothing> setgroups(
+    const std::vector<gid_t>& gids,
+    const Option<uid_t>& uid = None())
+{
+  int ngroups = static_cast<int>(gids.size());
+  gid_t _gids[ngroups];
+
+  for (int i = 0; i < ngroups; i++) {
+    _gids[i] = gids[i];
+  }
+
+#ifdef __APPLE__
+   // Groups implementation in the Darwin kernel is different. The list
+   // groups in the kernel is a cache, which means that setgroups only
+   // set the groups that are ever checked, but the dynamic resolution
+   // mechanism is needed here.
+   // For more detail please see:
+   // https://github.com/practicalswift/osx/blob/master/src/samba/patches/support-darwin-initgroups-syscall // NOLINT
+  int maxgroups = sysconf(_SC_NGROUPS_MAX);
+  if (maxgroups == -1) {
+    return Error("Failed to get sysconf(_SC_NGROUPS_MAX)");
+  }
+
+  if (ngroups > maxgroups) {
+      ngroups = maxgroups;
+  }
+
+  if (uid.isNone()) {
+    return Error(
+        "The uid of the user who is associated with the group "
+        "list we are setting is missing");
+  }
+
+  if (::syscall(SYS_initgroups, ngroups, _gids, uid.get()) == -1) {
+    return ErrnoError();
+  }
+#else
+  if (::setgroups(ngroups, _gids) == -1) {
+    return ErrnoError();
+  }
+#endif
 
   return Nothing();
 }
