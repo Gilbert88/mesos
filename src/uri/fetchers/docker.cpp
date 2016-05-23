@@ -27,6 +27,7 @@
 #include <process/process.hpp>
 #include <process/subprocess.hpp>
 
+#include <stout/base64.hpp>
 #include <stout/none.hpp>
 #include <stout/option.hpp>
 #include <stout/strings.hpp>
@@ -661,7 +662,13 @@ Future<string> DockerFetcherPluginProcess::getAuthToken(
   // engine supports both Basic authentication and OAuth2 for
   // getting tokens. Ideally, we should support both in docker
   // fetcher plugin.
-  if (!auths.empty()) {
+  if (uri.has_user()) {
+    if (uri.has_password()) {
+      auth = base64::encode(uri.user() + ":" + uri.password());
+    } else {
+      auth = uri.user();
+    }
+  } else if (!auths.empty()) {
     foreachpair (const string& key,
                  const spec::Config::Auth& value,
                  auths) {
@@ -764,7 +771,11 @@ URI DockerFetcherPluginProcess::getManifestUri(const URI& uri)
       scheme,
       path::join("/v2", uri.path(), "manifests", uri.query()),
       uri.host(),
-      (uri.has_port() ? Option<int>(uri.port()) : None()));
+      (uri.has_port() ? Option<int>(uri.port()) : None()),
+      None(),
+      None(),
+      (uri.has_user() ? Option<string>(uri.user()) : None()),
+      (uri.has_password() ? Option<string>(uri.password()) : None()));
 }
 
 
@@ -779,7 +790,11 @@ URI DockerFetcherPluginProcess::getBlobUri(const URI& uri)
       scheme,
       path::join("/v2", uri.path(), "blobs", uri.query()),
       uri.host(),
-      (uri.has_port() ? Option<int>(uri.port()) : None()));
+      (uri.has_port() ? Option<int>(uri.port()) : None()),
+      None(),
+      None(),
+      (uri.has_user() ? Option<string>(uri.user()) : None()),
+      (uri.has_password() ? Option<string>(uri.password()) : None()));
 }
 
 } // namespace uri {
