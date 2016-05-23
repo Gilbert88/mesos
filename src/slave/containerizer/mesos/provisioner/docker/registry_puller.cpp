@@ -72,7 +72,9 @@ public:
 private:
   Future<vector<string>> _pull(
       const spec::ImageReference& reference,
-      const string& directory);
+      const string& directory,
+      const Option<string>& principal,
+      const Option<string>& secret);
 
   Future<vector<string>> __pull(
     const spec::ImageReference& reference,
@@ -83,7 +85,9 @@ private:
   Future<hashset<string>> fetchBlobs(
     const spec::ImageReference& reference,
     const string& directory,
-    const spec::v2::ImageManifest& manifest);
+    const spec::v2::ImageManifest& manifest,
+    const Option<string>& principal,
+    const Option<string>& secret);
 
   RegistryPullerProcess(const RegistryPullerProcess&) = delete;
   RegistryPullerProcess& operator=(const RegistryPullerProcess&) = delete;
@@ -201,6 +205,16 @@ Future<vector<string>> RegistryPullerProcess::pull(
 {
   spec::ImageReference reference = normalize(_reference, defaultRegistryUrl);
 
+  Option<string> principal;
+  Option<string> secret;
+  if (credential.isSome()) {
+    principal = credential->principal();
+
+    if (credential->has_secret()) {
+      secret = credential->secret();
+    }
+  }
+
   URI manifestUri;
   if (reference.has_registry()) {
     Result<int> port = spec::getRegistryPort(reference.registry());
@@ -218,7 +232,9 @@ Future<vector<string>> RegistryPullerProcess::pull(
         (reference.has_tag() ? reference.tag() : "latest"),
         spec::getRegistryHost(reference.registry()),
         scheme.get(),
-        port.isSome() ? port.get() : Option<int>());
+        port.isSome() ? port.get() : Option<int>(),
+        principal,
+        secret);
   } else {
     const string registry = defaultRegistryUrl.domain.isSome()
       ? defaultRegistryUrl.domain.get()
@@ -233,7 +249,9 @@ Future<vector<string>> RegistryPullerProcess::pull(
         (reference.has_tag() ? reference.tag() : "latest"),
         registry,
         defaultRegistryUrl.scheme,
-        port);
+        port,
+        principal,
+        secret);
   }
 
   VLOG(1) << "Pulling image '" << reference
@@ -241,13 +259,15 @@ Future<vector<string>> RegistryPullerProcess::pull(
           << "' to '" << directory << "'";
 
   return fetcher->fetch(manifestUri, directory)
-    .then(defer(self(), &Self::_pull, reference, directory));
+    .then(defer(self(), &Self::_pull, reference, directory, principal, secret));
 }
 
 
 Future<vector<string>> RegistryPullerProcess::_pull(
     const spec::ImageReference& reference,
-    const string& directory)
+    const string& directory,
+    const Option<string>& principal,
+    const Option<string>& secret)
 {
   Try<string> _manifest = os::read(path::join(directory, "manifest"));
   if (_manifest.isError()) {
@@ -268,7 +288,7 @@ Future<vector<string>> RegistryPullerProcess::_pull(
     return Failure("'fsLayers' and 'history' have different size in manifest");
   }
 
-  return fetchBlobs(reference, directory, manifest.get())
+  return fetchBlobs(reference, directory, manifest.get(), principal, secret)
     .then(defer(self(),
                 &Self::__pull,
                 reference,
@@ -349,7 +369,9 @@ Future<vector<string>> RegistryPullerProcess::__pull(
 Future<hashset<string>> RegistryPullerProcess::fetchBlobs(
     const spec::ImageReference& reference,
     const string& directory,
-    const spec::v2::ImageManifest& manifest)
+    const spec::v2::ImageManifest& manifest,
+    const Option<string>& principal,
+    const Option<string>& secret)
 {
   // First, find all the blobs that need to be fetched.
   //
@@ -400,7 +422,9 @@ Future<hashset<string>> RegistryPullerProcess::fetchBlobs(
           blobSum,
           spec::getRegistryHost(reference.registry()),
           scheme.get(),
-          port.isSome() ? port.get() : Option<int>());
+          port.isSome() ? port.get() : Option<int>(),
+          principal,
+          secret);
     } else {
       const string registry = defaultRegistryUrl.domain.isSome()
         ? defaultRegistryUrl.domain.get()
@@ -415,7 +439,9 @@ Future<hashset<string>> RegistryPullerProcess::fetchBlobs(
           blobSum,
           registry,
           defaultRegistryUrl.scheme,
-          port);
+          port,
+          principal,
+          secret);
     }
 
     futures.push_back(fetcher->fetch(blobUri, directory));

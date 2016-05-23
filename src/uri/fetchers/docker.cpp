@@ -27,6 +27,7 @@
 #include <process/process.hpp>
 #include <process/subprocess.hpp>
 
+#include <stout/base64.hpp>
 #include <stout/none.hpp>
 #include <stout/option.hpp>
 #include <stout/strings.hpp>
@@ -661,32 +662,40 @@ Future<string> DockerFetcherPluginProcess::getAuthToken(
   // engine supports both Basic authentication and OAuth2 for
   // getting tokens. Ideally, we should support both in docker
   // fetcher plugin.
-  foreachpair (const string& key, const spec::Config::Auth& value, auths) {
-    // Handle domains including 'docker.io' as a special case,
-    // because the url is set differently for different version
-    // of docker default registry, but all of them should depend
-    // on the same default namespace 'docker.io'. Please see:
-    // https://github.com/docker/docker/blob/master/registry/config.go#L34
-    const bool isDocker =
-      strings::contains(uri.host(), "docker.io") &&
-      strings::contains(key, "docker.io");
+  if (uri.has_user()) {
+    if (uri.has_password()) {
+      auth = base64::encode(uri.user() + ":" + uri.password());
+    } else {
+      auth = uri.user();
+    }
+  } else {
+    foreachpair (const string& key, const spec::Config::Auth& value, auths) {
+      // Handle domains including 'docker.io' as a special case,
+      // because the url is set differently for different version
+      // of docker default registry, but all of them should depend
+      // on the same default namespace 'docker.io'. Please see:
+      // https://github.com/docker/docker/blob/master/registry/config.go#L34
+      const bool isDocker =
+        strings::contains(uri.host(), "docker.io") &&
+        strings::contains(key, "docker.io");
 
-    // NOTE: The host field of uri can be either domain or IP
-    // address, which is merged in docker registry puller.
-    const string registry = uri.has_port()
-      ? uri.host() + ":" + stringify(uri.port())
-      : uri.host();
+      // NOTE: The host field of uri can be either domain or IP
+      // address, which is merged in docker registry puller.
+      const string registry = uri.has_port()
+        ? uri.host() + ":" + stringify(uri.port())
+        : uri.host();
 
-    // Should not use 'http::URL::parse()' here, since many
-    // registry domain recorded in docker config file does
-    // not start with 'https://' or 'http://'. They are pure
-    // domain only (e.g., 'quay.io', 'localhost:5000').
-    // Please see 'ResolveAuthConfig()' in:
-    // https://github.com/docker/docker/blob/master/registry/auth.go
-    if (isDocker || (registry == spec::parseUrl(key))) {
-      if (value.has_auth()) {
-        auth = value.auth();
-        break;
+      // Should not use 'http::URL::parse()' here, since many
+      // registry domain recorded in docker config file does
+      // not start with 'https://' or 'http://'. They are pure
+      // domain only (e.g., 'quay.io', 'localhost:5000').
+      // Please see 'ResolveAuthConfig()' in:
+      // https://github.com/docker/docker/blob/master/registry/auth.go
+      if (isDocker || (registry == spec::parseUrl(key))) {
+        if (value.has_auth()) {
+          auth = value.auth();
+          break;
+        }
       }
     }
   }
@@ -758,7 +767,11 @@ URI DockerFetcherPluginProcess::getManifestUri(const URI& uri)
       scheme,
       path::join("/v2", uri.path(), "manifests", uri.query()),
       uri.host(),
-      (uri.has_port() ? Option<int>(uri.port()) : None()));
+      (uri.has_port() ? Option<int>(uri.port()) : None()),
+      None(),
+      None(),
+      (uri.has_user() ? Option<string>(uri.user()) : None()),
+      (uri.has_password() ? Option<string>(uri.password()) : None()));
 }
 
 
@@ -773,7 +786,11 @@ URI DockerFetcherPluginProcess::getBlobUri(const URI& uri)
       scheme,
       path::join("/v2", uri.path(), "blobs", uri.query()),
       uri.host(),
-      (uri.has_port() ? Option<int>(uri.port()) : None()));
+      (uri.has_port() ? Option<int>(uri.port()) : None()),
+      None(),
+      None(),
+      (uri.has_user() ? Option<string>(uri.user()) : None()),
+      (uri.has_password() ? Option<string>(uri.password()) : None()));
 }
 
 } // namespace uri {
