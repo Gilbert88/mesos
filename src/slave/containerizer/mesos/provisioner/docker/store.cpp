@@ -69,6 +69,7 @@ public:
 private:
   Future<Image> _get(
       const spec::ImageReference& reference,
+      const Option<Credential>& credential,
       const Option<Image>& image);
 
   Future<ImageInfo> __get(const Image& image);
@@ -188,14 +189,20 @@ Future<ImageInfo> StoreProcess::get(const mesos::Image& image)
                    "': " + reference.error());
   }
 
+  Option<Credential> credential;
+  if (image.docker().has_credential()) {
+    credential = image.docker().credential();
+  }
+
   return metadataManager->get(reference.get(), image.cached())
-    .then(defer(self(), &Self::_get, reference.get(), lambda::_1))
+    .then(defer(self(), &Self::_get, reference.get(), credential, lambda::_1))
     .then(defer(self(), &Self::__get, lambda::_1));
 }
 
 
 Future<Image> StoreProcess::_get(
     const spec::ImageReference& reference,
+    const Option<Credential>& credential,
     const Option<Image>& image)
 {
   // NOTE: Here, we assume that image layers are not removed without
@@ -222,7 +229,7 @@ Future<Image> StoreProcess::_get(
   if (!pulling.contains(name)) {
     Owned<Promise<Image>> promise(new Promise<Image>());
 
-    Future<Image> future = puller->pull(reference, staging.get())
+    Future<Image> future = puller->pull(reference, staging.get(), credential)
       .then(defer(self(), &Self::moveLayers, staging.get(), lambda::_1))
       .then(defer(self(), [=](const vector<string>& layerIds) {
         return metadataManager->put(reference, layerIds);
