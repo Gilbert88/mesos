@@ -186,7 +186,7 @@ Try<ImageManifest> parse(const JSON::Object& json)
               "The value of label key '" + key + "' is not a JSON string");
         }
 
-        ImageManifest::Config::Label* label =
+        Label* label =
           manifest->mutable_config()->add_labels();
 
         label->set_key(key);
@@ -223,7 +223,7 @@ Try<ImageManifest> parse(const JSON::Object& json)
               "The value of label key '" + key + "' is not a JSON string");
         }
 
-        ImageManifest::Config::Label* label =
+        Label* label =
           manifest->mutable_container_config()->add_labels();
 
         label->set_key(key);
