@@ -16,6 +16,12 @@
 
 package docker.spec.v1;
 
+message Label {
+  optional string key = 1;
+  optional string value = 2;
+}
+
+
 /**
  * Protobuf for the Docker v1 image manifest JSON schema:
  * https://github.com/docker/docker/blob/master/image/spec/v1.md
@@ -50,18 +56,9 @@ message ImageManifest {
     // Name of the image as it was passed by the operator.
     optional string Image = 8;
 
-    message Label {
-      optional string key = 1;
-      optional string value = 2;
-    }
-
-    // NOTE: This field has to be handled manually instead of
-    // parsed by 'protobuf::parse()', since the keys of the
-    // 'Labels' JSON are unknown, and 'protobuf::parse()' parses
-    // a JSON object to a protobuf message by judging whether
-    // the field names of the JSON object and the protobuf
-    // message are exactly identical (case sensitive), so the
-    // name for this field can be any except `Labels`.
+    // NOTE: We cannot use 'Labels' here becasue otherwise,
+    // json->protobuf parsing will fail. 'labels' is manually
+    // set during parsing.
     repeated Label labels = 9;
 
     // TODO(gilbert): Create a message including string-message
