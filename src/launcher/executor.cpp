@@ -330,6 +330,11 @@ public:
         // framework/task/default user -> container user mapping once
         // user namespace and container capabilities is available for
         // mesos container.
+        if (imageUser.isSome()) {
+          LOG(WARNING) << "Host user to image user mapping is not "
+                       << "supported yet";
+        }
+
         if (user.isSome()) {
           Result<uid_t> _uid = os::getuid(user.get());
           if (!_uid.isSome()) {
