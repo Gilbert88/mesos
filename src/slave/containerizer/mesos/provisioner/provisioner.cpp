@@ -18,6 +18,8 @@
 
 #include <mesos/type_utils.hpp>
 
+#include <mesos/docker/spec.hpp>
+
 #include <process/collect.hpp>
 #include <process/defer.hpp>
 #include <process/dispatch.hpp>
@@ -38,6 +40,8 @@
 #include "slave/containerizer/mesos/provisioner/store.hpp"
 
 using namespace process;
+
+namespace spec = docker::spec;
 
 using std::list;
 using std::string;
@@ -341,8 +345,7 @@ Future<ProvisionInfo> ProvisionerProcess::__provision(
   for (FTSENT *node = ::fts_read(tree);
        node != nullptr; node = ::fts_read(tree)) {
     if (node->fts_info == FTS_F &&
-        strings::startsWith(
-            node->fts_name, string(docker::spec::WHITEOUT_PREFIX))) {
+        strings::startsWith(node->fts_name, string(spec::WHITEOUT_PREFIX))) {
       Path path = Path(node->fts_path);
 
       whiteout.push_back(path::join(
