@@ -348,8 +348,8 @@ Future<ProvisionInfo> ProvisionerProcess::__provision(
         strings::startsWith(node->fts_name, string(spec::WHITEOUT_PREFIX))) {
       Path path = Path(node->fts_path);
 
-      whiteout.push_back(path::join(
-          path.dirname(), path.basename().substr(strlen(WHITEOUT_PREFIX))));
+      whiteout.push_back(path::join(path.dirname(), path.basename().substr(
+          strlen(spec::WHITEOUT_PREFIX))));
 
       Try<Nothing> rm = os::rm(path.value);
       if (rm.isError()) {
