@@ -309,52 +309,50 @@ Future<ProvisionInfo> ProvisionerProcess::_provision(
 }
 
 
-// This function is docker image specific. Depending on docker v1
-// spec, a docker image may include filesystem changeset, which
-// may need to delete directories or files. The file/dir to be
-// deleted will be labeled by creating a 'whiteout' file, which
-// is at the same location and with the basename of the deleted
-// file or directory prefixed with '.wh.'. Please see:
+// This function is currently docker image specific. Depending
+// on docker v1 spec, a docker image may include filesystem
+// changeset, which may need to delete directories or files.
+// The file/dir to be deleted will be labeled by creating a
+// 'whiteout' file, which is at the same location and with the
+// basename of the deleted file or directory prefixed with
+// '.wh.'. Please see:
 // https://github.com/docker/docker/blob/master/image/spec/v1.md
 Future<ProvisionInfo> ProvisionerProcess::__provision(
     const string& rootfs,
     const Image& image,
     const ImageInfo& imageInfo)
 {
-  CHECK(os::stat::isdir(rootfs));
-
   // Skip single-layered images since no 'whiteout' files needs
   // to be handled, and this excludes any image using the bind
   // backend.
   if (imageInfo.layers.size() == 1 || image.type() != Image::DOCKER) {
-    return ProvisionInfo{ rootfs, imageInfo.dockerManifest };
+    return ProvisionInfo{rootfs, imageInfo.dockerManifest};
   }
 
-  char* _rootfs[] = { const_cast<char*>(rootfs.c_str()), nullptr };
+  char* _rootfs[] = {const_cast<char*>(rootfs.c_str()), nullptr};
 
   FTS* tree = ::fts_open(_rootfs, FTS_NOCHDIR | FTS_PHYSICAL, nullptr);
   if (tree == nullptr) {
-    return Failure("Failed to open '" + rootfs + "'");
+    return Failure("Failed to open '" + rootfs + "': " + os::strerror(errno));
   }
 
-  vector<string> whitelist;
+  vector<string> whiteout;
 
   for (FTSENT *node = ::fts_read(tree);
        node != nullptr; node = ::fts_read(tree)) {
     if (node->fts_info == FTS_F &&
-        strings::startsWith(node->fts_name, ".wh.")) {
+        strings::startsWith(
+            node->fts_name, string(docker::spec::WHITEOUT_PREFIX))) {
       Path path = Path(node->fts_path);
 
-      const string _path =
-        path::join(path.dirname(), path.basename().substr(4));
-
-      whitelist.push_back(_path);
+      whiteout.push_back(path::join(
+          path.dirname(), path.basename().substr(strlen(WHITEOUT_PREFIX))));
 
       Try<Nothing> rm = os::rm(path.value);
       if (rm.isError()) {
         ::fts_close(tree);
         return Failure(
-            "Failed to remove the whitelist '.wh.' file '" +
+            "Failed to remove the whiteout '.wh.' file '" +
             path.value + "': " + rm.error());
       }
     }
@@ -367,28 +365,29 @@ Future<ProvisionInfo> ProvisionerProcess::__provision(
   }
 
   if (::fts_close(tree) != 0) {
-    return Failure("Failed to stop traversing file system");
+    return Failure(
+        "Failed to stop traversing file system: " + os::strerror(errno));
   }
 
-  foreach (const string& path, whitelist) {
+  foreach (const string& path, whiteout) {
     if (os::stat::isdir(path)) {
       Try<Nothing> rmdir = os::rmdir(path);
       if (rmdir.isError()) {
         return Failure(
-            "Failed to remove whitelist directory '" +
+            "Failed to remove whiteout directory '" +
             path + "': " + rmdir.error());
       }
     } else {
       Try<Nothing> rm = os::rm(path);
       if (rm.isError()) {
         return Failure(
-            "Failed to remove whitelist file '" +
+            "Failed to remove whiteout file '" +
             path + "': " + rm.error());
       }
     }
   }
 
-  return ProvisionInfo{ rootfs, imageInfo.dockerManifest };
+  return ProvisionInfo{rootfs, imageInfo.dockerManifest};
 }
 
 
