@@ -102,6 +102,7 @@ public:
     }
 
     std::vector<std::string> directories = {
+      "/bin/ls",
       "/bin/sh",
       "/lib/x86_64-linux-gnu",
       "/lib64",
