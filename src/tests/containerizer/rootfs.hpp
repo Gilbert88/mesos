@@ -103,9 +103,7 @@ public:
 
     std::vector<std::string> directories = {
       "/bin",
-      "/lib/modules",
-      "/lib/firmware",
-      "/lib/systemd",
+      "/lib/x86_64-linux-gnu",
       "/lib64",
       "/etc"
     };
