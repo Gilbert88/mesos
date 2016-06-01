@@ -102,10 +102,6 @@ public:
     }
 
     std::vector<std::string> directories = {
-      "/bin/sed",
-      "/bin/setfacl",
-      "/bin/setfont",
-      "/bin/setupcon",
       "/bin/sh",
       "/bin/sh.distrib",
       "/bin/ss",
