@@ -102,10 +102,7 @@ public:
     }
 
     std::vector<std::string> directories = {
-      "/bin/sh",
-      "/bin/sh.distrib",
       "/bin/ss",
-      "/bin/static-sh",
       "/lib/x86_64-linux-gnu",
       "/lib64",
       "/etc/passwd"
