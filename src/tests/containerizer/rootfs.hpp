@@ -104,7 +104,8 @@ public:
     std::vector<std::string> directories = {
       "/bin",
       "/lib/x86_64-linux-gnu",
-      "/lib64"
+      "/lib64",
+      "/etc/passwd"
     };
 
     foreach (const std::string& directory, directories) {
@@ -137,8 +138,7 @@ public:
       "/proc",
       "/sys",
       "/dev",
-      "/tmp",
-      "/etc"
+      "/tmp"
     };
 
     foreach (const std::string& directory, directories) {
