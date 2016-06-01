@@ -102,14 +102,6 @@ public:
     }
 
     std::vector<std::string> directories = {
-      "/bin/plymouth",
-      "/bin/plymouth-upstart-bridge",
-      "/bin/rbash",
-      "/bin/readlink",
-      "/bin/red",
-      "/bin/rnano",
-      "/bin/running-in-container",
-      "/bin/run-parts",
       "/bin/sed",
       "/bin/setfacl",
       "/bin/setfont",
