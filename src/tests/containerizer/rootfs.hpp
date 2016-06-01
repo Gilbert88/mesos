@@ -102,16 +102,11 @@ public:
     }
 
     std::vector<std::string> directories = {
-      "/bin/ping6",
       "/bin/plymouth",
       "/bin/plymouth-upstart-bridge",
-      "/bin/ps",
-      "/bin/pwd",
       "/bin/rbash",
       "/bin/readlink",
       "/bin/red",
-      "/bin/rm",
-      "/bin/rmdir",
       "/bin/rnano",
       "/bin/running-in-container",
       "/bin/run-parts",
@@ -121,13 +116,8 @@ public:
       "/bin/setupcon",
       "/bin/sh",
       "/bin/sh.distrib",
-      "/bin/sleep",
       "/bin/ss",
       "/bin/static-sh",
-      "/bin/stty",
-      "/bin/su",
-      "/bin/sync",
-      "/bin/tailf",
       "/lib/x86_64-linux-gnu",
       "/lib64",
       "/etc/passwd"
