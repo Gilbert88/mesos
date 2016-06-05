@@ -1877,19 +1877,21 @@ Try<Isolator*> PortMappingIsolatorProcess::create(const Flags& flags)
   // each container. This is important because when we unmount the
   // network namespace handles on the host, those handles will be
   // unmounted in the containers as well, but NOT vice versa.
-
-  // We need to get the realpath for the bind mount root since on some
-  // Linux distribution, The bind mount root (i.e., /var/run/netns)
-  // might contain symlink.
-  Result<string> bindMountRoot = os::realpath(PORT_MAPPING_BIND_MOUNT_ROOT());
-  if (!bindMountRoot.isSome()) {
-    return Error(
-        "Failed to get realpath for bind mount root '" +
-        PORT_MAPPING_BIND_MOUNT_ROOT() + "': " +
-        (bindMountRoot.isError() ? bindMountRoot.error() : "Not found"));
+  Result<string> bindMountRoot = PORT_MAPPING_BIND_MOUNT_ROOT();
+  if (os::exists(bindMountRoot.get())) {
+    // We need to get the realpath for the bind mount root since on some
+    // Linux distribution, The bind mount root (i.e., /var/run/netns)
+    // might contain symlink.
+    bindMountRoot = os::realpath(PORT_MAPPING_BIND_MOUNT_ROOT());
+    if (!bindMountRoot.isSome()) {
+      return Error(
+          "Failed to get realpath for bind mount root '" +
+          PORT_MAPPING_BIND_MOUNT_ROOT() + "': " +
+          (bindMountRoot.isError() ? bindMountRoot.error() : "Not found"));
+    }
   }
 
-  // We first create the bind mount directory if it does not exist.
+  // We create the bind mount directory if it does not exist.
   Try<Nothing> mkdir = os::mkdir(bindMountRoot.get());
   if (mkdir.isError()) {
     return Error(
