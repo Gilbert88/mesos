@@ -2582,6 +2582,21 @@ Future<Nothing> PortMappingIsolatorProcess::isolate(
   // even if slave's checkpointed meta data is deleted. Second, it
   // makes the debugging easier. See MESOS-2528 for details.
   const string linker = getSymlinkPath(containerId);
+
+  // Overwrite the symlink if it exists.
+  if (os::exists(linker)) {
+    LOG(WARNING) << "Removing the symlink '" << linker << "' "
+                 << "to the network namespace handle for container "
+                 << containerId;
+
+    Try<Nothing> rm = os::rm(linker);
+    if (rm.isError()) {
+      return Failure(
+          "Failed to remove the existed symlink '" +
+          linker + "': " + rm.error());
+    }
+  }
+
   Try<Nothing> symlink = ::fs::symlink(target, linker);
   if (symlink.isError()) {
     return Failure(
