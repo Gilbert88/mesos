@@ -600,7 +600,7 @@ TEST_F(MesosContainerizerDestroyTest, DestroyWhileFetching)
     .WillOnce(DoAll(FutureSatisfy(&exec),
                     Return(promise.future())));
 
-  MesosContainerizer containerizer(Owned<MesosContainerizerProcess>(process));
+  MesosContainerizer containerizer((Owned<MesosContainerizerProcess>(process)));
 
   ContainerID containerId;
   containerId.set_value(UUID::random().toString());
@@ -668,7 +668,7 @@ TEST_F(MesosContainerizerDestroyTest, DestroyWhilePreparing)
       provisioner.get(),
       {Owned<Isolator>(isolator)});
 
-  MesosContainerizer containerizer(Owned<MesosContainerizerProcess>(process));
+  MesosContainerizer containerizer((Owned<MesosContainerizerProcess>(process)));
 
   ContainerID containerId;
   containerId.set_value(UUID::random().toString());
@@ -773,7 +773,7 @@ TEST_F(MesosContainerizerProvisionerTest, ProvisionFailed)
       Owned<Provisioner>(provisioner),
       vector<Owned<Isolator>>());
 
-  MesosContainerizer containerizer(Owned<MesosContainerizerProcess>(process));
+  MesosContainerizer containerizer((Owned<MesosContainerizerProcess>(process)));
 
   ContainerID containerId;
   containerId.set_value(UUID::random().toString());
@@ -868,7 +868,7 @@ TEST_F(MesosContainerizerProvisionerTest, DestroyWhileProvisioning)
       Owned<Provisioner>(provisioner),
       vector<Owned<Isolator>>());
 
-  MesosContainerizer containerizer(Owned<MesosContainerizerProcess>(process));
+  MesosContainerizer containerizer((Owned<MesosContainerizerProcess>(process)));
 
   ContainerID containerId;
   containerId.set_value(UUID::random().toString());
@@ -965,7 +965,7 @@ TEST_F(MesosContainerizerProvisionerTest, DestroyWhileProvisioningVolumeImage)
       Owned<Provisioner>(provisioner),
       vector<Owned<Isolator>>());
 
-  MesosContainerizer containerizer(Owned<MesosContainerizerProcess>(process));
+  MesosContainerizer containerizer((Owned<MesosContainerizerProcess>(process)));
 
   ContainerID containerId;
   containerId.set_value(UUID::random().toString());
@@ -1071,7 +1071,7 @@ TEST_F(MesosContainerizerProvisionerTest, IsolatorCleanupBeforePrepare)
       Owned<Provisioner>(provisioner),
       {Owned<Isolator>(isolator)});
 
-  MesosContainerizer containerizer(Owned<MesosContainerizerProcess>(process));
+  MesosContainerizer containerizer((Owned<MesosContainerizerProcess>(process)));
 
   ContainerID containerId;
   containerId.set_value(UUID::random().toString());
@@ -1168,7 +1168,7 @@ TEST_F(MesosContainerizerDestroyTest, LauncherDestroyFailure)
       provisioner.get(),
       vector<Owned<Isolator>>());
 
-  MesosContainerizer containerizer(Owned<MesosContainerizerProcess>(process));
+  MesosContainerizer containerizer((Owned<MesosContainerizerProcess>(process)));
 
   ContainerID containerId;
   containerId.set_value(UUID::random().toString());
