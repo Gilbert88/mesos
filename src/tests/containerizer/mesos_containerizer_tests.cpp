@@ -988,7 +988,7 @@ TEST_F(MesosContainerizerProvisionerTest, DestroyWhileProvisioningVolumeImage)
 
   Volume* volume = containerInfo.add_volumes();
   volume->mutable_image()->CopyFrom(image);
-  volume->set_container_path(slave::COMMAND_EXECUTOR_ROOTFS_CONTAINER_PATH);
+  volume->set_container_path("tmp");
   volume->set_mode(Volume::RW);
 
   ExecutorInfo executorInfo = CREATE_EXECUTOR_INFO("executor", "exit 0");
