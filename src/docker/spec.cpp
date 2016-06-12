@@ -183,7 +183,7 @@ Try<hashmap<string, Config::Auth>> parseConfig(
 }
 
 
-inline string parseUrl(const string& _url)
+string parseUrl(const string& _url)
 {
   string url = _url;
   if (strings::startsWith(_url, "http://")) {
