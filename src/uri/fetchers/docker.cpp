@@ -687,14 +687,11 @@ Future<string> DockerFetcherPluginProcess::getAuthToken(
         ? uri.host() + ":" + stringify(uri.port())
         : uri.host();
 
-      // Should not use http url to parse the key, since some registry
-      // URls recorded in docker config file may be either domain or
-      // IP address with/without port. The registry prefix of the
-      // image repo can also be with/without port. Because an entity
-      // in docker config file should be unique per registry. So we
-      // can simplify the logic by checking whether the uri host/port
-      // is included in an entity's url.
-      if (strings::contains(key, registry) || isDocker) {
+      // Should not use 'http::URL::parse()' here, since many
+      // registry domain recorded in docker config file does
+      // not start with 'https://' or 'http://'. They are pure
+      // domain only (e.g., 'quay.io', 'localhost:5000').
+      if (isDocker || (registry == spec::parseUrl(key))) {
         if (value.has_auth()) {
           auth = value.auth();
 
