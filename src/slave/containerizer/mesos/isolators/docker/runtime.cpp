@@ -98,9 +98,9 @@ Future<Option<ContainerLaunchInfo>> DockerRuntimeIsolatorProcess::prepare(
   Option<string> workingDirectory =
     getWorkingDirectory(containerConfig);
 
-  Option<string> user = getImageUser(containerConfig);
+  Option<string> user = getContainerUser(containerConfig);
   if (user.isSome()) {
-    // TODO(gilbert): Parse the image user from 'user|uid[:group|gid]'
+    // TODO(gilbert): Parse the container user from 'user|uid[:group|gid]'
     // to corresponding user and group. UID and GID should be numerical,
     // while username and groupname should be non-numerical.
     // Please see:
@@ -389,10 +389,10 @@ Option<string> DockerRuntimeIsolatorProcess::getWorkingDirectory(
 }
 
 
-Option<string> DockerRuntimeIsolatorProcess::getImageUser(
+Option<string> DockerRuntimeIsolatorProcess::getContainerUser(
     const ContainerConfig& containerConfig)
 {
-  // NOTE: In docker manifest, if an image user is none, it may be
+  // NOTE: In docker manifest, if its container user is none, it may be
   // set as `"User": ""`.
   if (!containerConfig.docker().manifest().config().has_user() ||
       containerConfig.docker().manifest().config().user() == "") {

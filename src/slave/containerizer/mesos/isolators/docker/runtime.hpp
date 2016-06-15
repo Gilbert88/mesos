@@ -55,7 +55,7 @@ private:
   Option<std::string> getWorkingDirectory(
       const mesos::slave::ContainerConfig& containerConfig);
 
-  Option<std::string> getImageUser(
+  Option<std::string> getContainerUser(
       const mesos::slave::ContainerConfig& containerConfig);
 
   const Flags flags;
