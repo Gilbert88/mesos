@@ -104,6 +104,7 @@ public:
     std::vector<std::string> files = {
       "/bin/echo",
       "/bin/ls",
+      "/bin/sleep",
       "/bin/sh",
       "/usr/bin/sh",
       "/lib/x86_64-linux-gnu",
