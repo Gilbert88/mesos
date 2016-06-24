@@ -401,11 +401,29 @@ Try<string> LinuxFilesystemIsolatorProcess::script(
             containerConfig.rootfs(),
             volume.container_path());
 
-        Try<Nothing> mkdir = os::mkdir(target);
-        if (mkdir.isError()) {
-          return Error(
-              "Failed to create the target of the mount at '" +
-              target + "': " + mkdir.error());
+        if (os::stat::isfile(source)) {
+          // The file volume case.
+          Try<Nothing> mkdir = os::mkdir(Path(target).dirname());
+          if (mkdir.isError()) {
+            return Error(
+                "Failed to create directory '" +
+                Path(target).dirname() + "' "
+                "for the target mount file: " + mkdir.error());
+          }
+
+          Try<Nothing> touch = os::touch(target);
+          if (touch.isError()) {
+            return Error(
+                "Failed to create the target mount file at '" +
+                target + "': " + touch.error());
+          }
+        } else {
+          Try<Nothing> mkdir = os::mkdir(target);
+          if (mkdir.isError()) {
+            return Error(
+                "Failed to create the target of the mount at '" +
+                target + "': " + mkdir.error());
+          }
         }
       } else {
         target = volume.container_path();
@@ -444,11 +462,28 @@ Try<string> LinuxFilesystemIsolatorProcess::script(
           containerConfig.directory(),
           volume.container_path());
 
-      Try<Nothing> mkdir = os::mkdir(mountPoint);
-      if (mkdir.isError()) {
-        return Error(
-            "Failed to create the target of the mount at '" +
-            mountPoint + "': " + mkdir.error());
+      if (os::stat::isfile(source)) {
+        // The file volume case.
+        Try<Nothing> mkdir = os::mkdir(Path(mountPoint).dirname());
+        if (mkdir.isError()) {
+          return Error(
+              "Failed to create the target mount file directory at '" +
+              Path(mountPoint).dirname() + "': " + mkdir.error());
+        }
+
+        Try<Nothing> touch = os::touch(mountPoint);
+        if (touch.isError()) {
+          return Error(
+              "Failed to create the target mount file at '" +
+              target + "': " + touch.error());
+        }
+      } else {
+        Try<Nothing> mkdir = os::mkdir(mountPoint);
+        if (mkdir.isError()) {
+          return Error(
+              "Failed to create the target of the mount at '" +
+              mountPoint + "': " + mkdir.error());
+        }
       }
     }
 
