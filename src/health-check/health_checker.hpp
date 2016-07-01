@@ -61,27 +61,25 @@ using process::UPID;
 namespace mesos {
 namespace internal {
 
-using namespace process;
-
 // Forward declarations.
 class HealthCheckerProcess;
 
 class HealthChecker
 {
 public:
-  static Try<Owned<HealthChecker>> create(
+  static Try<process::Owned<HealthChecker>> create(
       const HealthCheck& check,
       const UPID& executor,
       const TaskID& taskID);
 
   ~HealthChecker();
 
-  Future<Nothing> healthCheck();
+  process::Future<Nothing> healthCheck();
 
 private:
-  explicit HealthChecker(Owned<HealthCheckerProcess> process);
+  explicit HealthChecker(process::Owned<HealthCheckerProcess> process);
 
-  Owned<HealthCheckerProcess> process;
+  process::Owned<HealthCheckerProcess> process;
 };
 
 
@@ -100,7 +98,7 @@ public:
 
   virtual ~HealthCheckerProcess() {}
 
-  Future<Nothing> healthCheck()
+  process::Future<Nothing> healthCheck()
   {
     VLOG(2) << "Health checks starting in "
       << Seconds(check.delay_seconds()) << ", grace period "
@@ -239,7 +237,7 @@ private:
 
     pid_t commandPid = external.get().get().pid();
 
-    Future<Option<int>> status = external.get().get().status();
+    process::Future<Option<int>> status = external.get().get().status();
     status.await(Seconds(check.timeout_seconds()));
 
     if (!status.isReady()) {
