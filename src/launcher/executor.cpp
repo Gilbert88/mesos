@@ -431,15 +431,15 @@ protected:
              << _checker.error() << endl;
       } else {
         checker = _checker.get();
-      }
 
-      checker->healthCheck()
-        .onAny([](const Future<Nothing>& future) {
-          // Only possible to be a failure.
-          if (future.isFailed()) {
-            cerr << "Healh check failed" << endl;
-          }
-        });
+        checker->healthCheck()
+          .onAny([](const Future<Nothing>& future) {
+            // Only possible to be a failure.
+            if (future.isFailed()) {
+              cerr << "Healh check failed" << endl;
+            }
+          });
+      }
     }
 
     // Monitor this process.
