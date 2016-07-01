@@ -306,7 +306,7 @@ TEST_F(HealthCheckTest, HealthyTask)
 
 // Testing a healthy task with a container image using mesos
 // containerizer reporting one healthy status to scheduler.
-TEST_F(HealthCheckTest, ROOT_LocalPullerHealthyTask)
+TEST_F(HealthCheckTest, ROOT_HealthyTaskWithContainerImage)
 {
   Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
@@ -379,43 +379,6 @@ TEST_F(HealthCheckTest, ROOT_LocalPullerHealthyTask)
   EXPECT_EQ(TASK_RUNNING, statusHealth.get().state());
   EXPECT_TRUE(statusHealth.get().has_healthy());
   EXPECT_TRUE(statusHealth.get().healthy());
-
-  Future<TaskStatus> explicitReconciliation;
-  EXPECT_CALL(sched, statusUpdate(&driver, _))
-    .WillOnce(FutureArg<1>(&explicitReconciliation));
-
-  vector<TaskStatus> statuses;
-  TaskStatus status;
-
-  // Send a task status to trigger explicit reconciliation.
-  const TaskID taskId = statusHealth.get().task_id();
-  const SlaveID slaveId = statusHealth.get().slave_id();
-  status.mutable_task_id()->CopyFrom(taskId);
-
-  // State is not checked by reconciliation, but is required to be
-  // a valid task status.
-  status.set_state(TASK_RUNNING);
-  statuses.push_back(status);
-  driver.reconcileTasks(statuses);
-
-  AWAIT_READY(explicitReconciliation);
-  EXPECT_EQ(TASK_RUNNING, explicitReconciliation.get().state());
-  EXPECT_TRUE(explicitReconciliation.get().has_healthy());
-  EXPECT_TRUE(explicitReconciliation.get().healthy());
-
-  Future<TaskStatus> implicitReconciliation;
-  EXPECT_CALL(sched, statusUpdate(&driver, _))
-    .WillOnce(FutureArg<1>(&implicitReconciliation));
-
-  // Send an empty vector of task statuses to trigger implicit
-  // reconciliation.
-  statuses.clear();
-  driver.reconcileTasks(statuses);
-
-  AWAIT_READY(implicitReconciliation);
-  EXPECT_EQ(TASK_RUNNING, implicitReconciliation.get().state());
-  EXPECT_TRUE(implicitReconciliation.get().has_healthy());
-  EXPECT_TRUE(implicitReconciliation.get().healthy());
 
   // Verify that task health is exposed in the master's state endpoint.
   {
