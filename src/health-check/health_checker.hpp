@@ -104,7 +104,7 @@ public:
       << Seconds(check.delay_seconds()) << ", grace period "
       << Seconds(check.grace_period_seconds());
 
-    startTime = Clock::now();
+    startTime = process::Clock::now();
 
     delay(Seconds(check.delay_seconds()), self(), &Self::_healthCheck);
     return promise.future();
@@ -114,7 +114,8 @@ private:
   void failure(const string& message)
   {
     if (check.grace_period_seconds() > 0 &&
-        (Clock::now() - startTime).secs() <= check.grace_period_seconds()) {
+        (process::Clock::now() - startTime).secs() <=
+          check.grace_period_seconds()) {
       LOG(INFO) << "Ignoring failure as health check still in grace period";
       reschedule();
       return;
@@ -183,7 +184,7 @@ private:
     }
 
     // Launch the subprocess.
-    Option<Try<Subprocess>> external = None();
+    Option<Try<process::Subprocess>> external = None();
 
     if (command.shell()) {
       // Use the shell variant.
@@ -196,9 +197,9 @@ private:
 
       external = process::subprocess(
           command.value(),
-          Subprocess::PATH("/dev/null"),
-          Subprocess::FD(STDERR_FILENO),
-          Subprocess::FD(STDERR_FILENO),
+          process::Subprocess::PATH("/dev/null"),
+          process::Subprocess::FD(STDERR_FILENO),
+          process::Subprocess::FD(STDERR_FILENO),
           process::NO_SETSID,
           environment);
     } else {
@@ -219,9 +220,9 @@ private:
       external = process::subprocess(
           command.value(),
           argv,
-          Subprocess::PATH("/dev/null"),
-          Subprocess::FD(STDERR_FILENO),
-          Subprocess::FD(STDERR_FILENO),
+          process::Subprocess::PATH("/dev/null"),
+          process::Subprocess::FD(STDERR_FILENO),
+          process::Subprocess::FD(STDERR_FILENO),
           process::NO_SETSID,
           None(),
           environment);
@@ -278,7 +279,7 @@ private:
     delay(Seconds(check.interval_seconds()), self(), &Self::_healthCheck);
   }
 
-  Promise<Nothing> promise;
+  process::Promise<Nothing> promise;
   HealthCheck check;
   bool initializing;
   UPID executor;
