@@ -110,7 +110,7 @@ Try<Owned<slave::Store>> Store::create(const Flags& flags)
         // be able to start if the path of 'docker_config'
         // does not exist or invalid.
         LOG(WARNING) << "Failed to read the docker config file '"
-                     << config << "': " << read.error());
+                     << config << "': " << read.error();
       } else {
         config = read.get();
       }
@@ -123,7 +123,7 @@ Try<Owned<slave::Store>> Store::create(const Flags& flags)
       // of docker config file is not a valid JSON Object.
       LOG(WARNING) << "Failed to parse docker config '"
                    << config << "' " << "as a JSON Object: "
-                   << json.error());
+                   << json.error();
     } else {
       _flags.docker_config = json.get();
     }
