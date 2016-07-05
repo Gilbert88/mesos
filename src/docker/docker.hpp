@@ -210,7 +210,7 @@ protected:
   // Uses the specified path to the Docker CLI tool.
   Docker(const std::string& _path,
          const std::string& _socket,
-         const Option<JSON::Object>& _config)
+         const Option<std::string>& _config)
        : path(_path),
          socket("unix://" + _socket),
          config(_config) {}
@@ -279,7 +279,7 @@ private:
       const std::string& image,
       const std::string& path,
       const std::string& socket,
-      const Option<JSON::Object>& config,
+      const Option<std::string>& config,
       process::Future<std::string> output);
 
   static process::Future<Image> __pull(
@@ -288,7 +288,7 @@ private:
       const std::string& image,
       const std::string& path,
       const std::string& socket,
-      const Option<JSON::Object>& config);
+      const Option<std::string>& config);
 
   static process::Future<Image> ___pull(
       const Docker& docker,
@@ -306,7 +306,7 @@ private:
 
   const std::string path;
   const std::string socket;
-  const Option<JSON::Object> config;
+  const Option<std::string> config;
 };
 
 #endif // __DOCKER_HPP__

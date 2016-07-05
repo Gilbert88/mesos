@@ -102,7 +102,7 @@ Try<Owned<Docker>> Docker::create(
     const string& path,
     const string& socket,
     bool validate,
-    const Option<JSON::Object>& config)
+    const Option<string>& config)
 {
   if (!strings::startsWith(socket, "/")) {
     return Error("Invalid Docker socket path: " + socket);
@@ -1269,7 +1269,7 @@ Future<Docker::Image> Docker::_pull(
     const string& image,
     const string& path,
     const string& socket,
-    const Option<JSON::Object>& config,
+    const Option<string>& config,
     Future<string> output)
 {
   Option<int> status = s.status().get();
@@ -1290,7 +1290,7 @@ Future<Docker::Image> Docker::__pull(
     const string& image,
     const string& path,
     const string& socket,
-    const Option<JSON::Object>& config)
+    const Option<string>& config)
 {
   vector<string> argv;
   argv.push_back(path);
@@ -1306,6 +1306,13 @@ Future<Docker::Image> Docker::__pull(
   // Set the HOME path where docker config file locates.
   Option<string> home;
   if (config.isSome()) {
+    Try<JSON::Object> json = JSON::parse<JSON::Object>(config.get());
+    if (json.isError()) {
+      return Failure(
+          "Failed to parse docker config '" + config.get() + "' "
+          "as a JSON Object: " + json.error());
+    }
+
     Try<string> _home = os::mkdtemp();
 
     if (_home.isError()) {
@@ -1315,7 +1322,7 @@ Future<Docker::Image> Docker::__pull(
 
     home = _home.get();
 
-    Result<JSON::Object> auths = config->find<JSON::Object>("auths");
+    Result<JSON::Object> auths = json->find<JSON::Object>("auths");
     if (auths.isError()) {
       return Failure("Failed to find 'auths' in docker config file: " +
                      auths.error());
