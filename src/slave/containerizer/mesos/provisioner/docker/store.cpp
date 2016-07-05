@@ -100,30 +100,33 @@ Try<Owned<slave::Store>> Store::create(const Flags& flags)
   if (flags.docker_config.isSome()) {
     string config = flags.docker_config.get();
 
-    // The semantic should not be changed. If the agent flag
-    // 'docker_config' is specified as a path to the docker
-    // config file, it has to start with 'file://'.
-    if (strings::startsWith(config, "file://")) {
-      const string path = config.substr(7);
-
-      Try<string> read = os::read(path);
+    // The agent flag 'docker_config' can only be either an
+    // absolute path or a JSON Object as a string. Otherwise,
+    // it would be neglected.
+    if (path::absolute(config)) {
+      Try<string> read = os::read(config);
       if (read.isError()) {
-        return Error(
-            "Failed to read the docker config file '" +
-            path + "': " + read.error());
+        // Not return an error because the agent should still
+        // be able to start if the path of 'docker_config'
+        // does not exist or invalid.
+        LOG(WARNING) << "Failed to read the docker config file '"
+                     << config << "': " << read.error());
+      } else {
+        config = read.get();
       }
-
-      config = read.get();
     }
 
     Try<JSON::Object> json = JSON::parse<JSON::Object>(config);
     if (json.isError()) {
-      return Error(
-          "Failed to parse docker config '" + config + "' " +
-          "as a JSON Object: " + json.error());
+      // Similar to above, should not return an error because
+      // the agent should still be able to start if the content
+      // of docker config file is not a valid JSON Object.
+      LOG(WARNING) << "Failed to parse docker config '"
+                   << config << "' " << "as a JSON Object: "
+                   << json.error());
+    } else {
+      _flags.docker_config = json.get();
     }
-
-    _flags.docker_config = json.get();
   }
 #endif
 
