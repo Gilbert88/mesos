@@ -49,7 +49,7 @@ public:
       const std::string& path,
       const std::string& socket,
       bool validate = true,
-      const Option<JSON::Object>& config = None());
+      const Option<std::string>& config = None());
 
   virtual ~Docker() {}
 
