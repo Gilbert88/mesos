@@ -97,7 +97,34 @@ Try<Owned<slave::Store>> Store::create(const Flags& flags)
 
   // TODO(dpravat): Remove after resolving MESOS-5473.
 #ifndef __WINDOWS__
-  _flags.docker_config = flags.docker_config;
+  if (flags.docker_config.isSome()) {
+    string config = flags.docker_config.get();
+
+    // The semantic should not be changed. If the agent flag
+    // 'docker_config' is specified as a path to the docker
+    // config file, it has to start with 'file://'.
+    if (strings::startsWith(config, "file://")) {
+      const string path = config.substr(7);
+
+      Try<string> read = os::read(path);
+      if (read.isError()) {
+        return Error(
+            "Failed to read the docker config file '" +
+            path + "': " + read.error());
+      }
+
+      config = read.get();
+    }
+
+    Try<JSON::Object> json = JSON::parse<JSON::Object>(config);
+    if (json.isError()) {
+      return Error(
+          "Failed to parse docker config '" + config + "' " +
+          "as a JSON Object: " + json.error());
+    }
+
+    _flags.docker_config = json.get();
+  }
 #endif
 
   Try<Owned<uri::Fetcher>> fetcher = uri::fetcher::create(_flags);
