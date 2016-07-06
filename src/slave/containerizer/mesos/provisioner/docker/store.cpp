@@ -116,16 +116,21 @@ Try<Owned<slave::Store>> Store::create(const Flags& flags)
       }
     }
 
-    Try<JSON::Object> json = JSON::parse<JSON::Object>(config);
-    if (json.isError()) {
-      // Similar to above, should not return an error because
-      // the agent should still be able to start if the content
-      // of docker config file is not a valid JSON Object.
-      LOG(WARNING) << "Failed to parse docker config '"
-                   << config << "' " << "as a JSON Object: "
-                   << json.error();
-    } else {
-      _flags.docker_config = json.get();
+    // An extra check to make sure an absolute path will not
+    // be parsed as a JSON Object, to avoid confusing warning
+    // log. We can avoid deplicate codes as well.
+    if (!path::absolute(config)) {
+      Try<JSON::Object> json = JSON::parse<JSON::Object>(config);
+      if (json.isError()) {
+        // Similar to above, should not return an error because
+        // the agent should still be able to start if the content
+        // of docker config file is not a valid JSON Object.
+        LOG(WARNING) << "Failed to parse docker config '"
+                     << config << "' " << "as a JSON Object: "
+                     << json.error();
+      } else {
+        _flags.docker_config = json.get();
+      }
     }
   }
 #endif

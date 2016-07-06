@@ -142,11 +142,51 @@ Try<DockerContainerizer*> DockerContainerizer::create(
     return Error("Failed to create container logger: " + logger.error());
   }
 
+  // The content of docker config file as a JSON Object.
+  Option<JSON::Object> dockerConfig;
+
+  if (flags.docker_config.isSome()) {
+    string config = flags.docker_config.get();
+
+    // The agent flag 'docker_config' can only be either an
+    // absolute path or a JSON Object as a string. Otherwise,
+    // it would be neglected.
+    if (path::absolute(config)) {
+      Try<string> read = os::read(config);
+      if (read.isError()) {
+        // Not return an error because the agent should still
+        // be able to start if the path of 'docker_config'
+        // does not exist or invalid.
+        LOG(WARNING) << "Failed to read the docker config file '"
+                     << config << "': " << read.error();
+      } else {
+        config = read.get();
+      }
+    }
+
+    // An extra check to make sure an absolute path will not
+    // be parsed as a JSON Object, to avoid confusing warning
+    // log. We can avoid deplicate codes as well.
+    if (!path::absolute(config)) {
+      Try<JSON::Object> json = JSON::parse<JSON::Object>(config);
+      if (json.isError()) {
+        // Similar to above, should not return an error because
+        // the agent should still be able to start if the content
+        // of docker config file is not a valid JSON Object.
+        LOG(WARNING) << "Failed to parse docker config '"
+                     << config << "' " << "as a JSON Object: "
+                     << json.error();
+      } else {
+        dockerConfig = json.get();
+      }
+    }
+  }
+
   Try<Owned<Docker>> create = Docker::create(
       flags.docker,
       flags.docker_socket,
       true,
-      flags.docker_config);
+      dockerConfig);
 
   if (create.isError()) {
     return Error("Failed to create docker: " + create.error());
