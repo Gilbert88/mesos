@@ -403,6 +403,11 @@ Try<string> LinuxFilesystemIsolatorProcess::script(
             containerConfig.rootfs(),
             volume.container_path());
 
+        // The image volume case.
+        if (volume.has_image()) {
+          target = path::join(target, "rootfs");
+        }
+
         if (os::stat::isfile(source)) {
           // The file volume case.
           Try<Nothing> mkdir = os::mkdir(Path(target).dirname());
@@ -437,6 +442,19 @@ Try<string> LinuxFilesystemIsolatorProcess::script(
           return Error("Absolute container path '" + target + "' "
                        "does not exist");
         }
+
+        if (volume.has_image()) {
+          target = path::join(target, "rootfs");
+
+          // If an image volume is specified, the mount point of
+          // this image volume has to exist, to avoid creating
+          // the rootfs mount point implicitly.
+          if (!os::exists(target)) {
+            return Error(
+                "The image volume rootfs mount point '" +
+                target + "' does not exist");
+          }
+        }
       }
 
       // TODO(jieyu): We need to check that target resolves under
@@ -463,6 +481,12 @@ Try<string> LinuxFilesystemIsolatorProcess::script(
       string mountPoint = path::join(
           containerConfig.directory(),
           volume.container_path());
+
+      // The image volume case.
+      if (volume.has_image()) {
+        target = path::join(target, "rootfs");
+        mountPoint = path::join(mountPoint, "rootfs");
+      }
 
       if (os::stat::isfile(source)) {
         // The file volume case.

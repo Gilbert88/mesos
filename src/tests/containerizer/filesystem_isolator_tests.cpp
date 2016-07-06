@@ -1222,11 +1222,11 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_ImageInVolumeWithoutRootFilesystem)
 
   ExecutorInfo executor = CREATE_EXECUTOR_INFO(
       "test_executor",
-      "test -d rootfs/bin");
+      "test -d test/rootfs/bin");
 
   executor.mutable_container()->CopyFrom(createContainerInfo(
       None(),
-      {createVolumeFromImage("rootfs", "test_image", Volume::RW)}));
+      {createVolumeFromImage("test", "test_image", Volume::RW)}));
 
   string directory = path::join(os::getcwd(), "sandbox");
   ASSERT_SOME(os::mkdir(directory));
@@ -1276,11 +1276,11 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_ImageInVolumeWithRootFilesystem)
 
   ExecutorInfo executor = CREATE_EXECUTOR_INFO(
       "test_executor",
-      "[ ! -d '" + os::getcwd() + "' ] && [ -d rootfs/bin ]");
+      "[ ! -d '" + os::getcwd() + "' ] && [ -d test/rootfs/bin ]");
 
   executor.mutable_container()->CopyFrom(createContainerInfo(
       "test_image_rootfs",
-      {createVolumeFromImage("rootfs", "test_image_volume", Volume::RW)}));
+      {createVolumeFromImage("test", "test_image_volume", Volume::RW)}));
 
   string directory = path::join(os::getcwd(), "sandbox");
   ASSERT_SOME(os::mkdir(directory));
