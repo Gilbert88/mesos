@@ -814,6 +814,7 @@ TEST_F(DockerTest, ROOT_DOCKER_NVIDIA_GPU_DeviceAllow)
       "/mnt/mesos/sandbox",
       resources,
       None(),
+      None(),
       devices);
 
   AWAIT_READY(status);
@@ -870,6 +871,7 @@ TEST_F(DockerTest, ROOT_DOCKER_NVIDIA_GPU_InspectDevices)
       directory.get(),
       "/mnt/mesos/sandbox",
       resources,
+      None(),
       None(),
       devices);
 

@@ -80,6 +80,7 @@ public:
       const string& containerName,
       const string& sandboxDirectory,
       const string& mappedDirectory,
+      const Option<string>& user,
       const Duration& shutdownGracePeriod,
       const string& healthCheckDir,
       const map<string, string>& taskEnvironment)
@@ -92,6 +93,7 @@ public:
       containerName(containerName),
       sandboxDirectory(sandboxDirectory),
       mappedDirectory(mappedDirectory),
+      user(user),
       shutdownGracePeriod(shutdownGracePeriod),
       taskEnvironment(taskEnvironment),
       stop(Nothing()),
@@ -163,10 +165,10 @@ public:
         sandboxDirectory,
         mappedDirectory,
         task.resources() + task.executor().resources(),
+        user,
         taskEnvironment,
         None(), // No extra devices.
-        Subprocess::FD(STDOUT_FILENO),
-        Subprocess::FD(STDERR_FILENO));
+        {Subprocess::FD(STDOUT_FILENO), Subprocess::FD(STDERR_FILENO)});
 
     run->onAny(defer(self(), &Self::reaped, lambda::_1));
 
@@ -565,6 +567,7 @@ private:
   string containerName;
   string sandboxDirectory;
   string mappedDirectory;
+  Option<string> user;
   Duration shutdownGracePeriod;
   map<string, string> taskEnvironment;
 
@@ -586,6 +589,7 @@ public:
       const string& container,
       const string& sandboxDirectory,
       const string& mappedDirectory,
+      const Option<string>& user,
       const Duration& shutdownGracePeriod,
       const string& healthCheckDir,
       const map<string, string>& taskEnvironment)
@@ -595,6 +599,7 @@ public:
         container,
         sandboxDirectory,
         mappedDirectory,
+        user,
         shutdownGracePeriod,
         healthCheckDir,
         taskEnvironment));
@@ -806,6 +811,7 @@ int main(int argc, char** argv)
       flags.container.get(),
       flags.sandbox_directory.get(),
       flags.mapped_directory.get(),
+      flags.user,
       shutdownGracePeriod,
       flags.launcher_dir.get(),
       taskEnvironment);

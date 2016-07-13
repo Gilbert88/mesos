@@ -1484,10 +1484,10 @@ public:
           const std::string&,
           const std::string&,
           const Option<mesos::Resources>&,
+          const Option<std::string>&,
           const Option<std::map<std::string, std::string>>&,
           const Option<std::vector<Device>>&,
-          const process::Subprocess::IO&,
-          const process::Subprocess::IO&));
+          const std::pair<process::Subprocess::IO, process::Subprocess::IO>&));
 
   MOCK_CONST_METHOD2(
       ps,
@@ -1521,10 +1521,11 @@ public:
       const std::string& sandboxDirectory,
       const std::string& mappedDirectory,
       const Option<mesos::Resources>& resources,
+      const Option<std::string>& user,
       const Option<std::map<std::string, std::string>>& env,
       const Option<std::vector<Device>>& devices,
-      const process::Subprocess::IO& stdout,
-      const process::Subprocess::IO& stderr) const
+      const std::pair<
+          process::Subprocess::IO, process::Subprocess::IO>& _std) const
   {
     return Docker::run(
         containerInfo,
@@ -1533,10 +1534,10 @@ public:
         sandboxDirectory,
         mappedDirectory,
         resources,
+        user,
         env,
         devices,
-        stdout,
-        stderr);
+        _std);
   }
 
   process::Future<std::list<Docker::Container>> _ps(

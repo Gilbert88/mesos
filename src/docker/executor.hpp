@@ -57,6 +57,10 @@ struct Flags : public mesos::internal::logging::Flags
         "mapped_directory",
         "The sandbox directory path that is mapped in the docker container.\n");
 
+    add(&user,
+        "user",
+        "The user that the docker container should be run as.");
+
     // TODO(alexr): Remove this after the deprecation cycle (started in 1.0).
     add(&stop_timeout,
         "stop_timeout",
@@ -81,6 +85,7 @@ struct Flags : public mesos::internal::logging::Flags
   Option<std::string> docker_socket;
   Option<std::string> sandbox_directory;
   Option<std::string> mapped_directory;
+  Option<std::string> user;
   Option<std::string> launcher_dir;
   Option<std::string> task_environment;
 

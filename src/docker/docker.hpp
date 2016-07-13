@@ -149,12 +149,12 @@ public:
       const std::string& sandboxDirectory,
       const std::string& mappedDirectory,
       const Option<mesos::Resources>& resources = None(),
+      const Option<std::string>& user = None(),
       const Option<std::map<std::string, std::string>>& env = None(),
       const Option<std::vector<Device>>& devices = None(),
-      const process::Subprocess::IO& _stdout =
-        process::Subprocess::FD(STDOUT_FILENO),
-      const process::Subprocess::IO& _stderr =
-        process::Subprocess::FD(STDERR_FILENO))
+      const std::pair<process::Subprocess::IO, process::Subprocess::IO>&
+        _std = {process::Subprocess::FD(STDOUT_FILENO),
+                process::Subprocess::FD(STDERR_FILENO)})
     const;
 
   // Returns the current docker version.

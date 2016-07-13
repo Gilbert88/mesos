@@ -55,6 +55,7 @@ using namespace process;
 
 using std::list;
 using std::map;
+using std::pair;
 using std::string;
 using std::vector;
 
@@ -493,10 +494,10 @@ Future<Option<int>> Docker::run(
     const string& sandboxDirectory,
     const string& mappedDirectory,
     const Option<Resources>& resources,
+    const Option<string>& user,
     const Option<map<string, string>>& env,
     const Option<vector<Device>>& devices,
-    const process::Subprocess::IO& _stdout,
-    const process::Subprocess::IO& _stderr) const
+    const pair<process::Subprocess::IO, process::Subprocess::IO>& _std) const
 {
   if (!containerInfo.has_docker()) {
     return Failure("No docker info found in container info");
@@ -554,6 +555,10 @@ Future<Option<int>> Docker::run(
   argv.push_back("MESOS_SANDBOX=" + mappedDirectory);
   argv.push_back("-e");
   argv.push_back("MESOS_CONTAINER_NAME=" + name);
+
+  if (user.isSome()) {
+    argv.push_back("--user=" + user.get());
+  }
 
   Option<string> volumeDriver;
   foreach (const Volume& volume, containerInfo.volumes()) {
@@ -818,8 +823,8 @@ Future<Option<int>> Docker::run(
       path,
       argv,
       Subprocess::PATH("/dev/null"),
-      _stdout,
-      _stderr,
+      _std.first,
+      _std.second,
       NO_SETSID,
       None(),
       environment);

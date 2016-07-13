@@ -213,6 +213,7 @@ docker::Flags dockerFlags(
   const Flags& flags,
   const string& name,
   const string& directory,
+  const Option<string>& user,
   const Option<map<string, string>>& taskEnvironment)
 {
   docker::Flags dockerFlags;
@@ -220,6 +221,7 @@ docker::Flags dockerFlags(
   dockerFlags.docker = flags.docker;
   dockerFlags.sandbox_directory = directory;
   dockerFlags.mapped_directory = flags.sandbox_directory;
+  dockerFlags.user = user;
   dockerFlags.docker_socket = flags.docker_socket;
   dockerFlags.launcher_dir = flags.launcher_dir;
 
@@ -336,6 +338,7 @@ DockerContainerizerProcess::Container::create(
       flags,
       Container::name(slaveId, stringify(id)),
       containerWorkdir,
+      user,
       None());
 
     // Override the command with the docker command executor.
@@ -1228,10 +1231,10 @@ Future<Docker::Container> DockerContainerizerProcess::launchExecutorContainer(
         container->directory,
         flags.sandbox_directory,
         container->resources,
+        container->user,
         container->environment,
         None(), // No extra devices.
-        subprocessInfo.out,
-        subprocessInfo.err);
+        {subprocessInfo.out, subprocessInfo.err});
 
     // It's possible that 'run' terminates before we're able to
     // obtain an 'inspect' result. It's also possible that 'run'
@@ -1345,6 +1348,7 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
         flags,
         container->name(),
         container->directory,
+        container->user,
         container->taskEnvironment);
 
     VLOG(1) << "Launching 'mesos-docker-executor' with flags '"
