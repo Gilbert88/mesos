@@ -1889,6 +1889,11 @@ persistent_volume_framework_SOURCES = examples/persistent_volume_framework.cpp
 persistent_volume_framework_CPPFLAGS = $(MESOS_CPPFLAGS)
 persistent_volume_framework_LDADD = libmesos.la $(LDADD)
 
+check_PROGRAMS += unified-containerizer-framework
+unified_containerizer_framework_SOURCES = examples/unified_containerizer_framework.cpp
+unified_containerizer_framework_CPPFLAGS = $(MESOS_CPPFLAGS)
+unified_containerizer_framework_LDADD = libmesos.la $(LDADD)
+
 if OS_LINUX
 check_PROGRAMS += setns-test-helper
 setns_test_helper_SOURCES =					\
