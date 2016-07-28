@@ -220,6 +220,9 @@ int MesosContainerizerLaunch::execute()
       Try<Subprocess> s = Error("Not launched");
 
       if (parse->shell()) {
+        cout << "Executing pre-exec shell command '"
+             << parse->value() << "' as a subprocess" << endl;
+
         s = subprocess(parse->value(), Subprocess::PATH("/dev/null"));
       } else {
         // Launch non-shell command as a subprocess to avoid
@@ -228,6 +231,10 @@ int MesosContainerizerLaunch::execute()
         foreach (const string& arg, parse->arguments()) {
           args.push_back(arg);
         }
+
+        cout << "Executing pre-exec non-shell command '"
+             << parse->value() << "' with arguments "
+             << stringify(args) << " as a subprocess" << endl;
 
         s = subprocess(parse->value(), args, Subprocess::PATH("/dev/null"));
       }
