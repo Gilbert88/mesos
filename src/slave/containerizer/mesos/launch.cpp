@@ -220,7 +220,7 @@ int MesosContainerizerLaunch::execute()
       Try<Subprocess> s = Error("Not launched");
 
       if (parse->shell()) {
-        cout << "Executing pre-exec command " << vlue << endl;
+        cout << "Executing pre-exec command " << value << endl;
 
         s = subprocess(parse->value(), Subprocess::PATH("/dev/null"));
       } else {
