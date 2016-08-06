@@ -141,7 +141,7 @@ Future<Nothing> CopyBackendProcess::_provision(
   // slash so we only copy the content but not the folder.
   vector<string> args{"cp", "-a", layer, rootfs};
 #else
-  vector<string> args{"cp", "-afT", layer, rootfs};
+  vector<string> args{"cp", "-r", layer, rootfs};
 #endif // __APPLE__ || __FreeBSD__
 
   Try<Subprocess> s = subprocess(
