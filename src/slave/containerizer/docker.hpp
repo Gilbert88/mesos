@@ -302,6 +302,7 @@ private:
         id(id),
         task(taskInfo),
         executor(executorInfo),
+        environment(_environment),
         directory(directory),
         user(user),
         slaveId(slaveId),
@@ -309,7 +310,6 @@ private:
         checkpoint(checkpoint),
         symlinked(symlinked),
         flags(flags),
-        environment(_environment),
         launchesExecutorContainer(launchesExecutorContainer)
     {
       // NOTE: The task's resources are included in the executor's
