@@ -296,7 +296,7 @@ private:
               const Flags& flags,
               const Option<CommandInfo>& _command,
               const Option<ContainerInfo>& _container,
-              const Option<std::map<std::string, std::string>>& _environment,
+              const std::map<std::string, std::string>& _environment,
               bool launchesExecutorContainer)
       : state(FETCHING),
         id(id),
@@ -309,6 +309,7 @@ private:
         checkpoint(checkpoint),
         symlinked(symlinked),
         flags(flags),
+        environment(_environment),
         launchesExecutorContainer(launchesExecutorContainer)
     {
       // NOTE: The task's resources are included in the executor's
@@ -341,18 +342,6 @@ private:
         container = task.get().container();
       } else {
         container = executor.container();
-      }
-
-      if (_environment.isSome()) {
-        environment = _environment.get();
-      } else {
-        environment = executorEnvironment(
-            executor,
-            directory,
-            slaveId,
-            slavePid,
-            checkpoint,
-            flags);
       }
     }
 
