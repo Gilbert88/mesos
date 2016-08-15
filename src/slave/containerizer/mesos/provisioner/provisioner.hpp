@@ -32,6 +32,7 @@
 
 #include <process/future.hpp>
 #include <process/owned.hpp>
+#include <process/shared.hpp>
 
 #include <process/metrics/counter.hpp>
 #include <process/metrics/metrics.hpp>
@@ -69,6 +70,13 @@ struct ProvisionInfo
 class Provisioner
 {
 public:
+  static void setDefaultProvisioner(
+      const process::Shared<Provisioner>& provisioner);
+
+  static void unsetDefaultProvisioner();
+
+  static process::Shared<Provisioner> getDefaultProvisioner();
+
   // Create the provisioner based on the specified flags.
   static Try<process::Owned<Provisioner>> create(const Flags& flags);
 
@@ -85,19 +93,19 @@ public:
   // directories) to not leak anything.
   virtual process::Future<Nothing> recover(
       const std::list<mesos::slave::ContainerState>& states,
-      const hashset<ContainerID>& orphans);
+      const hashset<ContainerID>& orphans) const;
 
   // Provision a root filesystem for the container using the specified
   // image and return the absolute path to the root filesystem.
   virtual process::Future<ProvisionInfo> provision(
       const ContainerID& containerId,
-      const Image& image);
+      const Image& image) const;
 
   // Destroy a previously provisioned root filesystem. Assumes that
   // all references (e.g., mounts, open files) to the provisioned
   // filesystem have been removed. Return false if there is no
   // provisioned root filesystem for the given container.
-  virtual process::Future<bool> destroy(const ContainerID& containerId);
+  virtual process::Future<bool> destroy(const ContainerID& containerId) const;
 
 protected:
   Provisioner() {} // For creating mock object.
@@ -107,6 +115,8 @@ private:
   Provisioner& operator=(const Provisioner&) = delete; // Not assignable.
 
   process::Owned<ProvisionerProcess> process;
+
+  static process::Shared<Provisioner>* _provisioner;
 };
 
 

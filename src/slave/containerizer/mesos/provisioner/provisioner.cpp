@@ -55,6 +55,31 @@ namespace mesos {
 namespace internal {
 namespace slave {
 
+// Global static pointer used to ensure a single instance
+// of the provisioner class.
+process::Shared<Provisioner>* Provisioner::_provisioner = nullptr;
+
+
+void Provisioner::setDefaultProvisioner(
+    const process::Shared<Provisioner>& provisioner)
+{
+  _provisioner = new process::Shared<Provisioner>(provisioner);
+}
+
+
+void Provisioner::unsetDefaultProvisioner()
+{
+  delete _provisioner;
+  _provisioner = nullptr;
+}
+
+
+process::Shared<Provisioner> Provisioner::getDefaultProvisioner()
+{
+  return *_provisioner;
+}
+
+
 Try<Owned<Provisioner>> Provisioner::create(const Flags& flags)
 {
   string _rootDir = slave::paths::getProvisionerDir(flags.work_dir);
@@ -118,7 +143,7 @@ Provisioner::~Provisioner()
 
 Future<Nothing> Provisioner::recover(
     const list<ContainerState>& states,
-    const hashset<ContainerID>& orphans)
+    const hashset<ContainerID>& orphans) const
 {
   return dispatch(
       CHECK_NOTNULL(process.get()),
@@ -130,7 +155,7 @@ Future<Nothing> Provisioner::recover(
 
 Future<ProvisionInfo> Provisioner::provision(
     const ContainerID& containerId,
-    const Image& image)
+    const Image& image) const
 {
   return dispatch(
       CHECK_NOTNULL(process.get()),
@@ -140,7 +165,7 @@ Future<ProvisionInfo> Provisioner::provision(
 }
 
 
-Future<bool> Provisioner::destroy(const ContainerID& containerId)
+Future<bool> Provisioner::destroy(const ContainerID& containerId) const
 {
   return dispatch(
       CHECK_NOTNULL(process.get()),
