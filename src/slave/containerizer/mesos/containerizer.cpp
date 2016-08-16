@@ -109,6 +109,10 @@
 #include "slave/containerizer/mesos/isolators/network/port_mapping.hpp"
 #endif
 
+#ifdef __linux__
+#include "slave/containerizer/mesos/isolators/volume/image.hpp"
+#endif
+
 #include "slave/containerizer/mesos/constants.hpp"
 #include "slave/containerizer/mesos/containerizer.hpp"
 #include "slave/containerizer/mesos/launch.hpp"
@@ -311,6 +315,7 @@ Try<MesosContainerizer*> MesosContainerizer::create(
     {"appc/runtime", &AppcRuntimeIsolatorProcess::create},
     {"docker/runtime", &DockerRuntimeIsolatorProcess::create},
     {"docker/volume", &DockerVolumeIsolatorProcess::create},
+    {"volume/image", &VolumeImageIsolatorProcess::create},
 
     {"gpu/nvidia",
       [&nvidia] (const Flags& flags) -> Try<Isolator*> {
@@ -388,15 +393,18 @@ MesosContainerizer::MesosContainerizer(
     const Owned<Launcher>& launcher,
     const Owned<Provisioner>& provisioner,
     const vector<Owned<Isolator>>& isolators)
-  : process(new MesosContainerizerProcess(
+{
+  Owned<Provisioner> _provisioner = provisioner;
+
+  process = Owned<MesosContainerizerProcess>(new MesosContainerizerProcess(
       flags,
       local,
       fetcher,
       logger,
       launcher,
-      provisioner,
-      isolators))
-{
+      _provisioner.share(),
+      isolators));
+
   spawn(process.get());
 }
 

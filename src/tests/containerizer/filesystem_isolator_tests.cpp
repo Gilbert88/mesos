@@ -41,6 +41,9 @@
 #include "slave/containerizer/mesos/linux_launcher.hpp"
 
 #include "slave/containerizer/mesos/isolators/filesystem/linux.hpp"
+
+#include "slave/containerizer/mesos/isolators/volume/image.hpp"
+
 #include "slave/containerizer/mesos/provisioner/backend.hpp"
 #include "slave/containerizer/mesos/provisioner/paths.hpp"
 #include "slave/containerizer/mesos/provisioner/backends/copy.hpp"
@@ -73,6 +76,7 @@ using mesos::internal::slave::Provisioner;
 using mesos::internal::slave::ProvisionerProcess;
 using mesos::internal::slave::Slave;
 using mesos::internal::slave::Store;
+using mesos::internal::slave::VolumeImageIsolatorProcess;
 
 using mesos::master::detector::MasterDetector;
 
@@ -146,12 +150,22 @@ protected:
 
     Owned<Provisioner> provisioner(new Provisioner(provisionerProcess));
 
-    Try<Isolator*> isolator = LinuxFilesystemIsolatorProcess::create(flags);
+    Try<Isolator*> linuxIsolator =
+      LinuxFilesystemIsolatorProcess::create(flags);
 
-    if (isolator.isError()) {
+    if (linuxIsolator.isError()) {
       return Error(
           "Failed to create LinuxFilesystemIsolatorProcess: " +
-          isolator.error());
+          linuxIsolator.error());
+    }
+
+    Try<Isolator*> imageIsolator =
+      VolumeImageIsolatorProcess::create(flags);
+
+    if (imageIsolator.isError()) {
+      return Error(
+          "Failed to create VolumeImageIsolatorProcess: " +
+          imageIsolator.error());
     }
 
     Try<Launcher*> launcher = LinuxLauncher::create(flags);
@@ -176,7 +190,8 @@ protected:
             Owned<ContainerLogger>(logger.get()),
             Owned<Launcher>(launcher.get()),
             provisioner,
-            {Owned<Isolator>(isolator.get())}));
+            {Owned<Isolator>(linuxIsolator.get()),
+             Owned<Isolator>(imageIsolator.get())}));
   }
 
   ContainerInfo createContainerInfo(

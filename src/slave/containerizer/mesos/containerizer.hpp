@@ -122,7 +122,7 @@ public:
       Fetcher* _fetcher,
       const process::Owned<mesos::slave::ContainerLogger>& _logger,
       const process::Owned<Launcher>& _launcher,
-      const process::Owned<Provisioner>& _provisioner,
+      const process::Shared<Provisioner>& _provisioner,
       const std::vector<process::Owned<mesos::slave::Isolator>>& _isolators)
     : ProcessBase(process::ID::generate("mesos-containerizer")),
       flags(_flags),
@@ -131,9 +131,15 @@ public:
       logger(_logger),
       launcher(_launcher),
       provisioner(_provisioner),
-      isolators(_isolators) {}
+      isolators(_isolators)
+  {
+    Provisioner::setDefaultProvisioner(provisioner);
+  }
 
-  virtual ~MesosContainerizerProcess() {}
+  virtual ~MesosContainerizerProcess()
+  {
+    Provisioner::unsetDefaultProvisioner();
+  }
 
   virtual process::Future<Nothing> recover(
       const Option<state::SlaveState>& state);
@@ -277,7 +283,7 @@ private:
   Fetcher* fetcher;
   process::Owned<mesos::slave::ContainerLogger> logger;
   const process::Owned<Launcher> launcher;
-  const process::Owned<Provisioner> provisioner;
+  const process::Shared<Provisioner> provisioner;
   const std::vector<process::Owned<mesos::slave::Isolator>> isolators;
 
   enum State
