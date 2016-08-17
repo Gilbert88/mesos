@@ -722,12 +722,14 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_RecoverOrphanedPersistentVolume)
 
   // Wipe the slave meta directory so that the slave will treat the
   // above running task as an orphan.
-  ASSERT_SOME(os::rmdir(slave::paths::getMetaRootDir(flags.work_dir)));
+  // ASSERT_SOME(os::rmdir(slave::paths::getMetaRootDir(flags.work_dir)));
 
   // Recreate the containerizer using the same helper as above.
   containerizer = createContainerizer(
       flags,
       {{"test_image", path::join(os::getcwd(), "test_image")}});
+
+  ASSERT_SOME(containerizer);
 
   slave = StartSlave(detector.get(), containerizer.get().get(), flags);
   ASSERT_SOME(slave);
