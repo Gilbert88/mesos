@@ -388,11 +388,11 @@ protected:
 
           commandInfo->set_shell(true);
           commandInfo->set_value(command.get());
-          commandInfo->set_user("gitlab_ci_runner");
+          commandInfo->set_user("nobody");
         } else {
           // TODO(gilbert): Treat 'command' as executable value and arguments.
           commandInfo->set_shell(false);
-          commandInfo->set_user("gitlab_ci_runner");
+          commandInfo->set_user("nobody");
         }
 
         if (environment.isSome()) {
