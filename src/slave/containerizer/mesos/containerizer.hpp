@@ -22,6 +22,7 @@
 
 #include <process/id.hpp>
 #include <process/sequence.hpp>
+#include <process/shared.hpp>
 
 #include <process/metrics/counter.hpp>
 
