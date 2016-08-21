@@ -41,6 +41,9 @@
 #include "slave/containerizer/mesos/linux_launcher.hpp"
 
 #include "slave/containerizer/mesos/isolators/filesystem/linux.hpp"
+
+#include "slave/containerizer/mesos/isolators/volume/image.hpp"
+
 #include "slave/containerizer/mesos/provisioner/backend.hpp"
 #include "slave/containerizer/mesos/provisioner/paths.hpp"
 #include "slave/containerizer/mesos/provisioner/backends/copy.hpp"
