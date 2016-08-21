@@ -32,7 +32,9 @@ namespace slave {
 class VolumeImageIsolatorProcess : public MesosIsolatorProcess
 {
 public:
-  static Try<mesos::slave::Isolator*> create(const Flags& flags);
+  static Try<mesos::slave::Isolator*> create(
+      const Flags& flags,
+      const Shared<Provisioner>& provisioner);
 
   virtual ~VolumeImageIsolatorProcess();
 
