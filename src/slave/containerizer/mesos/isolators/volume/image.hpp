@@ -47,6 +47,7 @@ private:
       const std::list<process::Future<ProvisionInfo>>& futures);
 
   const Flags flags;
+  const process::Shared<Provisioner> provisioner;
 };
 
 } // namespace slave {

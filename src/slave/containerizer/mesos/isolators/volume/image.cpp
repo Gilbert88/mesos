@@ -55,18 +55,22 @@ namespace internal {
 namespace slave {
 
 VolumeImageIsolatorProcess::VolumeImageIsolatorProcess(
-    const Flags& _flags)
+    const Flags& _flags
+    const Shared<Provisioner>& _provisioner)
   : ProcessBase(process::ID::generate("volume-image-isolator")),
-    flags(_flags) {}
+    flags(_flags),
+    provisioner(_provisioner) {}
 
 
 VolumeImageIsolatorProcess::~VolumeImageIsolatorProcess() {}
 
 
-Try<Isolator*> VolumeImageIsolatorProcess::create(const Flags& flags)
+Try<Isolator*> VolumeImageIsolatorProcess::create(
+    const Flags& flags,
+    const Shared<Provisioner>& provisioner)
 {
   process::Owned<MesosIsolatorProcess> process(
-      new VolumeImageIsolatorProcess(flags));
+      new VolumeImageIsolatorProcess(flags, provisioner));
 
   return new MesosIsolator(process);
 }
@@ -85,8 +89,6 @@ Future<Option<ContainerLaunchInfo>> VolumeImageIsolatorProcess::prepare(
   if (executorInfo.container().type() != ContainerInfo::MESOS) {
     return Failure("Can only prepare image volumes for a MESOS container");
   }
-
-  Shared<Provisioner> provisioner = Provisioner::getDefaultProvisioner();
 
   vector<string> targets;
   list<Future<ProvisionInfo>> futures;
