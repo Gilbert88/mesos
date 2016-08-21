@@ -374,6 +374,11 @@ Try<vector<CommandInfo>> LinuxFilesystemIsolatorProcess::getPreExecCommands(
       continue;
     }
 
+    if (volume.has_image()) {
+      VLOG(1) << "Image volumes are handled by 'volume/image' isolator";
+      continue;
+    }
+
     if (!volume.has_host_path()) {
       return Error("A volume misses 'host_path'");
     }
