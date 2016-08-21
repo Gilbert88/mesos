@@ -28,7 +28,7 @@
 
 #include <process/future.hpp>
 #include <process/owned.hpp>
-#include <Process/shared.hpp>
+#include <process/shared.hpp>
 
 #include <stout/net.hpp>
 #include <stout/strings.hpp>
