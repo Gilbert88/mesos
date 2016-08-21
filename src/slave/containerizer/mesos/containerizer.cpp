@@ -109,6 +109,10 @@
 #include "slave/containerizer/mesos/isolators/network/port_mapping.hpp"
 #endif
 
+#ifdef __linux__
+#include "slave/containerizer/mesos/isolators/volume/image.hpp"
+#endif
+
 #include "slave/containerizer/mesos/constants.hpp"
 #include "slave/containerizer/mesos/containerizer.hpp"
 #include "slave/containerizer/mesos/launch.hpp"
@@ -317,7 +321,7 @@ Try<MesosContainerizer*> MesosContainerizer::create(
     {"volume/image",
       [&provisioner] (const Flags& flags) -> Try<Isolator*> {
         return VolumeImageIsolatorProcess::create(flags, provisioner);
-      }}
+      }},
 
     {"gpu/nvidia",
       [&nvidia] (const Flags& flags) -> Try<Isolator*> {
