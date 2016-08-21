@@ -28,6 +28,7 @@
 
 #include <process/future.hpp>
 #include <process/owned.hpp>
+#include <Process/shared.hpp>
 
 #include <stout/net.hpp>
 #include <stout/strings.hpp>
@@ -169,7 +170,7 @@ public:
         fetcher,
         Owned<ContainerLogger>(logger.get()),
         Owned<Launcher>(launcher.get()),
-        provisioner.get(),
+        provisioner.get().share(),
         isolators));
   }
 
@@ -517,7 +518,7 @@ public:
       Fetcher* fetcher,
       const Owned<ContainerLogger>& logger,
       const Owned<Launcher>& launcher,
-      const Owned<Provisioner>& provisioner,
+      const Shared<Provisioner>& provisioner,
       const vector<Owned<Isolator>>& isolators)
     : MesosContainerizerProcess(
           flags,
@@ -770,16 +771,16 @@ class MockProvisioner : public mesos::internal::slave::Provisioner
 {
 public:
   MockProvisioner() {}
-  MOCK_METHOD2(recover,
+  MOCK_CONST_METHOD2(recover,
                Future<Nothing>(const list<ContainerState>&,
                                const hashset<ContainerID>&));
 
-  MOCK_METHOD2(provision,
+  MOCK_CONST_METHOD2(provision,
                Future<mesos::internal::slave::ProvisionInfo>(
                    const ContainerID&,
                    const Image&));
 
-  MOCK_METHOD1(destroy, Future<bool>(const ContainerID&));
+  MOCK_CONST_METHOD1(destroy, Future<bool>(const ContainerID&));
 };
 
 
@@ -819,7 +820,7 @@ TEST_F(MesosContainerizerProvisionerTest, ProvisionFailed)
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
       Owned<Launcher>(launcher),
-      Owned<Provisioner>(provisioner),
+      Shared<Provisioner>(provisioner),
       vector<Owned<Isolator>>());
 
   MesosContainerizer containerizer((Owned<MesosContainerizerProcess>(process)));
@@ -914,7 +915,7 @@ TEST_F(MesosContainerizerProvisionerTest, DestroyWhileProvisioning)
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
       Owned<Launcher>(launcher),
-      Owned<Provisioner>(provisioner),
+      Shared<Provisioner>(provisioner),
       vector<Owned<Isolator>>());
 
   MesosContainerizer containerizer((Owned<MesosContainerizerProcess>(process)));
@@ -1011,7 +1012,7 @@ TEST_F(MesosContainerizerProvisionerTest, DestroyWhileProvisioningVolumeImage)
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
       Owned<Launcher>(launcher),
-      Owned<Provisioner>(provisioner),
+      Shared<Provisioner>(provisioner),
       vector<Owned<Isolator>>());
 
   MesosContainerizer containerizer((Owned<MesosContainerizerProcess>(process)));
@@ -1117,7 +1118,7 @@ TEST_F(MesosContainerizerProvisionerTest, IsolatorCleanupBeforePrepare)
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
       Owned<Launcher>(launcher),
-      Owned<Provisioner>(provisioner),
+      Shared<Provisioner>(provisioner),
       {Owned<Isolator>(isolator)});
 
   MesosContainerizer containerizer((Owned<MesosContainerizerProcess>(process)));
