@@ -144,14 +144,25 @@ protected:
         stores,
         backends));
 
-    Owned<Provisioner> provisioner(new Provisioner(provisionerProcess));
+    Owned<Provisioner> _provisioner(new Provisioner(provisionerProcess));
+    Shared<Provisioner> provisioner = _provisioner.share();
 
-    Try<Isolator*> isolator = LinuxFilesystemIsolatorProcess::create(flags);
+    Try<Isolator*> linuxIsolator =
+      LinuxFilesystemIsolatorProcess::create(flags);
 
-    if (isolator.isError()) {
+    if (linuxIsolator.isError()) {
       return Error(
           "Failed to create LinuxFilesystemIsolatorProcess: " +
-          isolator.error());
+          linuxIsolator.error());
+    }
+
+    Try<Isolator*> imageIsolator =
+      VolumeImageIsolatorProcess::create(flags, provisioner);
+
+    if (imageIsolator.isError()) {
+      return Error(
+          "Failed to create VolumeImageIsolatorProcess: " +
+          imageIsolator.error());
     }
 
     Try<Launcher*> launcher = LinuxLauncher::create(flags);
@@ -176,7 +187,8 @@ protected:
             Owned<ContainerLogger>(logger.get()),
             Owned<Launcher>(launcher.get()),
             provisioner,
-            {Owned<Isolator>(isolator.get())}));
+            {Owned<Isolator>(linuxIsolator.get()),
+             Owned<Isolator>(imageIsolator.get())}));
   }
 
   ContainerInfo createContainerInfo(
