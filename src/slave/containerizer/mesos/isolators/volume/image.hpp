@@ -41,7 +41,9 @@ public:
       const mesos::slave::ContainerConfig& containerConfig);
 
 private:
-  VolumeImageIsolatorProcess(const Flags& flags);
+  VolumeImageIsolatorProcess(
+      const Flags& flags,
+      const Shared<Provisioner>& provisioner);
 
   process::Future<Option<mesos::slave::ContainerLaunchInfo>> _prepare(
       const ContainerID& containerId,
