@@ -43,7 +43,7 @@ public:
 private:
   VolumeImageIsolatorProcess(
       const Flags& flags,
-      const Shared<Provisioner>& provisioner);
+      const process::Shared<Provisioner>& provisioner);
 
   process::Future<Option<mesos::slave::ContainerLaunchInfo>> _prepare(
       const ContainerID& containerId,
