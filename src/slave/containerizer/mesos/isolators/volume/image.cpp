@@ -55,7 +55,7 @@ namespace internal {
 namespace slave {
 
 VolumeImageIsolatorProcess::VolumeImageIsolatorProcess(
-    const Flags& _flags
+    const Flags& _flags,
     const Shared<Provisioner>& _provisioner)
   : ProcessBase(process::ID::generate("volume-image-isolator")),
     flags(_flags),
