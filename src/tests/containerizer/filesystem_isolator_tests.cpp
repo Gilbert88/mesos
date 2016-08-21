@@ -76,6 +76,7 @@ using mesos::internal::slave::Provisioner;
 using mesos::internal::slave::ProvisionerProcess;
 using mesos::internal::slave::Slave;
 using mesos::internal::slave::Store;
+using mesos::internal::slave::VolumeImageIsolatorProcess;
 
 using mesos::master::detector::MasterDetector;
 
