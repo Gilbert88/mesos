@@ -26,10 +26,7 @@
 
 #include <stout/error.hpp>
 #include <stout/foreach.hpp>
-#include <stout/stringify.hpp>
 #include <stout/strings.hpp>
-
-#include "slave/flags.hpp"
 
 #include "slave/containerizer/mesos/isolators/volume/image.hpp"
 
@@ -147,7 +144,7 @@ Future<Option<ContainerLaunchInfo>> VolumeImageIsolatorProcess::prepare(
       // container has rootfs defined. The bind mount of the sandbox
       // will hide what's inside 'target'. So we should always create
       // the mount point in 'directory'.
-      string mountPoint = path::join(
+      const string mountPoint = path::join(
           containerConfig.directory(),
           volume.container_path());
 

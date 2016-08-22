@@ -17,7 +17,13 @@
 #ifndef __VOLUME_IMAGE_ISOLATOR_HPP__
 #define __VOLUME_IMAGE_ISOLATOR_HPP__
 
+#include <list>
+#include <string>
+#include <vector>
+
 #include <process/shared.hpp>
+
+#include "slave/flags.hpp"
 
 #include "slave/containerizer/mesos/isolator.hpp"
 
