@@ -362,7 +362,7 @@ Try<MesosContainerizer*> MesosContainerizer::create(
   // Always enable volume/image on linux to ensure backwards
   // compatibility.
   if (isolations.count("volume/image") == 0) {
-    tokens.push_back(tokens.begin(), "volume/image");
+    tokens.push_back("volume/image");
   }
 #endif // __linux__
 
