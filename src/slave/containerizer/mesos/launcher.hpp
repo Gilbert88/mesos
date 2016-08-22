@@ -87,14 +87,38 @@ public:
       const ContainerID& containerId) = 0;
 
 protected:
-  // Build a path based on a hierarchy of containers whose leaf container
-  // is `containerId`. The `prefix` parameter is prepended to the
-  // `containerId` as we build the path up the tree (e.g. passing a
-  // `containersId` with a value of 3 and a prefix of `foo` would
-  // result in .../foo/1/foo/2/foo/3).
-  std::string buildPathFromHierarchy(
+  // Returns a path representation of a ContainerID that can be used
+  // for creating cgroups or writing to the filesystem. A ContainerID
+  // can represent a nested container (i.e, it has a parent
+  // ContainerID) and the path representation includes all of the
+  // parents as directories in the path. The `prefix` parameter is
+  // prepended to each ContainerID as we build the path. For example,
+  // given two containers, one with ID 'a9dd' and one nested within
+  // 'a9dd' with ID '4e3a' and a prefix of 'foo' we'd get:
+  // 'foo/a9dd/foo/4e3a').
+  //
+  // TODO(benh): Put this on 'Containerizer' instead?
+  static std::string buildPathForContainer(
       const ContainerID& containerId,
-      const string& prefix);
+      const std::string& prefix = "");
+
+  // The launchers use the runtime directory (flag 'runtime_dir') to
+  // checkpoint things for each container, e.g., the PID of the first
+  // process executed within a container (i.e., the "PID 1") gets
+  // checkpoitned in a file called 'pid'. The following helper
+  // function constructs the path for a container given the 'flags'
+  // that was used as well as the container 'id'. For example, given
+  // two containers, one with ID 'a9dd' and one nested within 'a9dd'
+  // with ID '4e3a' and with the flag 'runtime_dir' set to
+  // '/var/run/mesos' and the flag 'launcher' set to 'linux' you would
+  // have a directory structure that looks like:
+  //
+  // /var/run/mesos/launcher/linux/containers/a9dd
+  // /var/run/mesos/launcher/linux/containers/a9dd/pid
+  // /var/run/mesos/launcher/linux/containers/a9dd/containers/4e3a/pid
+  static std::string getRuntimePathForContainer(
+      const Flags& flags,
+      const ContainerID& id);
 };
 
 

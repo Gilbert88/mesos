@@ -47,29 +47,30 @@ namespace mesos {
 namespace internal {
 namespace slave {
 
-constexpr char POSIX_LAUNCHER_NAME[] = "posix";
-
-
-string Launcher::buildPathFromHierarchy(
-    const ContainerID& _containerId,
+string Launcher::buildPathForContainer(
+    const ContainerID& containerId,
     const string& prefix)
 {
-  // Build the path in reverse order
-  // by following the parent hierarchy.
-  ContainerID containerId = _containerId;
-
-  string path = path::join(prefix, containerId.value());
-
-  while (containerId.has_parent()) {
-    containerId = containerId.parent();
-
-    path = path::join(
+  if (!containerId.has_parent()) {
+    return path::join(prefix, containerId.value());
+  } else {
+    return path::join(
+        buildPathForContainer(containerId.parent(), prefix),
         prefix,
-        containerId.value(),
-        path);
+        containerId.value());
   }
+}
 
-  return path;
+
+string Launcher::getRuntimePathForContainer(
+    const Flags& flags,
+    const ContainerID& containerId)
+{
+  return path::join(
+      flags.runtime_dir,
+      "launcher",
+      flags.launcher,
+      buildPathForContainer(containerId, "containers"));
 }
 
 
@@ -212,10 +213,7 @@ string PosixLauncher::getExitStatusCheckpointPath(
     const ContainerID& containerId)
 {
   return path::join(
-      flags.runtime_dir,
-      "launcher",
-      POSIX_LAUNCHER_NAME,
-      buildPathFromHierarchy(containerId, "containers"),
+      getRuntimePathForContainer(flags, containerId),
       "exit_status");
 }
 

@@ -69,6 +69,8 @@ private:
   const std::string freezerHierarchy;
   const Option<std::string> systemdHierarchy;
 
+  // Helper for determining the cgroup for a container (i.e., the
+  // "path" in a cgroup subsystem).
   std::string cgroup(const ContainerID& containerId);
 
   // The 'pid' is the process id of the child process and also the
