@@ -359,9 +359,10 @@ Try<MesosContainerizer*> MesosContainerizer::create(
   // created after all volume isolators, so that the nvidia
   // gpu libraries '/usr/local/nvidia' will be overwritten.
   //
-  // Always enable volume/image on linux to ensure backwards
-  // compatibility.
-  if (isolations.count("volume/image") == 0) {
+  // Always enable 'volume/image' on linux if 'filesystem/linux'
+  // is enabled, to ensure backwards compatibility.
+  if (isolations.count("filesystem/linux") != 0 &&
+      isolations.count("volume/image") == 0) {
     tokens.push_back("volume/image");
   }
 #endif // __linux__
