@@ -76,6 +76,22 @@
 #define CLONE_NEWCGROUP 0x02000000
 #endif
 
+// Define a 'setns' for compilation environments that don't already
+// have one.
+inline int setns(int fd, int nstype)
+{
+#ifdef SYS_setns
+  return ::syscall(SYS_setns, fd, nstype);
+#elif __x86_64__
+  // A workaround for those hosts that have an old glibc (older than
+  // 2.14) but have a new kernel. The magic number '308' here is the
+  // syscall number for 'setns' on x86_64 architecture.
+  return ::syscall(308, fd, nstype);
+#else
+#error "setns is not available"
+#endif
+}
+
 namespace ns {
 
 // Returns all the supported namespaces by the kernel.
@@ -155,18 +171,7 @@ inline Try<Nothing> setns(const std::string& path, const std::string& ns)
     return Error(nstype.error());
   }
 
-#ifdef SYS_setns
-  int ret = ::syscall(SYS_setns, fd.get(), nstype.get());
-#elif __x86_64__
-  // A workaround for those hosts that have an old glibc (older than
-  // 2.14) but have a new kernel. The magic number '308' here is the
-  // syscall number for 'setns' on x86_64 architecture.
-  int ret = ::syscall(308, fd.get(), nstype.get());
-#else
-#error "setns is not available"
-#endif
-
-  if (ret == -1) {
+  if (::setns(fd.get(), nstype.get()) == -1) {
     // Save the errno as it might be overwritten by 'os::close' below.
     ErrnoError error;
     os::close(fd.get());
@@ -220,13 +225,237 @@ inline Try<ino_t> getns(pid_t pid, const std::string& ns)
 }
 
 
+
+// TODO(benh): Write a real comment explaining this!
+inline Try<pid_t> enter(
+    pid_t target,
+    int nstypes,
+    int flags,
+    const lambda::function<int()>& f)
+{
+  // NOTE: the order in which we 'setns' is significant, so we use an
+  // array here rather than something like a map.
+  //
+  // The user namespace needs to come first so that it is entered
+  // first. This gives an unprivileged user the potential to enter the
+  // other namespaces.
+  const size_t NAMESPACES = 7;
+  struct
+  {
+    int nstype;
+    std::string name;
+  } namespaces[NAMESPACES] = {
+    {CLONE_NEWUSER, "user"},
+    {CLONE_NEWIPC, "ipc"},
+    {CLONE_NEWUTS, "uts"},
+    {CLONE_NEWNET, "net"},
+    {CLONE_NEWPID, "pid"},
+    {CLONE_NEWNS, "mnt"},
+    {CLONE_NEWCGROUP, "cgroup"}
+  };
+
+  hashmap<int, int> fds = {};
+
+  // Helper for closing a list of file descriptors.
+  auto close = [](const std::list<int>& fds) {
+    foreach (int fd, fds) {
+      ::close(fd);
+    }
+  };
+
+  // NOTE: we do all of this ahead of time so we can be async signal
+  // safe after calling fork below.
+  for (size_t i = 0; i < NAMESPACES; i++) {
+    // Only open the namespaace file descriptor if it's been requested.
+    if (namespaces[i].nstype & nstypes) {
+      std::string path =
+        path::join("/proc", stringify(target), "ns", namespaces[i].name);
+      Try<int> fd = os::open(path, O_RDONLY);
+      if (fd.isError()) {
+        close(fds.values());
+        return Error("Failed to open '" + path +
+                     "' for entering namespace: " + fd.error());
+      }
+      fds[namespaces[i].nstype] = fd.get();
+    }
+  }
+
+  int sockets[2];
+  if (::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) != 0) {
+    close(fds.values());
+    return ErrnoError("Failed to create Unix domain socket");
+  }
+
+  // Need to set SO_PASSCRED option in order to receive credentials
+  // (which is how we get the pid of the clone'd process, see
+  // below). Note that apparently we only need to do this for
+  // receiving, not also for sending.
+  const int value = 1;
+  const ssize_t size = sizeof(value);
+  if (::setsockopt(sockets[0], SOL_SOCKET, SO_PASSCRED, &value, size) == -1) {
+    Error error = ErrnoError("Failed to set socket option SO_PASSCRED");
+    close(fds.values());
+    os::close(sockets[0]);
+    os::close(sockets[1]);
+    return error;
+  }
+
+  // NOTE: to determine the pid of the final process executing the
+  // specified lambda we use the SCM_CREDENTIALS mechanism of
+  // 'sendmsg' and 'recvmsg'. On Linux there is also a way to do this
+  // via 'getsockopt' and SO_PEERCRED which looks easier, but IIUC
+  // requires you to do an explicit connect from the child process
+  // back to the parent so that there is only one connection per
+  // socket (unlike in our world where the socket can be used by
+  // multiple forks/clones simultaneously because it's just a file
+  // descriptor that gets copied after each fork/clone). Perhaps the
+  // SO_PEERCRED is less lines of code but this approach was taken for
+  // now.
+
+  char base[1];
+
+  iovec iov = {0};
+  iov.iov_base = base;
+  iov.iov_len = sizeof(base);
+
+  // Need to allocate a char array large enough to hold "control"
+  // data. However, since this buffer is in reality a 'struct cmsghdr'
+  // we use a union to ensure that it is aligned as required for that
+  // structure.
+  union {
+    struct cmsghdr cmessage;
+    char control[CMSG_SPACE(sizeof(struct ucred))];
+  };
+
+  cmessage.cmsg_len = CMSG_LEN(sizeof(struct ucred));
+  cmessage.cmsg_level = SOL_SOCKET;
+  cmessage.cmsg_type = SCM_CREDENTIALS;
+
+  msghdr message = {0};
+  message.msg_name = nullptr;
+  message.msg_namelen = 0;
+  message.msg_iov = &iov;
+  message.msg_iovlen = 1;
+  message.msg_control = control;
+  message.msg_controllen = sizeof(control); // CMSG_LEN(sizeof(struct ucred));
+
+  pid_t child = fork();
+  if (child < 0) {
+    close(fds.values());
+    os::close(sockets[0]);
+    os::close(sockets[1]);
+    return ErrnoError();
+  } else if (child > 0) {
+    // Parent.
+    close(fds.values());
+    os::close(sockets[1]);
+
+    ssize_t length = ::recvmsg(sockets[0], &message, 0);
+
+    // TODO(benh): Note that whenever we 'kill(child, SIGKILL)' below
+    // we don't guarantee cleanup! It's possible that the
+    // greatgrandchild is still running. Require the greatgrandchild
+    // to read from the socket after sending back it's pid to ensure
+    // no orphans.
+
+    if (length < 0) {
+      // We failed to read, close the socket and kill the child
+      // (which might die on it's own trying to write to the
+      // socket).
+      Error error = ErrnoError("Failed to receive");
+      os::close(sockets[0]);
+      ::kill(child, SIGKILL);
+      return error;
+    } else if (length == 0) {
+      // Socket closed, child must have died, but kill anyway.
+      os::close(sockets[0]);
+      ::kill(child, SIGKILL);
+      return Error("Failed to receive: Socket closed");
+    }
+
+    os::close(sockets[0]);
+
+    // Extract pid.
+    if (CMSG_FIRSTHDR(&message) == nullptr ||
+        CMSG_FIRSTHDR(&message)->cmsg_len != CMSG_LEN(sizeof(struct ucred)) ||
+        CMSG_FIRSTHDR(&message)->cmsg_level != SOL_SOCKET ||
+        CMSG_FIRSTHDR(&message)->cmsg_type != SCM_CREDENTIALS) {
+      ::kill(child, SIGKILL);
+      return Error("Bad control data received");
+    }
+
+    return ((struct ucred*) CMSG_DATA(CMSG_FIRSTHDR(&message)))->pid;
+  } else {
+    // Child.
+    ::close(sockets[0]);
+
+    // Loop through and 'setns' into all of the parent namespaces that
+    // have been requested.
+    for (size_t i = 0; i < NAMESPACES; i++) {
+      Option<int> fd = fds.get(namespaces[i].nstype);
+      if (fd.isSome()) {
+        CHECK(namespaces[i].nstype & nstypes);
+        if (::setns(fd.get(), namespaces[i].nstype) < 0) {
+          std::cout << "setns failed: " << strerror(errno) << std::endl;
+          close(fds.values());
+          ::close(sockets[1]);
+          ::exit(EXIT_FAILURE);
+        }
+      }
+    }
+
+    close(fds.values());
+
+    // Fork again to make sure we're actually in those namespaces
+    // (required for the pid namespace at least).
+    pid_t grandchild = fork();
+    if (grandchild != 0) {
+      // Still the (first) child.
+      //
+      // Exit since either the fork failed or we're the parent and are
+      // no longer necessary.
+      //
+      // NOTE: in the event of a fork failure here we won't be able to
+      // properly pass back exactly the issue as the parent will
+      // simply just see a closed socket.
+      ::close(sockets[1]);
+      ::exit(grandchild > 0 ? EXIT_FAILURE : EXIT_SUCCESS);
+    }
+
+    // Grandchild (second child, now completely entered in the
+    // namespaces of the target).
+    //
+    // Now clone with the specified flags, close the unused socket,
+    // and execute the specified function.
+    pid_t pid = os::clone([=]() {
+      // Now send back the pid and have it be translated appropriately
+      // by the kernel to the enclosing pid namespace.
+      //
+      // NOTE: sending back the pid is best effort because we're going
+      // to exit no matter what.
+      ((struct ucred*) CMSG_DATA(CMSG_FIRSTHDR(&message)))->pid = ::getpid();
+      ((struct ucred*) CMSG_DATA(CMSG_FIRSTHDR(&message)))->uid = ::getuid();
+      ((struct ucred*) CMSG_DATA(CMSG_FIRSTHDR(&message)))->gid = ::getgid();
+
+      if (::sendmsg(sockets[1], &message, 0) == -1) {
+        // Failed to send the pid back to the parent!
+        ::exit(EXIT_FAILURE);
+      }
+
+      ::close(sockets[1]);
+
+      return f();
+    },
+    flags);
+
+    ::close(sockets[1]);
+    ::exit(pid < 0 ? EXIT_FAILURE : EXIT_SUCCESS);
+  }
+  UNREACHABLE();
+}
+
+
 namespace pid {
-
-namespace internal {
-
-inline Nothing _nothing() { return Nothing(); }
-
-} // namespace internal {
 
 inline process::Future<Nothing> destroy(ino_t inode)
 {
@@ -291,7 +520,7 @@ inline process::Future<Nothing> destroy(ino_t inode)
   // namespace will then be empty and will be released by the kernel
   // (unless there are additional references).
   return process::collect(futures)
-    .then(lambda::bind(&internal::_nothing));
+    .then([]() { return Nothing(); });
 }
 
 } // namespace pid {
