@@ -336,6 +336,19 @@ PID<Master> launch(const Flags& flags, Allocator* _allocator)
   resourceEstimators = new vector<ResourceEstimator*>();
   qosControllers = new vector<QoSController*>();
 
+  // Override the default launcher that gets created per agent to
+  // 'posix' if we're creating multiple agents because the
+  // LinuxLauncher does not support multiple agents on the same host
+  // (see MESOS-3793).
+  string launcher = slave::Flags().launcher;
+
+  if (flags.num_slaves > 1) {
+    LOG(WARNING) << "Using the 'posix' launcher instead of '"
+                 << slave::Flags().launcher << "' since currently only the "
+                 << "'posix' launcher supports multiple agents per host";
+    launcher = "posix";
+  }
+
   vector<UPID> pids;
 
   for (int i = 0; i < flags.num_slaves; i++) {
@@ -381,10 +394,7 @@ PID<Master> launch(const Flags& flags, Allocator* _allocator)
 
     qosControllers->push_back(qosController.get());
 
-    // Set default launcher to 'posix'(see MESOS-3793).
-    if (flags.launcher.isNone()) {
-      flags.launcher = "posix";
-    }
+    flags.launcher = launcher;
 
     Try<Containerizer*> containerizer =
       Containerizer::create(flags, true, fetchers->back());
