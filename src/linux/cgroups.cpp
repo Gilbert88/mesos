@@ -15,14 +15,12 @@
 // limitations under the License.
 
 #include <errno.h>
-#include <fts.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
 
 #include <sys/syscall.h>
-#include <sys/types.h>
 
 #include <glog/logging.h>
 
@@ -515,12 +513,10 @@ Try<string> prepare(
 }
 
 
-// Returns some error string if either (a) hierarchy is not mounted,
-// (b) cgroup does not exist, or (c) control file does not exist.
-static Option<Error> verify(
+Option<Error> verify(
     const string& hierarchy,
-    const string& cgroup = "",
-    const string& control = "")
+    const string& cgroup,
+    const string& control)
 {
   Try<bool> mounted = cgroups::mounted(hierarchy);
   if (mounted.isError()) {
@@ -872,66 +868,20 @@ Try<bool> exists(const string& hierarchy, const string& cgroup)
 }
 
 
-Try<vector<string>> get(const string& hierarchy, const string& cgroup)
+
+Try<vector<string>> get(
+    const string& hierarchy,
+    const string& cgroup)
 {
-  Option<Error> error = verify(hierarchy, cgroup);
-  if (error.isSome()) {
-    return error.get();
-  }
-
-  Result<string> hierarchyAbsPath = os::realpath(hierarchy);
-  if (!hierarchyAbsPath.isSome()) {
-    return Error(
-        "Failed to determine canonical path of '" + hierarchy + "': " +
-        (hierarchyAbsPath.isError()
-         ? hierarchyAbsPath.error()
-         : "No such file or directory"));
-  }
-
-  Result<string> destAbsPath = os::realpath(path::join(hierarchy, cgroup));
-  if (!destAbsPath.isSome()) {
-    return Error(
-        "Failed to determine canonical path of '" +
-        path::join(hierarchy, cgroup) + "': " +
-        (destAbsPath.isError()
-         ? destAbsPath.error()
-         : "No such file or directory"));
-  }
-
-  char* paths[] = { const_cast<char*>(destAbsPath.get().c_str()), nullptr };
-
-  FTS* tree = fts_open(paths, FTS_NOCHDIR, nullptr);
-  if (tree == nullptr) {
-    return ErrnoError("Failed to start traversing file system");
-  }
-
-  vector<string> cgroups;
-
-  FTSENT* node;
-  while ((node = fts_read(tree)) != nullptr) {
-    // Use post-order walk here. fts_level is the depth of the traversal,
-    // numbered from -1 to N, where the file/dir was found. The traversal root
-    // itself is numbered 0. fts_info includes flags for the current node.
-    // FTS_DP indicates a directory being visited in postorder.
-    if (node->fts_level > 0 && node->fts_info & FTS_DP) {
-      string path =
-        strings::trim(node->fts_path + hierarchyAbsPath.get().length(), "/");
-      cgroups.push_back(path);
-    }
-  }
-
-  if (errno != 0) {
-    Error error =
-      ErrnoError("Failed to read a node while traversing file system");
-    fts_close(tree);
-    return error;
-  }
-
-  if (fts_close(tree) != 0) {
-    return ErrnoError("Failed to stop traversing file system");
-  }
-
-  return cgroups;
+  return traverse(
+      hierarchy,
+      cgroup,
+      [](const string& path, vector<string> cgroups) {
+        cgroups.push_back(path);
+        return std::move(cgroups);
+      },
+      vector<string>(),
+      POST_ORDER);
 }
 
 

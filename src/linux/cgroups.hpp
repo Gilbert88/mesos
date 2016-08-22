@@ -17,6 +17,7 @@
 #ifndef __CGROUPS_HPP__
 #define __CGROUPS_HPP__
 
+#include <fts.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -24,6 +25,7 @@
 #include <string>
 #include <vector>
 
+#include <sys/stat.h>
 #include <sys/types.h>
 
 #include <process/future.hpp>
@@ -34,6 +36,7 @@
 #include <stout/hashmap.hpp>
 #include <stout/nothing.hpp>
 #include <stout/option.hpp>
+#include <stout/os.hpp>
 #include <stout/try.hpp>
 
 namespace cgroups {
@@ -70,6 +73,15 @@ const unsigned int THREAD_ASSIGN_RETRIES = 100;
 
 // TODO(idownes): Rework all functions in this file to better support
 // separately mounted subsystems.
+
+
+// Returns some error string if either (a) hierarchy is not mounted,
+// (b) cgroup does not exist, or (c) control file does not exist.
+Option<Error> verify(
+    const std::string& hierarchy,
+    const std::string& cgroup = "",
+    const std::string& control = "");
+
 
 // Prepare a hierarchy which has the specified subsystem (and only that
 // subsystem) mounted and also has the specified cgroup created. Returns the
@@ -211,11 +223,123 @@ Try<Nothing> remove(const std::string& hierarchy, const std::string& cgroup);
 Try<bool> exists(const std::string& hierarchy, const std::string& cgroup);
 
 
-// Return all the cgroups under the given cgroup of a given hierarchy. By
-// default, it returns all the cgroups under the given hierarchy. This function
-// will return error if the given hierarchy is not mounted or the cgroup does
-// not exist. We use a post-order walk here to ease the removal of cgroups.
-// @param   hierarchy   Path to the hierarchy root.
+// Describes the kind of traversal that you might want to do on
+// cgroups within a hierarchy, see 'traverse' below.
+enum Traversal
+{
+  PRE_ORDER,
+  POST_ORDER,
+};
+
+
+// Traverse all the cgroups either via pre-order or post-order
+// 'traversal' starting at 'cgroup' within 'hierarchy' and execute a
+// specified function 'f' with an accumulator 't' when visting each
+// cgroup and return the accumulated value.
+//
+// This function will return error if 'hierarchy' is not mounted or if
+// 'cgroup' does not exist.
+//
+// @param   hierarchy   Path to the hierarchy.
+// @param   cgroup      Relative path to the cgroup within the hierarchy.
+// @return  An accumulator of type T.
+template <typename T, typename F>
+Try<T> traverse(
+    const std::string& hierarchy,
+    const std::string& cgroup,
+    F f, // std::function<T(const std::string&, T)>
+    T t,
+    const Traversal& traversal = PRE_ORDER)
+{
+  Option<Error> error = verify(hierarchy, cgroup);
+  if (error.isSome()) {
+    return error.get();
+  }
+
+  // We resolve the absolute path of 'hierarchy/cgroup' in case
+  // 'cgroup' may have some '..' or '.' or other things that should
+  // fail during 'fts_open' below.
+  Result<std::string> rootAbsPath = os::realpath(path::join(hierarchy, cgroup));
+  if (!rootAbsPath.isSome()) {
+    return Error(
+        "Failed to determine canonical path of '" +
+        path::join(hierarchy, cgroup) + "': " +
+        (rootAbsPath.isError()
+         ? rootAbsPath.error()
+         : "No such file or directory"));
+  }
+
+  // We also resolve the absolute path of 'hierarchy' because we need
+  // the absolute path when we construct relative cgroup paths during
+  // traversal (see below).
+  Result<std::string> hierarchyAbsPath = os::realpath(hierarchy);
+  if (!hierarchyAbsPath.isSome()) {
+    return Error(
+        "Failed to determine canonical path of '" + hierarchy + "': " +
+        (hierarchyAbsPath.isError()
+         ? hierarchyAbsPath.error()
+         : "No such file or directory"));
+  }
+
+  char* paths[] = {const_cast<char*>(rootAbsPath->c_str()), nullptr};
+
+  FTS* tree = fts_open(paths, FTS_NOCHDIR, nullptr);
+
+  if (tree == nullptr) {
+    return ErrnoError("Failed to start traversing filesystem");
+  }
+
+  for (FTSENT* node = fts_read(tree); node != nullptr; node = fts_read(tree)) {
+    // For now a traverse is only pre-order, but perhaps we'll change
+    // this in the future. The 'fts_level' is the depth of the
+    // traversal, numbered from -1 to N to match the depth of the
+    // file/directory. The traversal root itself is numbered 0 (hence
+    // we look for '> 0' below). The 'fts_info' includes flags for the
+    // current node and FTS_D indicates a directory being visited in
+    // pre-order.
+    if (node->fts_level > 0 &&
+        ((traversal == PRE_ORDER && node->fts_info & FTS_D) ||
+         (traversal == POST_ORDER && node->fts_info & FTS_DP))) {
+      std::string path = node->fts_path + hierarchyAbsPath->length();
+
+      // Remove any starting or trailing '/'.
+      path = strings::trim(path, "/");
+
+      // Accumulate by calling the function.
+      Try<T> accumulate = f(path, std::move(t));
+
+      if (accumulate.isError()) {
+        return Error("Accumulating failed while traversing on '" +
+                     path + "': " + accumulate.error());
+      }
+
+      t = std::move(accumulate.get());
+    }
+  }
+
+  if (errno != 0) {
+    Error error = ErrnoError("Failed while traversing filesystem");
+    fts_close(tree);
+    return error;
+  }
+
+  if (fts_close(tree) != 0) {
+    return ErrnoError("Failed to stop traversing filesystem");
+  }
+
+  return std::move(t); // TODO(benh): std::move conflict with NRVO?
+}
+
+
+// Return all the cgroups under 'cgroup' within 'hierarchy'. We use a
+// post-order traversal here so that the cgroups are returned in an
+// order that is conducive to removal (i.e., nested cgroups first).
+//
+// This function will return error if 'hierarchy' is not mounted or if
+// 'cgroup' does not exist.
+//
+// @param   hierarchy   Path to the hierarchy.
+// @param   cgroup      Relative path to the cgroup within the hierarchy.
 // @return  A vector of cgroup names.
 Try<std::vector<std::string>> get(
     const std::string& hierarchy,
