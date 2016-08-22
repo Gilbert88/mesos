@@ -350,11 +350,15 @@ Try<MesosContainerizer*> MesosContainerizer::create(
   set<string> isolations = set<string>(tokens.begin(), tokens.end());
 
   if (tokens.size() != isolations.size()) {
-    return Error("Duplicate entries found in --isolation flag '"
+    return Error("Duplicate entries found in --isolation flag '" +
                  stringify(tokens) + "'");
   }
 
 #ifdef __linux__
+  // TODO(gilbert): Make sure the 'gpu/nvidia' isolator to be
+  // created after all volume isolators, so that the nvidia
+  // gpu libraries '/usr/local/nvidia' will be overwritten.
+  //
   // Always enable volume/image on linux to ensure backwards
   // compatibility.
   if (isolations.count("volume/image") == 0) {
