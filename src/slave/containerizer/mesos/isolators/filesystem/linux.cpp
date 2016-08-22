@@ -369,8 +369,8 @@ Try<vector<CommandInfo>> LinuxFilesystemIsolatorProcess::getPreExecCommands(
     // NOTE: Volumes with source will be handled by the corresponding
     // isolators (e.g., docker/volume).
     if (volume.has_source()) {
-      VLOG(1) << "Ignored a volume with source for container '"
-              << containerId << "'";
+      VLOG(1) << "Ignored a volume with source for container "
+              << containerId;
       continue;
     }
 
