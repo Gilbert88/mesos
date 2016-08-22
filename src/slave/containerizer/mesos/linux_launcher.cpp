@@ -54,16 +54,6 @@ namespace mesos {
 namespace internal {
 namespace slave {
 
-static ContainerID container(const string& cgroup)
-{
-  string basename = Path(cgroup).basename();
-
-  ContainerID containerId;
-  containerId.set_value(basename);
-  return containerId;
-}
-
-
 // `_systemdHierarchy` is only set if running on a systemd environment.
 LinuxLauncher::LinuxLauncher(
     const Flags& _flags,
@@ -130,91 +120,187 @@ bool LinuxLauncher::available()
 }
 
 
+// Helper for traversing the cgroups used to contruct a new Container
+// and accumulate all of the constructed containers.
+Try<hashmap<ContainerID, LinuxLauncher::Container>> LinuxLauncher::recover(
+      const string& cgroup,
+      hashmap<ContainerID, Container> containers)
+{
+  Container container;
+
+  // Determine the ContainerID for this cgroup.
+  foreach (const string& token, strings::tokenize(cgroup, "/")) {
+    // Only add a parent if this isn't the first token (which we
+    // determine by checking if the current 'id' field has been
+    // set).
+    if (container.id.has_value()) {
+      container.id.mutable_parent()->CopyFrom(container.id);
+    }
+    container.id.set_value(token);
+  }
+
+  // Validate the ID (there should be at least one level).
+  if (!container.id.has_value()) {
+    return Error("Failed to get ContainerID from cgroup '" + cgroup + "'");
+  }
+
+  // Recover the checkpointed 'PID 1' for this container. Note that
+  // it's possible that we don't have a pid checkpointed either
+  // because (1) we created the cgroup but terminated before
+  // checkpointing the pid (which means the pid must have terminated
+  // also because of the way 'subprocess' works) or (2) we've just
+  // recovered containers launched with an earlier version of the
+  // launcher that did not checkpoint pids.
+  string path = path::join(
+      getRuntimePathForContainer(flags, container.id),
+      "pid");
+
+  if (!os::exists(path)) {
+    container.pid = None();
+  } else {
+    Try<string> read = os::read(path);
+    if (read.isError()) {
+      return Error("Failed to read pid of container at '" + path +
+                   "': " + read.error());
+    }
+
+    Try<pid_t> pid = numify<pid_t>(read.get());
+    if (pid.isError()) {
+      return Error("Failed to numify pid '" + read.get() +
+                   "'of container at '" + path + "': " + pid.error());
+    }
+
+    container.pid = pid.get();
+  }
+
+  containers.put(container.id, container);
+
+  return containers;
+}
+
+
 Future<hashset<ContainerID>> LinuxLauncher::recover(
     const list<ContainerState>& states)
 {
-  hashset<string> recovered;
+  // Traverse all of the cgroups to recover exisiting containers.
+  Try<hashmap<ContainerID, Container>> traverse = cgroups::traverse(
+      freezerHierarchy,
+      flags.cgroups_root,
+      [this](const string& cgroup, hashmap<ContainerID, Container> containers) {
+        return recover(cgroup, containers);
+      },
+      hashmap<ContainerID, Container>(),
+      cgroups::Traversal::PRE_ORDER);
 
-  // On systemd environments, capture the pids under the
-  // `MESOS_EXECUTORS_SLICE` for validation during recovery.
-  Result<std::set<pid_t>> mesosExecutorSlicePids = None();
+  if (traverse.isError()) {
+    return Failure("Failed to traverse the cgroups: " + traverse.error());
+  }
+
+  containers = traverse.get();
+
+  // Now loop through the containers expected by ContainerState, which
+  // should only be top-level containers in order to help us determine
+  // what containers are orphans.
+  hashset<ContainerID> expected = {};
+
+  foreach (const ContainerState& state, states) {
+    if (!containers.contains(state.container_id())) {
+      // This may occur if the freezer cgroup was destroyed but our
+      // process restarts before being able to record this. So,
+      // nothing to do here (a future call to 'wait' for this
+      // container will just return immediately), but we do verbose
+      // log.
+      VLOG(2) << "Couldn't find freezer cgroup for container "
+              << state.container_id() << ", assuming already destroyed";
+      continue;
+    }
+
+    // It's possible that we'll have recovered the container but don't
+    // have a pid because that container was launched before the
+    // launcher started checkpointing pids, so we can save the pid
+    // from ContainerState so we don't consider the container
+    // orphaned.
+    if (containers.contains(state.container_id())) {
+      // For now we just overwrite the pid even if we already
+      // checkpointed the pid ourselves. In the future when the
+      // launcher is the only one responsible for checkpointing pids
+      // then we can just remove this code (i.e., a container without
+      // a checkpointed pid will be an orphan that was likely created
+      // because our process restarted before the 'subprocess' hook
+      // for checkpointing the pid completed ... and note that
+      // subprocess "does the right thing" and makes sure that the
+      // child terminates if the hooks don't complete).
+      containers[state.container_id()].pid = state.pid();
+    }
+
+    expected.insert(state.container_id());
+  }
+
+  // TODO(benh): In the past we used to make sure that we didn't have
+  // multiple containers that had the same pid. This seemed pretty
+  // random, and is highly unlikely to occur in practice. A good
+  // sanity check we could do here, however, is to make sure that the
+  // pid is actually contained within each container. Note that we'd
+  // need to do this here versus when we traverse and recover each
+  // container because we might recover a container without a
+  // checkpointed pid due to those containers being launched before
+  // the launcher started checkpointing pids and we need to have
+  // looped through each ContainerState to fill in any pids.
+
+  // If we are on a systemd environment, check that container pids are
+  // still in the `MESOS_EXECUTORS_SLICE`. If they are not, warn the
+  // operator that resource isolation may be invalidated.
   if (systemdHierarchy.isSome()) {
-    mesosExecutorSlicePids = cgroups::processes(
+    Result<std::set<pid_t>> mesosExecutorSlicePids = cgroups::processes(
         systemdHierarchy.get(),
         systemd::mesos::MESOS_EXECUTORS_SLICE);
 
-    // If we error out trying to read the pids from the `MESOS_EXECUTORS_SLICE`
-    // we fail. This is a programmer error as we did not set up the slice
-    // correctly.
+    // If we error out trying to read the pids from the
+    // `MESOS_EXECUTORS_SLICE` we fail. This is a programmer error
+    // as we did not set up the slice correctly.
     if (mesosExecutorSlicePids.isError()) {
       return Failure("Failed to read pids from systemd '" +
                      stringify(systemd::mesos::MESOS_EXECUTORS_SLICE) + "'");
     }
-  }
 
-  foreach (const ContainerState& state, states) {
-    const ContainerID& containerId = state.container_id();
-    pid_t pid = state.pid();
+    if (mesosExecutorSlicePids.isSome()) {
+      foreachvalue (const Container& container, containers) {
+        // TODO(benh): Do we expect all containers to be in the
+        // 'MESOS_EXECUTORS_SLICE'? See TODO in 'fork' below as
+        // well. For now we only do this for top-level containers.
+        if (container.id.has_parent()) {
+          continue;
+        }
 
-    if (pids.containsValue(pid)) {
-      // This should (almost) never occur. There is the possibility
-      // that a new executor is launched with the same pid as one that
-      // just exited (highly unlikely) and the slave dies after the
-      // new executor is launched but before it hears about the
-      // termination of the earlier executor (also unlikely).
-      // Regardless, the launcher can't do anything sensible so this
-      // is considered an error.
-      return Failure("Detected duplicate pid " + stringify(pid) +
-                     " for container " + stringify(containerId));
-    }
+        // Skip if we don't have a pid for the container.
+        if (container.pid.isNone()) {
+          continue;
+        }
 
-    // Store the pid now because if the freezer cgroup is absent
-    // (slave terminated after the cgroup is destroyed but before it
-    // was notified) then we'll still need it for the check in
-    // destroy() when we clean up.
-    pids.put(containerId, pid);
-
-    Try<bool> exists = cgroups::exists(freezerHierarchy, cgroup(containerId));
-
-    if (!exists.get()) {
-      // This may occur if the freezer cgroup was destroyed but the
-      // slave dies before noticing this. The containerizer will
-      // monitor the container's pid and notice that it has exited,
-      // triggering destruction of the container.
-      LOG(INFO) << "Couldn't find freezer cgroup for container "
-                << containerId << ", assuming already destroyed";
-      continue;
-    }
-
-    // If we are on a systemd environment, check that the pid is still in the
-    // `MESOS_EXECUTORS_SLICE`. If it is not, warn the operator that resource
-    // isolation may be invalidated.
-    // TODO(jmlvanre): Add a flag that enforces this matching (i.e. exits if a
-    // pid was found in the freezer but not in the
-    // `MESOS_EXECUTORS_SLICE`. We need to flag to support the upgrade path.
-    if (systemdHierarchy.isSome() && mesosExecutorSlicePids.isSome()) {
-      if (mesosExecutorSlicePids.get().count(pid) <= 0) {
-        LOG(WARNING)
-          << "Couldn't find pid '" << pid << "' in '"
-          << systemd::mesos::MESOS_EXECUTORS_SLICE << "'. This can lead to"
-          << " lack of proper resource isolation";
+        if (mesosExecutorSlicePids.get().count(container.pid.get()) <= 0) {
+          // TODO(jmlvanre): Add a flag that enforces this rather
+          // than just logs a warning (i.e., we exit if a pid was
+          // found in the freezer but not in the
+          // `MESOS_EXECUTORS_SLICE`. We need a flag to support the
+          // upgrade path.
+          LOG(WARNING)
+            << "Couldn't find pid '" << container.pid.get() << "' in '"
+            << systemd::mesos::MESOS_EXECUTORS_SLICE << "'. This can lead to"
+            << " lack of proper resource isolation";
+        }
       }
     }
-
-    recovered.insert(cgroup(containerId));
   }
 
-  // Return the set of orphan containers.
-  Try<vector<string>> cgroups =
-    cgroups::get(freezerHierarchy, flags.cgroups_root);
-
-  if (cgroups.isError()) {
-    return Failure(cgroups.error());
-  }
-
-  foreach (const string& cgroup, cgroups.get()) {
-    if (!recovered.contains(cgroup)) {
-      orphans.insert(container(cgroup));
+  // Finally, determine and return the set of orphaned top-level
+  // containers.
+  //
+  // TODO(benh): Do we want to return nested orphaned containers too?
+  // Or do we just want to destroy nested orphaned containers here?
+  hashset<ContainerID> orphans = {};
+  foreachvalue (const Container& container, containers) {
+    if (!container.id.has_parent() && !expected.contains(container.id)) {
+      orphans.insert(container.id);
     }
   }
 
@@ -234,19 +320,25 @@ Try<pid_t> LinuxLauncher::fork(
     const Option<int>& namespaces,
     vector<Subprocess::Hook> parentHooks)
 {
+  if (containers.contains(containerId)) {
+    return Error("Container '" + stringify(containerId) + "' already exists");
+  }
+
   int cloneFlags = namespaces.isSome() ? namespaces.get() : 0;
+
+  LOG(INFO) << "Cloning with namespaces " << ns::stringify(cloneFlags);
+
   cloneFlags |= SIGCHLD; // Specify SIGCHLD as child termination signal.
 
-  LOG(INFO) << "Cloning child process with flags = "
-            << ns::stringify(cloneFlags);
+  // NOTE: Currently we don't care about the order of the hooks.
 
-  // NOTE: Currently we don't care about the order of the hooks, as
-  // both hooks are independent.
-
-  // If we are on systemd, then extend the life of the child. As with the
-  // freezer, any grandchildren will also be contained in the slice.
+  // If we are on systemd, then extend the life of the child by
+  // putting it into a slice. As with the freezer, any grandchildren
+  // will also be contained in the slice.
   if (systemdHierarchy.isSome()) {
-    parentHooks.emplace_back(Subprocess::Hook(&systemd::mesos::extendLifetime));
+    parentHooks.emplace_back(Subprocess::Hook([](pid_t child) {
+      return systemd::mesos::extendLifetime(child);
+    }));
   }
 
   // Create parent Hook for isolating child in a freezer cgroup (will
@@ -258,6 +350,25 @@ Try<pid_t> LinuxLauncher::fork(
         child);
   }));
 
+  // Create parent Hook for checkpointing the pid.
+  parentHooks.emplace_back(Subprocess::Hook([=](pid_t child) -> Try<Nothing> {
+    // Need to make sure the directory has been created first. Note
+    // that we use 'this->flags' here because we have to disambiguate
+    // from the 'flags' parameter passed to 'LinuxLauncher::fork'.
+    //
+    // TODO(benh): Should really just have 'os::write' create the
+    // directories recursively as needed.
+    string directory = getRuntimePathForContainer(this->flags, containerId);
+
+    Try<Nothing> mkdir = os::mkdir(directory);
+    if (mkdir.isError()) {
+      return Error(
+          "Failed to make directory '" + directory + "': " + mkdir.error());
+    }
+
+    return os::write(path::join(directory, "pid"), stringify(child));
+  }));
+
   Try<Subprocess> child = subprocess(
       path,
       argv,
@@ -267,16 +378,20 @@ Try<pid_t> LinuxLauncher::fork(
       SETSID,
       flags,
       environment,
-      lambda::bind(&os::clone, lambda::_1, cloneFlags),
+      [cloneFlags](const lambda::function<int()>& child) {
+        return os::clone(child, cloneFlags);
+      },
       parentHooks);
 
   if (child.isError()) {
     return Error("Failed to clone child process: " + child.error());
   }
 
-  if (!pids.contains(containerId)) {
-    pids.put(containerId, child.get().pid());
-  }
+  Container container;
+  container.id = containerId;
+  container.pid = child.get().pid();;
+
+  containers.put(containerId, container);
 
   return child.get().pid();
 }
@@ -284,57 +399,49 @@ Try<pid_t> LinuxLauncher::fork(
 
 Future<Nothing> LinuxLauncher::destroy(const ContainerID& containerId)
 {
-  if (!pids.contains(containerId) && !orphans.contains(containerId)) {
-    return Failure("Unknown container");
+  Option<Container> container = containers.get(containerId);
+
+  if (container.isNone()) {
+    return Failure("Container does not exist");
   }
 
-  pids.erase(containerId);
-  orphans.erase(containerId);
+  // NOTE: currently cleaning up the checkpointed 'pid' file is not
+  // the responsiblity of the launcher.
 
-  // Just return if the cgroup was destroyed and the slave didn't receive the
-  // notification. See comment in recover().
-  Try<bool> exists = cgroups::exists(freezerHierarchy, cgroup(containerId));
-  if (exists.isError()) {
-    return Failure("Failed to check existence of freezer cgroup: " +
-                   exists.error());
-  }
-
-  if (!exists.get()) {
-    return Nothing();
-  }
-
-  Result<ino_t> containerPidNs =
-    NamespacesPidIsolatorProcess::getNamespace(containerId);
-
-  if (containerPidNs.isSome()) {
-    LOG(INFO) << "Using pid namespace to destroy container " << containerId;
-
-    return ns::pid::destroy(containerPidNs.get())
-      .then(lambda::bind(
-            (Future<Nothing>(*)(const string&,
-                                const string&,
-                                const Duration&))(&cgroups::destroy),
-            freezerHierarchy,
-            cgroup(containerId),
-            cgroups::DESTROY_TIMEOUT));
-  }
-
-  // Try to clean up using just the freezer cgroup.
-  return cgroups::destroy(
-      freezerHierarchy,
-      cgroup(containerId),
-      cgroups::DESTROY_TIMEOUT);
+  // Try and use the pid namespace to destroy the container first if
+  // it's available and then use the freezer second.
+  return [=]() -> Future<Nothing> {
+    Result<ino_t> inode =
+      NamespacesPidIsolatorProcess::getNamespace(containerId);
+    if (inode.isSome()) {
+      LOG(INFO) << "Using pid namespace to destroy container "
+                << cgroup(containerId);
+      return ns::pid::destroy(inode.get());
+    } else {
+      return Nothing();
+    }
+  }().then([=]() {
+    LOG(INFO) << "Using freezer to destroy container " << cgroup(containerId);
+    return cgroups::destroy(
+        freezerHierarchy,
+        cgroup(containerId),
+        cgroups::DESTROY_TIMEOUT);
+  });
 }
 
 
 Future<ContainerStatus> LinuxLauncher::status(const ContainerID& containerId)
 {
-  if (!pids.contains(containerId)) {
-    return Failure("Container does not exist!");
+  Option<Container> container = containers.get(containerId);
+
+  if (container.isNone()) {
+    return Failure("Container does not exist");
+  } else if (container->pid.isNone()) {
+    return Failure("Container is orphaned");
   }
 
   ContainerStatus status;
-  status.set_executor_pid(pids[containerId]);
+  status.set_executor_pid(container->pid.get());
 
   return status;
 }
