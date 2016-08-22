@@ -375,7 +375,7 @@ Try<vector<CommandInfo>> LinuxFilesystemIsolatorProcess::getPreExecCommands(
     }
 
     if (volume.has_image()) {
-      VLOG(1) << "Image volumes are handled by 'volume/image' isolator";
+      VLOG(1) << "Ignored an image volume for container " << containerId;
       continue;
     }
 

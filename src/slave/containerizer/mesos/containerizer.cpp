@@ -346,17 +346,25 @@ Try<MesosContainerizer*> MesosContainerizer::create(
 #endif
   };
 
-  const vector<string> isolations = strings::tokenize(flags_.isolation, ",");
+  vector<string> tokens = strings::tokenize(flags_.isolation, ",");
+  set<string> isolations = set<string>(tokens.begin(), tokens.end());
 
-  if (isolations.size() !=
-      set<string>(isolations.begin(), isolations.end()).size()) {
-    return Error("Duplicate entries found in --isolation flag"
-                 " '" + stringify(isolations) + "'");
+  if (tokens.size() != isolations.size()) {
+    return Error("Duplicate entries found in --isolation flag '"
+                 stringify(tokens) + "'");
   }
+
+#ifdef __linux__
+  // Always enable volume/image on linux to ensure backwards
+  // compatibility.
+  if (isolations.count("volume/image") == 0) {
+    tokens.push_back(tokens.begin(), "volume/image");
+  }
+#endif // __linux__
 
   vector<Owned<Isolator>> isolators;
 
-  foreach (const string& isolation, isolations) {
+  foreach (const string& isolation, tokens) {
     Try<Isolator*> isolator = [&]() -> Try<Isolator*> {
       if (creators.contains(isolation)) {
         return creators.at(isolation)(flags_);
