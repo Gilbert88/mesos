@@ -64,6 +64,14 @@ std::string getContainerRootfsDir(
     const std::string& rootfsId);
 
 
+// This lookup method is not used for now. But we still want to
+// keep it in case we need to find the nested container path in
+// the future.
+Try<Option<std::string>> findContainerDir(
+    const std::string& provisionerDir,
+    const ContainerID& containerId);
+
+
 // Recursively "ls" the container directory and return a map of
 // backend -> {rootfsId, ...}
 Try<hashmap<std::string, hashset<std::string>>>

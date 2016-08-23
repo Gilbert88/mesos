@@ -103,6 +103,45 @@ string getContainerRootfsDir(
 }
 
 
+Try<Option<string>> findContainerDir(
+    const string& provisionerDir,
+    const ContainerID& containerId)
+{
+  const string containersDir = getContainersDir(provisionerDir);
+
+  if (!os::exists(containersDir)) {
+    return None();
+  }
+
+  Try<list<string>> containerIds = os::ls(containersDir);
+  if (containerIds.isError()) {
+    return Error("Unable to list the containers directory '" +
+                 containersDir + "': " + containerIds.error());
+  }
+
+  foreach (const string& entry, containerIds.get()) {
+    if (entry == containerId.value()) {
+      return path::join(containersDir, entry);
+    }
+
+    Try<Option<string>> subContainerDir = findContainerDir(
+        path::join(containersDir, entry),
+        containerId);
+
+    if (subContainerDir.isError()) {
+      return Error("Failed to find the container directory: " +
+                   subContainerDir.error());
+    }
+
+    if (subContainerDir->isSome()) {
+      return subContainerDir->get();
+    }
+  }
+
+  return None();
+}
+
+
 Try<hashset<ContainerID>> listContainers(
     const string& provisionerDir)
 {
