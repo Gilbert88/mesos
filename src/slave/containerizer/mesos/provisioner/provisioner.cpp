@@ -201,15 +201,7 @@ Future<Nothing> ProvisionerProcess::recover(
           stringify(containerId) + ": " + rootfses.error());
     }
 
-    foreachkey (const string& backend, rootfses.get()) {
-      if (!backends.contains(backend)) {
-        return Failure(
-            "Found rootfses managed by an unrecognized backend: " + backend);
-      }
-
-      info->rootfses.put(backend, rootfses.get()[backend]);
-    }
-
+    info->rootfses = rootfses.get();
     infos.put(containerId, info);
 
     if (alive.contains(containerId) || orphans.contains(containerId)) {
