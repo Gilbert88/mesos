@@ -106,35 +106,60 @@ string getContainerRootfsDir(
 Try<hashset<ContainerID>> listContainers(
     const string& provisionerDir)
 {
-  hashset<ContainerID> results;
+  lambda::function<Try<hashset<ContainerID>>(
+      const string&, const Option<ContainerID>&)> helper;
 
-  string containersDir = getContainersDir(provisionerDir);
-  if (!os::exists(containersDir)) {
-    // No container has been created yet.
-    return results;
-  }
+  // The lambda is used here because we do not want the
+  // 'parentContainerId' to be in the public function.
+  helper = [&helper](
+      const string& containersDir,
+      const Option<ContainerID>& parentContainerId)
+    -> Try<hashset<ContainerID>> {
+    hashset<ContainerID> results;
 
-  Try<list<string>> containerIds = os::ls(containersDir);
-  if (containerIds.isError()) {
-    return Error("Unable to list the containers directory: " +
-                 containerIds.error());
-  }
-
-  foreach (const string& entry, containerIds.get()) {
-    string containerPath = path::join(containersDir, entry);
-
-    if (!os::stat::isdir(containerPath)) {
-      LOG(WARNING) << "Ignoring unexpected container entry at: "
-                   << containerPath;
-      continue;
+    if (!os::exists(containersDir)) {
+      // No container has been created yet.
+      return results;
     }
 
-    ContainerID containerId;
-    containerId.set_value(entry);
-    results.insert(containerId);
-  }
+    Try<list<string>> containerIds = os::ls(containersDir);
+    if (containerIds.isError()) {
+      return Error("Unable to list the containers directory: '" +
+                   containersDir + "': " + containerIds.error());
+    }
 
-  return results;
+    foreach (const string& entry, containerIds.get()) {
+      const string containerPath = path::join(containersDir, entry);
+
+      if (!os::stat::isdir(containerPath)) {
+        LOG(WARNING) << "Ignoring unexpected container entry at: "
+                     << containerPath;
+        continue;
+      }
+
+      ContainerID containerId;
+      containerId.set_value(entry);
+
+      if (parentContainerId.isSome()) {
+        containerId.mutable_parent()->CopyFrom(parentContainerId.get());
+      }
+
+      results.insert(containerId);
+
+      Try<hashset<ContainerID>> subContainers =
+        helper(getContainersDir(containerPath), containerId);
+
+      if (subContainers.isError()) {
+        return Error("Failed to list sub-containers: " + subContainers.error());
+      }
+
+      results.insert(subContainers->begin(), subContainers->end());
+    }
+
+    return results;
+  };
+
+  return helper(getContainersDir(provisionerDir), None());
 }
 
 
