@@ -17,6 +17,7 @@
 #include <errno.h>
 #ifdef __linux__
 #include <sched.h>
+#include <signal.h>
 #endif // __linux__
 #include <string.h>
 
@@ -26,6 +27,8 @@
 #include <stout/os.hpp>
 #include <stout/protobuf.hpp>
 #include <stout/unreachable.hpp>
+
+#include <stout/os/kill.hpp>
 
 #ifdef __linux__
 #include "linux/capabilities.hpp"
@@ -100,6 +103,11 @@ MesosContainerizerLaunch::Flags::Flags()
       "executing the command.");
 
 #ifdef __linux__
+  add(&wait_status_path,
+      "wait_status_path",
+      "The path to write the status of the launched process to\n"
+      "(as returned by 'waitpid()'");
+
   add(&unshare_namespace_mnt,
       "unshare_namespace_mnt",
       "Whether to launch the command in a new mount namespace.",
@@ -110,6 +118,75 @@ MesosContainerizerLaunch::Flags::Flags()
       "Capabilities of the command can use.");
 #endif // __linux__
 }
+
+
+#ifdef __linux__
+// When launching the executor with an 'init' process, we need to
+// forward all relevant signals to it. The functions below help to
+// enable this forwarding.
+static pid_t containerPid;
+
+
+static void signalHandler(int sig)
+{
+  // We purposefully ignore the error here since we have to remain
+  // async signal safe. The only possible error scenario relevant to
+  // us is ESRCH, but if that happens that means our pid is already
+  // gone and the process will exit soon. So we are safe.
+  os::kill(containerPid, sig);
+}
+
+
+static Try<Nothing> forwardSignals(pid_t pid)
+{
+  containerPid = pid;
+
+  // Forwarding signal handlers for all relevant signals.
+  for (int i = 1; i < NSIG; i++) {
+    // We don't want to forward the SIGCHLD signal, nor do we want to
+    // handle it ourselves because we reap all children inline in the
+    // `execute` function.
+    if (i == SIGCHLD) {
+      continue;
+    }
+
+    // We can't catch or ignore these signals, so we shouldn't try
+    // to register a handler for them.
+    if (i == SIGKILL || i == SIGSTOP) {
+      continue;
+    }
+
+    if (os::signals::install(i, signalHandler) != 0) {
+      // Error out if we cant install a handler for any non real-time
+      // signals (i.e. any signal less or equal to `SIGUNUSED`). For
+      // the real-time signals, we simply ignore the error and move on
+      // to the next signal.
+      //
+      // NOTE: We can't just use `SIGRTMIN` because its value changes
+      // based on signals used internally by glibc.
+      if (i <= SIGUNUSED) {
+        return ErrnoError("Unable to register signal '" + stringify(i) + "'");
+      }
+    }
+  }
+
+  return Nothing();
+}
+
+
+static void resetSignalHandlers()
+{
+  for (int i = 1; i < NSIG; i++) {
+    // Ignore SIGCHLD/SIGKILL/SIGSTOP as we didn't install handlers
+    // for them in 'forwardSignals'.
+    if (i == SIGCHLD || i == SIGKILL || i == SIGSTOP) {
+      continue;
+    }
+
+    os::signals::reset(i);
+  }
+}
+#endif // __linux__
 
 
 int MesosContainerizerLaunch::execute()
@@ -192,6 +269,29 @@ int MesosContainerizerLaunch::execute()
   }
 
 #ifdef __linux__
+  // The existence of the `wait_status_path` flag implies that we will
+  // fork-exec the command we are launching, rather than simply
+  // execing it (so we have the opportunity to checkpoint its status).
+  // We open the file now, in order to ensure that we can write to it
+  // even if we `pivot_root` below.
+  Option<int> waitStatusFd = None();
+
+  if (flags.wait_status_path.isSome()) {
+    Try<int> open = os::open(
+        flags.wait_status_path.get(),
+        O_WRONLY | O_CREAT | O_CLOEXEC,
+        S_IRUSR | S_IWUSR);
+
+    if (open.isError()) {
+      cerr << "Failed to open file for writing the status"
+           << " '" << flags.wait_status_path.get() << "':"
+           << " " << open.error() << endl;
+      return EXIT_FAILURE;
+    }
+
+    waitStatusFd = open.get();
+  }
+
   if (flags.unshare_namespace_mnt) {
     if (unshare(CLONE_NEWNS) != 0) {
       cerr << "Failed to unshare mount namespace: "
@@ -270,8 +370,8 @@ int MesosContainerizerLaunch::execute()
         UNREACHABLE();
       }
 
-      int exitStatus = 0;
-      Result<pid_t> waitpid = os::waitpid(pid, &exitStatus, 0);
+      int status = 0;
+      Result<pid_t> waitpid = os::waitpid(pid, &status, 0);
 
       if (waitpid.isError()) {
         cerr << "Failed to os::waitpid() on pre-exec command"
@@ -284,9 +384,9 @@ int MesosContainerizerLaunch::execute()
         return EXIT_FAILURE;
       }
 
-      if (exitStatus != 0) {
+      if (status != 0) {
         cerr << "The pre-exec command '" << value << "'"
-             << " failed with exit status " << exitStatus << endl;
+             << " failed with status " << status << endl;
         return EXIT_FAILURE;
       }
     }
@@ -489,6 +589,80 @@ int MesosContainerizerLaunch::execute()
 
   // Relay the environment variables.
   // TODO(jieyu): Consider using a clean environment.
+
+#ifdef __linux__
+  // If we have `waitStatusFd` set, then we need to fork-exec the
+  // command we are launching and write its status out to persistent
+  // storage. We use fork-exec directly (as opposed to
+  // `process::subprocess()`) for the same reasons described above for
+  // the pre-exec commands.
+  if (waitStatusFd.isSome()) {
+    pid_t pid = ::fork();
+
+    if (pid == -1) {
+      cerr << "Failed to fork() the command: "
+           << os::strerror(errno) << endl;
+      return EXIT_FAILURE;
+    }
+
+    if (pid > 0) {
+      // This is the parent.
+
+      // Forward all incoming signals to the newly created process.
+      Try<Nothing> signals = forwardSignals(pid);
+      if (signals.isError()) {
+        cerr << "Failed to forward signals: " << signals.error() << endl;
+        return EXIT_FAILURE;
+      }
+
+      // Wait for the newly created process to finish.
+      int status = 0;
+      Result<pid_t> waitpid = None();
+
+      // Reap all decendants, but only continue once we reap the
+      // process we just launched.
+      do {
+        waitpid = os::waitpid(-1, &status, 0);
+
+        if (waitpid.isError()) {
+          cerr << "Failed to os::waitpid(): " << waitpid.error() << endl;
+          return EXIT_FAILURE;
+        } else if (waitpid.isNone()) {
+          cerr << "Calling os::waitpid() with blocking semantics"
+               << "returned asynchronously" << endl;
+          return EXIT_FAILURE;
+        }
+      } while (pid != waitpid.get());
+
+      // Checkpoint the status of the command.
+      // It's ok to block here, so we just `os::write()` directly.
+      Try<Nothing> write = os::write(
+          waitStatusFd.get(),
+          stringify(status));
+
+      os::close(waitStatusFd.get());
+
+      if (write.isError()) {
+        cerr << "Failed to write the status"
+             << " '" << stringify(status) << "' to"
+             << " '" << flags.wait_status_path.get() << ":"
+             << " " << write.error() << endl;
+      }
+
+      if (WIFEXITED(status)) {
+        _exit(WEXITSTATUS(status));
+      } else if (WIFSIGNALED(status)) {
+        // Reset signal handlers in order to terminate self.
+        resetSignalHandlers();
+        os::kill(getpid(), WTERMSIG(status));
+      } else {
+        cerr << "Unexpected status from waitpid " << status << endl;
+      }
+
+      UNREACHABLE();
+    }
+  }
+#endif // __linux__
 
   if (command->shell()) {
     // Execute the command using shell.
