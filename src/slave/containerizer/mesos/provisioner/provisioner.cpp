@@ -176,6 +176,9 @@ Future<Nothing> ProvisionerProcess::recover(
   // orphans. Note that known orphan containers are recovered as well
   // and they will be destroyed by the containerizer using the normal
   // cleanup path. See MESOS-2367 for details.
+  //
+  // NOTE: For the nested container case, all containers (in any
+  // hierarchies) will be included in one hashset.
   Try<hashset<ContainerID>> containers =
     provisioner::paths::listContainers(rootDir);
 
@@ -187,6 +190,10 @@ Future<Nothing> ProvisionerProcess::recover(
 
   // Scan the list of containers, register all of them with 'infos'
   // but mark unknown orphans for immediate cleanup.
+  //
+  // NOTE: For the nested container case, like the set of known
+  // orphans, the unknown orphans list should include all unknown
+  // orphaned containers from all hierarchies.
   hashset<ContainerID> unknownOrphans;
 
   foreach (const ContainerID& containerId, containers.get()) {
@@ -217,6 +224,15 @@ Future<Nothing> ProvisionerProcess::recover(
   list<Future<bool>> cleanups;
   foreach (const ContainerID& containerId, unknownOrphans) {
     LOG(INFO) << "Cleaning up unknown orphan container " << containerId;
+
+    // If a container is an unknown orphan, it means the
+    // launcher has not forked it yet. So an unknown orphan
+    // should not have any child. It means that when
+    // destroying an unknown orphan, we can just simply
+    // call 'destroy' dirrectly, not necessarily to make
+    // the provisioner destroy recursive. However, every
+    // time we destroy a container in provisioner, we
+    // should still check that no sub-container exists.
     cleanups.push_back(destroy(containerId));
   }
 
@@ -406,6 +422,28 @@ Future<bool> ProvisionerProcess::destroy(const ContainerID& containerId)
     VLOG(1) << "Ignoring destroy request for unknown container " << containerId;
 
     return false;
+  }
+
+  // Provisioner destroy can be invoked from:
+  // 1. Provisioner recover to destroy all unknown orphans.
+  // 2. Containerizer recover to destroy known orphans.
+  //
+  // In both cases, we are assuming when a container is being
+  // destroyed, it has no corresponding sub-containers (should
+  // be already destroyed if it used to have any sub-container).
+  // The following is a check to make sure no sub-containers
+  // correlated.
+  //
+  // TODO(gilbert): This check is expensive since it scans
+  // the infos hashmap to prove no sub-contianer exists. It
+  // would be expensive if the hashmap is huge (a rare case).
+  foreachkey (const ContainerID& entry, infos) {
+    if (entry.has_parent() && (entry.parent() == containerId)) {
+      VLOG(1) << "Ignoring destroy request for container "
+              << containerId << " since its sub-container "
+              << entry << " is not destroyed yet";
+      return false;
+    }
   }
 
   // Unregister the container first. If destroy() fails, we can rely
