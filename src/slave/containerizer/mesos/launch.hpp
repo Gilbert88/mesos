@@ -44,6 +44,7 @@ public:
     Option<int> pipe_write;
     Option<JSON::Array> pre_exec_commands;
 #ifdef __linux__
+    Option<std::string> exit_status_path;
     bool unshare_namespace_mnt;
     Option<JSON::Object> capabilities;
 #endif // __linux__
