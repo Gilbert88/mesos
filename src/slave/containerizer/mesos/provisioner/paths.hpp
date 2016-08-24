@@ -82,7 +82,8 @@ listContainerRootfses(
 
 // Return a set of container IDs.
 Try<hashset<ContainerID>> listContainers(
-    const std::string& provisionerDir);
+    const std::string& provisionerDir,
+    const Option<ContainerID>& parentId = None());
 
 
 std::string getBackendDir(

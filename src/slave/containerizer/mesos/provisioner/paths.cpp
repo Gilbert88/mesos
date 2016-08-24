@@ -143,11 +143,13 @@ Try<Option<string>> findContainerDir(
 
 
 Try<hashset<ContainerID>> listContainers(
-    const string& provisionerDir)
+    const string& provisionerDir,
+    const Option<ContainerID>& parentId)
 {
   hashset<ContainerID> results;
 
-  string containersDir = getContainersDir(provisionerDir);
+  const string containersDir = getContainersDir(provisionerDir);
+
   if (!os::exists(containersDir)) {
     // No container has been created yet.
     return results;
@@ -155,12 +157,12 @@ Try<hashset<ContainerID>> listContainers(
 
   Try<list<string>> containerIds = os::ls(containersDir);
   if (containerIds.isError()) {
-    return Error("Unable to list the containers directory: " +
-                 containerIds.error());
+    return Error("Unable to list the containers directory: '" +
+                 containersDir + "': " + containerIds.error());
   }
 
   foreach (const string& entry, containerIds.get()) {
-    string containerPath = path::join(containersDir, entry);
+    const string containerPath = path::join(containersDir, entry);
 
     if (!os::stat::isdir(containerPath)) {
       LOG(WARNING) << "Ignoring unexpected container entry at: "
@@ -170,7 +172,23 @@ Try<hashset<ContainerID>> listContainers(
 
     ContainerID containerId;
     containerId.set_value(entry);
+
+    if (parentId.isSome()) {
+      containerId.mutable_parent()->CopyFrom(parentId.get());
+    }
+
     results.insert(containerId);
+
+    Try<hashset<ContainerID>> subContainers =
+      listContainers(containerPath, containerId);
+
+    if (subContainers.isError()) {
+      return Error("Failed to list sub-containers: " + subContainers.error());
+    }
+
+    if (!subContainers->empty()) {
+      results.insert(subContainers->begin(), subContainers->end());
+    }
   }
 
   return results;
