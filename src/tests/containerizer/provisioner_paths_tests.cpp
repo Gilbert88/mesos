@@ -17,6 +17,7 @@
 #include <process/gtest.hpp>
 
 #include <stout/gtest.hpp>
+#include <stout/hashset.hpp>
 #include <stout/os.hpp>
 
 #include "slave/containerizer/mesos/provisioner/paths.hpp"
@@ -77,6 +78,47 @@ TEST_F(ProvisionerPathTest, FindContainerDirectory)
   find = findContainerDir(provisionerDir, child4);
   ASSERT_SOME(find);
   EXPECT_NONE(find.get());
+}
+
+
+TEST_F(ProvisionerPathTest, ListProvisionerContainers)
+{
+  const string provisionerDir = os::getcwd();
+
+  // TODO(gilbert): Refactor duplicate code to the unit test
+  // class.
+  ContainerID child1;  // parent1/child1
+  ContainerID child2;  // parent1/child2
+  ContainerID child3;  // parent2/child3
+  ContainerID parent1; // parent1
+  ContainerID parent2; // parent2
+
+  child1.set_value("child1");
+  child1.mutable_parent()->set_value("parent1");
+  child2.set_value("child2");
+  child2.mutable_parent()->set_value("parent1");
+  child3.set_value("child3");
+  child3.mutable_parent()->set_value("parent2");
+  parent1.set_value("parent1");
+  parent2.set_value("parent2");
+
+  const string containerDir1 = getContainerDir(provisionerDir, child1);
+  const string containerDir2 = getContainerDir(provisionerDir, child2);
+  const string containerDir3 = getContainerDir(provisionerDir, child3);
+
+  ASSERT_SOME(os::mkdir(containerDir1));
+  ASSERT_SOME(os::mkdir(containerDir2));
+  ASSERT_SOME(os::mkdir(containerDir3));
+
+  Try<hashset<ContainerID>> containerIds = listContainers(provisionerDir);
+  ASSERT_SOME(containerIds);
+
+  EXPECT_TRUE(containerIds->contains(parent1));
+  EXPECT_TRUE(containerIds->contains(parent2));
+  EXPECT_TRUE(containerIds->contains(child1));
+  EXPECT_TRUE(containerIds->contains(child2));
+  EXPECT_TRUE(containerIds->contains(child3));
+  EXPECT_EQ(5u, containerIds->size());
 }
 
 } // namespace tests {
