@@ -69,6 +69,7 @@
 #include "slave/containerizer/mesos/linux_launcher.hpp"
 #endif // __linux__
 
+#include "tests/environment.hpp"
 #include "tests/flags.hpp"
 #include "tests/mesos.hpp"
 #include "tests/module.hpp"
@@ -209,7 +210,7 @@ TYPED_TEST_CASE(CpuIsolatorTest, CpuIsolatorTypes);
 
 TYPED_TEST(CpuIsolatorTest, UserCpuUsage)
 {
-  slave::Flags flags;
+  slave::Flags flags = this->CreateSlaveFlags();
 
   Try<Isolator*> _isolator = TypeParam::create(flags);
   ASSERT_SOME(_isolator);
@@ -321,7 +322,7 @@ TYPED_TEST(CpuIsolatorTest, UserCpuUsage)
 
 TYPED_TEST(CpuIsolatorTest, SystemCpuUsage)
 {
-  slave::Flags flags;
+  slave::Flags flags = this->CreateSlaveFlags();
 
   Try<Isolator*> _isolator = TypeParam::create(flags);
   ASSERT_SOME(_isolator);
