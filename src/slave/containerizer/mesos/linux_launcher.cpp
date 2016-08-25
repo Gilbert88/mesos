@@ -26,6 +26,7 @@
 #include <stout/abort.hpp>
 #include <stout/check.hpp>
 #include <stout/hashset.hpp>
+#include <stout/numify.hpp>
 #include <stout/os.hpp>
 #include <stout/path.hpp>
 #include <stout/strings.hpp>
@@ -87,6 +88,9 @@ public:
       const ContainerID& containerId);
 
   virtual std::string getExitStatusCheckpointPath(
+      const ContainerID& containerId);
+
+  virtual process::Future<Option<int>> wait(
       const ContainerID& containerId);
 
 private:
@@ -251,6 +255,16 @@ string LinuxLauncher::getExitStatusCheckpointPath(
       process.get(),
       &LinuxLauncherProcess::getExitStatusCheckpointPath,
       containerId).get();
+}
+
+
+Future<Option<int>> LinuxLauncher::wait(
+    const ContainerID& containerId)
+{
+  return dispatch(
+      process.get(),
+      &LinuxLauncherProcess::wait,
+      containerId);
 }
 
 
@@ -728,6 +742,77 @@ string LinuxLauncherProcess::getExitStatusCheckpointPath(
   return path::join(
       Launcher::getRuntimePathForContainer(flags, containerId),
       "exit_status");
+}
+
+
+Future<Option<int>> LinuxLauncherProcess::wait(const ContainerID& containerId)
+{
+  if (!containers.contains(containerId)) {
+    return Failure("Container does not exist");
+  }
+
+  // The following check will only return true in the case of a legacy
+  // container (i.e. one launched by an old launcher that doesn't do
+  // checkpointing) or if the agent crashes before checkpointing the
+  // `pid` of the container. In both cases we should return `None()`
+  // because:
+  //
+  // (1) Returning `None()` is the existing semantics for legacy
+  //     containers and there is no way to reap the exit status from a
+  //     non-existent checkpointed directory.
+  //
+  // (2) If the launcher crashes before checkpointing the `pid` of the
+  //     container, we know the container will be terminating soon
+  //     because it will fail on reading from the control pipe it has
+  //     open with the agent. In such a case, returning `None()` makes
+  //     sense because the container will never have truly started yet.
+  if (containers.at(containerId).pid == -1) {//.isNone()) {
+    return None();
+  }
+
+  return process::reap(containers.at(containerId).pid)//.get())
+    .then([=](const Option<int>& status) -> Future<Option<int>> {
+      // If the `reap()` call returned the exit
+      // status directly, just pass it through.
+      if (status.isSome()) {
+        return status.get();
+      }
+
+      // Extract the exit status from its checkpoint file.
+      string path = getExitStatusCheckpointPath(containerId);
+
+      // It's possible that the file was never created if the 'init'
+      // process received a SIGKILL before creating the file. Also,
+      // legacy containers will not have this file created for them
+      // (because they were launched with a legacy launcher that
+      // didn't do checkpointing). In both cases we should return
+      // `None()` because no exit status can be reaped from the
+      // non-existent checkpointed file.
+      if (!os::exists(path)) {
+        return None();
+      }
+
+      Try<string> read = os::read(path);
+      if (read.isError()) {
+        return Failure("Unable to read exit status from checkpoint file"
+                       " '" + path + "': " + read.error());
+      }
+
+      // It's possible that the file was never written
+      // to if the 'init' process received a SIGKILL
+      // before it's child exited.
+      if (read.get() == "") {
+        return None();
+      }
+
+      Try<int> exitStatus = numify<int>(read.get());
+      if (exitStatus.isError()) {
+        return Failure("Cannot read checkpointed exit"
+                       " status as integer: " + read.get());
+      }
+
+      return exitStatus.get();
+    });
 }
 
 

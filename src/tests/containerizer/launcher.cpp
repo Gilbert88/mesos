@@ -46,6 +46,12 @@ ACTION_P(InvokeGetExitStatusCheckpointPath, launcher)
 }
 
 
+ACTION_P(InvokeWait, launcher)
+{
+  return launcher->real->wait(arg0);
+}
+
+
 TestLauncher::TestLauncher(const process::Owned<slave::Launcher>& _real)
   : real(_real)
 {
@@ -70,6 +76,11 @@ TestLauncher::TestLauncher(const process::Owned<slave::Launcher>& _real)
   ON_CALL(*this, getExitStatusCheckpointPath(_))
     .WillByDefault(InvokeGetExitStatusCheckpointPath(this));
   EXPECT_CALL(*this, getExitStatusCheckpointPath(_))
+    .WillRepeatedly(DoDefault());
+
+  ON_CALL(*this, wait(_))
+    .WillByDefault(InvokeWait(this));
+  EXPECT_CALL(*this, wait(_))
     .WillRepeatedly(DoDefault());
 }
 

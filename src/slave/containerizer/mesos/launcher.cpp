@@ -218,6 +218,18 @@ string PosixLauncher::getExitStatusCheckpointPath(
 }
 
 
+Future<Option<int>> PosixLauncher::wait(const ContainerID& containerId)
+{
+  if (!pids.contains(containerId)) {
+    return Failure("Unknown container");
+  }
+
+  pid_t pid = pids.get(containerId).get();
+
+  return process::reap(pid);
+}
+
+
 Try<Launcher*> WindowsLauncher::create(const Flags& flags)
 {
   return new WindowsLauncher(flags);

@@ -77,7 +77,7 @@ public:
   // /var/run/mesos/launcher/linux/containers/a9dd/containers/4e3a/pid
   static std::string getRuntimePathForContainer(
       const Flags& flags,
-      const ContainerID& id);
+      const ContainerID& containerId);
 
   virtual ~Launcher() {}
 
@@ -118,6 +118,11 @@ public:
   // exit status of the container with `containerId`.
   virtual std::string getExitStatusCheckpointPath(
       const ContainerID& containerId) = 0;
+
+  // Wait for the container with `containerId` to complete.
+  // The exit status of the container is returned.
+  virtual process::Future<Option<int>> wait(
+      const ContainerID& containerId) = 0;
 };
 
 
@@ -154,6 +159,9 @@ public:
       const ContainerID& containerId);
 
   virtual std::string getExitStatusCheckpointPath(
+      const ContainerID& containerId);
+
+  virtual process::Future<Option<int>> wait(
       const ContainerID& containerId);
 
 protected:
