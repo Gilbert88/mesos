@@ -491,6 +491,90 @@ TEST_F(ProvisionerAppcTest, Recover)
 }
 
 
+// This test verifies that a provisioner can recover the rootfs
+// provisioned by a previous provisioner for nested container,
+// and then destroy it.
+TEST_F(ProvisionerAppcTest, RecoverNestedContainer)
+{
+  // Create provisioner.
+  slave::Flags flags;
+  flags.image_providers = "APPC";
+  flags.appc_store_dir = path::join(os::getcwd(), "store");
+  flags.image_provisioner_backend = "copy";
+  flags.work_dir = "work_dir";
+
+  Try<Owned<Provisioner>> provisioner1 = Provisioner::create(flags);
+  ASSERT_SOME(provisioner1);
+
+  Try<string> createImage = createTestImage(
+      flags.appc_store_dir,
+      getManifest());
+
+  ASSERT_SOME(createImage);
+
+  // Recover. This is when the image in the store is loaded.
+  AWAIT_READY(provisioner1.get()->recover({}, {}));
+
+  Image image;
+  image.mutable_appc()->CopyFrom(getTestImage());
+
+  ContainerID parent;
+  ContainerID child;
+
+  parent.set_value(UUID::random().toString());
+  child.set_value(UUID::random().toString());
+  child.mutable_parent()->CopyFrom(parent);
+
+  AWAIT_READY(provisioner1.get()->provision(parent, image));
+  AWAIT_READY(provisioner1.get()->provision(child, image));
+
+  // Create a new provisioner to recover the state from the container.
+  Try<Owned<Provisioner>> provisioner2 = Provisioner::create(flags);
+  ASSERT_SOME(provisioner2);
+
+  mesos::slave::ContainerState parentState;
+  mesos::slave::ContainerState childState;
+
+  // Here we are using an ExecutorInfo in the ContainerState without a
+  // ContainerInfo. This is the situation where the Image is specified
+  // via --default_container_info so it's not part of the recovered
+  // ExecutorInfo.
+  parentState.mutable_container_id()->CopyFrom(parent);
+  childState.mutable_container_id()->CopyFrom(child);
+
+  AWAIT_READY(provisioner2.get()->recover({parentState, childState}, {}));
+
+  // It's possible for the user to provision two different rootfses
+  // from the same image.
+  AWAIT_READY(provisioner2.get()->provision(child, image));
+
+  string provisionerDir = slave::paths::getProvisionerDir(flags.work_dir);
+
+  string containerDir =
+    slave::provisioner::paths::getContainerDir(
+        provisionerDir,
+        child);
+
+  Try<hashmap<string, hashset<string>>> rootfses =
+    slave::provisioner::paths::listContainerRootfses(
+        provisionerDir,
+        child);
+
+  ASSERT_SOME(rootfses);
+
+  // Verify that the rootfs is successfully provisioned.
+  ASSERT_TRUE(rootfses->contains(flags.image_provisioner_backend));
+  EXPECT_EQ(2u, rootfses->get(flags.image_provisioner_backend)->size());
+
+  Future<bool> destroy = provisioner2.get()->destroy(child);
+  AWAIT_READY(destroy);
+  EXPECT_TRUE(destroy.get());
+
+  // The container directory is successfully cleaned up.
+  EXPECT_FALSE(os::exists(containerDir));
+}
+
+
 // Mock HTTP image server.
 class TestAppcImageServer : public Process<TestAppcImageServer>
 {
