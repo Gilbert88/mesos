@@ -25,7 +25,6 @@
 #include <process/defer.hpp>
 #include <process/io.hpp>
 #include <process/owned.hpp>
-#include <process/reap.hpp>
 #include <process/subprocess.hpp>
 
 #include <process/metrics/metrics.hpp>
@@ -698,7 +697,7 @@ Future<Nothing> MesosContainerizerProcess::__recover(
 
     Owned<Container> container(new Container());
 
-    Future<Option<int>> status = process::reap(run.pid());
+    Future<Option<int>> status = launcher->wait(containerId);
     status.onAny(defer(self(), &Self::reaped, containerId));
     container->status = status;
 
@@ -1234,6 +1233,16 @@ Future<bool> MesosContainerizerProcess::_launch(
 #endif // __WINDOWS
     launchFlags.pre_exec_commands = preExecCommands;
 
+#ifdef __linux__
+    // TODO(klueska): For now we only support checkpointing the exit
+    // status in the `LinuxLauncher`. We plan to support this feature
+    // in the `PosixLauncher` in the future.
+    if (flags.launcher == "linux") {
+      launchFlags.exit_status_path =
+        launcher->getExitStatusCheckpointPath(containerId);
+    }
+#endif // __linux__
+
     VLOG(1) << "Launching '" << MESOS_CONTAINERIZER << "' with flags '"
             << launchFlags << "'";
 
@@ -1283,9 +1292,9 @@ Future<bool> MesosContainerizerProcess::_launch(
       }
     }
 
-    // Monitor the executor's pid. We keep the future because we'll
-    // refer to it again during container destroy.
-    Future<Option<int>> status = process::reap(pid);
+    // Monitor the forked process's pid. We keep the future because
+    // we'll refer to it again during container destroy.
+    Future<Option<int>> status = launcher->wait(containerId);
     status.onAny(defer(self(), &Self::reaped, containerId));
 
     container->status = status;
