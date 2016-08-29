@@ -544,8 +544,8 @@ TEST_F(ProvisionerAppcTest, RecoverNestedContainer)
 
   AWAIT_READY(provisioner2.get()->recover({parentState, childState}, {}));
 
-  // It's possible for the user to provision two different rootfses
-  // from the same image.
+  // Both a container and its sub-container can have the rootfses.
+  AWAIT_READY(provisioner2.get()->provision(parent, image));
   AWAIT_READY(provisioner2.get()->provision(child, image));
 
   string provisionerDir = slave::paths::getProvisionerDir(flags.work_dir);
