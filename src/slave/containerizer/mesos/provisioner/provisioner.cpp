@@ -427,6 +427,7 @@ Future<bool> ProvisionerProcess::destroy(const ContainerID& containerId)
   // Provisioner destroy can be invoked from:
   // 1. Provisioner recover to destroy all unknown orphans.
   // 2. Containerizer recover to destroy known orphans.
+  // 3. Containerizer destroy on one specific container.
   //
   // In both cases, we are assuming when a container is being
   // destroyed, it has no corresponding sub-containers (should
@@ -438,11 +439,11 @@ Future<bool> ProvisionerProcess::destroy(const ContainerID& containerId)
   // the infos hashmap to prove no sub-contianer exists. It
   // would be expensive if the hashmap is huge (a rare case).
   foreachkey (const ContainerID& entry, infos) {
-    if (entry.has_parent() && (entry.parent() == containerId)) {
-      VLOG(1) << "Ignoring destroy request for container "
-              << containerId << " since its sub-container "
-              << entry << " is not destroyed yet";
-      return false;
+    if (entry.has_parent() && entry.parent() == containerId) {
+      return Failure(
+          "Failed to destroy container " + stringify(containerId) +
+          " since its sub-container " + stringify(entry) +
+          " is not destroyed yet");
     }
   }
 
