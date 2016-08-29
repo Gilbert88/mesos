@@ -555,17 +555,6 @@ TEST_F(ProvisionerAppcTest, RecoverNestedContainer)
         provisionerDir,
         child);
 
-  Try<hashmap<string, hashset<string>>> rootfses =
-    slave::provisioner::paths::listContainerRootfses(
-        provisionerDir,
-        child);
-
-  ASSERT_SOME(rootfses);
-
-  // Verify that the rootfs is successfully provisioned.
-  ASSERT_TRUE(rootfses->contains(flags.image_provisioner_backend));
-  EXPECT_EQ(2u, rootfses->get(flags.image_provisioner_backend)->size());
-
   Future<bool> destroy = provisioner2.get()->destroy(child);
   AWAIT_READY(destroy);
   EXPECT_TRUE(destroy.get());
