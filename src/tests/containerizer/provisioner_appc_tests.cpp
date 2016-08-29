@@ -496,7 +496,6 @@ TEST_F(ProvisionerAppcTest, Recover)
 // and then destroy it.
 TEST_F(ProvisionerAppcTest, RecoverNestedContainer)
 {
-  // Create provisioner.
   slave::Flags flags;
   flags.image_providers = "APPC";
   flags.appc_store_dir = path::join(os::getcwd(), "store");
@@ -543,8 +542,6 @@ TEST_F(ProvisionerAppcTest, RecoverNestedContainer)
   childState.mutable_container_id()->CopyFrom(child);
 
   AWAIT_READY(provisioner2.get()->recover({parentState, childState}, {}));
-
-  // Both a container and its sub-container can have the rootfses.
   AWAIT_READY(provisioner2.get()->provision(child, image));
 
   string provisionerDir = slave::paths::getProvisionerDir(flags.work_dir);
@@ -557,8 +554,16 @@ TEST_F(ProvisionerAppcTest, RecoverNestedContainer)
   Future<bool> destroy = provisioner2.get()->destroy(child);
   AWAIT_READY(destroy);
   EXPECT_TRUE(destroy.get());
+  EXPECT_FALSE(os::exists(containerDir));
 
-  // The container directory is successfully cleaned up.
+  containerDir =
+    slave::provisioner::paths::getContainerDir(
+        provisionerDir,
+        parent);
+
+  destroy = provisioner2.get()->destroy(parent);
+  AWAIT_READY(destroy);
+  EXPECT_TRUE(destroy.get());
   EXPECT_FALSE(os::exists(containerDir));
 }
 
