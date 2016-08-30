@@ -227,11 +227,11 @@ inline Try<ino_t> getns(pid_t pid, const std::string& ns)
 
 
 // TODO(benh): Write a real comment explaining this!
-inline Try<pid_t> enter(
+inline Try<pid_t> clone(
     pid_t target,
     int nstypes,
-    int flags,
-    const lambda::function<int()>& f)
+    const lambda::function<int()>& f,
+    int flags)
 {
   // NOTE: the order in which we 'setns' is significant, so we use an
   // array here rather than something like a map.
@@ -254,6 +254,7 @@ inline Try<pid_t> enter(
     {CLONE_NEWCGROUP, "cgroup"}
   };
 
+  // File descriptors keyed by the (parent) namespace we are entering.
   hashmap<int, int> fds = {};
 
   // Helper for closing a list of file descriptors.
@@ -339,6 +340,15 @@ inline Try<pid_t> enter(
   message.msg_control = control;
   message.msg_controllen = sizeof(control); // CMSG_LEN(sizeof(struct ucred));
 
+  // Finally, the stack we'll use in the call to os::clone below (we
+  // allocate the stack here in order to keep the call to os::clone
+  // async signal safe, since otherwise it would be doing the dynamic
+  // allocation itself).
+  os::Stack stack;
+  stack.size = 8 * 1024 * 1024,
+  stack.address =
+    new unsigned long long[stack.size / sizeof(unsigned long long)];
+
   pid_t child = fork();
   if (child < 0) {
     close(fds.values());
@@ -399,7 +409,7 @@ inline Try<pid_t> enter(
           std::cout << "setns failed: " << strerror(errno) << std::endl;
           close(fds.values());
           ::close(sockets[1]);
-          ::exit(EXIT_FAILURE);
+          ::_exit(EXIT_FAILURE);
         }
       }
     }
@@ -419,7 +429,7 @@ inline Try<pid_t> enter(
       // properly pass back exactly the issue as the parent will
       // simply just see a closed socket.
       ::close(sockets[1]);
-      ::exit(grandchild > 0 ? EXIT_FAILURE : EXIT_SUCCESS);
+      ::_exit(grandchild > 0 ? EXIT_FAILURE : EXIT_SUCCESS);
     }
 
     // Grandchild (second child, now completely entered in the
@@ -439,17 +449,18 @@ inline Try<pid_t> enter(
 
       if (::sendmsg(sockets[1], &message, 0) == -1) {
         // Failed to send the pid back to the parent!
-        ::exit(EXIT_FAILURE);
+        ::_exit(EXIT_FAILURE);
       }
 
       ::close(sockets[1]);
 
       return f();
     },
-    flags);
+    flags,
+    stack);
 
     ::close(sockets[1]);
-    ::exit(pid < 0 ? EXIT_FAILURE : EXIT_SUCCESS);
+    ::_exit(pid < 0 ? EXIT_FAILURE : EXIT_SUCCESS);
   }
   UNREACHABLE();
 }
