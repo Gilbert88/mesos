@@ -81,7 +81,9 @@ public:
         NO_SETSID,
         &launchFlags,
         None(),
-        lambda::bind(&os::clone, lambda::_1, CLONE_NEWNS | SIGCHLD));
+        [](const lambda::function<int()>& child) {
+          return os::clone(child, CLONE_NEWNS | SIGCHLD);
+        });
 
     close(launchFlags.pipe_read.get());
     close(launchFlags.pipe_write.get());
