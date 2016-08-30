@@ -297,7 +297,9 @@ Try<T> traverse(
     // we look for '> 0' below). The 'fts_info' includes flags for the
     // current node and FTS_D indicates a directory being visited in
     // pre-order.
-    if (node->fts_level > 0 && node->fts_info & FTS_D) {
+    if (node->fts_level > 0 &&
+        ((traversal == PRE_ORDER && node->fts_info & FTS_D) ||
+         (traversal == POST_ORDER && node->fts_info & FTS_DP))) {
       std::string path = node->fts_path + hierarchyAbsPath->length();
 
       // Remove any starting or trailing '/'.
