@@ -22,10 +22,12 @@
 #error "linux/ns.hpp is only available on Linux systems."
 #endif
 
+#include <assert.h>
 #include <sched.h>
 #include <unistd.h>
 
 #include <sys/syscall.h>
+#include <sys/wait.h>
 
 #include <set>
 #include <string>
@@ -394,7 +396,18 @@ inline Try<pid_t> clone(
       return Error("Bad control data received");
     }
 
-    return ((struct ucred*) CMSG_DATA(CMSG_FIRSTHDR(&message)))->pid;
+    pid_t pid = ((struct ucred*) CMSG_DATA(CMSG_FIRSTHDR(&message)))->pid;
+
+    int status;
+    do {
+      ::waitpid(child, &status, 0);
+    } while (WIFSTOPPED(status));
+
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+      return Error("Failed to clone");
+    }
+
+    return pid;
   } else {
     // Child.
     ::close(sockets[0]);
@@ -404,9 +417,8 @@ inline Try<pid_t> clone(
     for (size_t i = 0; i < NAMESPACES; i++) {
       Option<int> fd = fds.get(namespaces[i].nstype);
       if (fd.isSome()) {
-        CHECK(namespaces[i].nstype & nstypes);
+        assert(namespaces[i].nstype & nstypes);
         if (::setns(fd.get(), namespaces[i].nstype) < 0) {
-          std::cout << "setns failed: " << strerror(errno) << std::endl;
           close(fds.values());
           ::close(sockets[1]);
           ::_exit(EXIT_FAILURE);
@@ -419,17 +431,27 @@ inline Try<pid_t> clone(
     // Fork again to make sure we're actually in those namespaces
     // (required for the pid namespace at least).
     pid_t grandchild = fork();
-    if (grandchild != 0) {
+    if (grandchild < 0) {
+      // TODO(benh): Exit with `errno` in order to capture `fork` error?
+      ::close(sockets[1]);
+      ::_exit(EXIT_FAILURE);
+    } else if (grandchild > 0) {
       // Still the (first) child.
       //
-      // Exit since either the fork failed or we're the parent and are
-      // no longer necessary.
-      //
-      // NOTE: in the event of a fork failure here we won't be able to
-      // properly pass back exactly the issue as the parent will
-      // simply just see a closed socket.
+      // Need to reap the new child and then just exit since we're the
+      // parent and are no longer necessary.
       ::close(sockets[1]);
-      ::_exit(grandchild > 0 ? EXIT_FAILURE : EXIT_SUCCESS);
+      int status;
+      do {
+        ::waitpid(grandchild, &status, 0);
+      } while (WIFSTOPPED(status));
+
+      if (WIFEXITED(status)) {
+        ::_exit(WEXITSTATUS(status));
+      } else {
+        assert(WIFSIGNALED(status));
+        ::kill(::getpid(), WTERMSIG(status));
+      }
     }
 
     // Grandchild (second child, now completely entered in the
@@ -460,6 +482,9 @@ inline Try<pid_t> clone(
     stack);
 
     ::close(sockets[1]);
+
+    // TODO(benh): Kill ourselves with an exit status that we can
+    // decode above to determine why `clone` failed.
     ::_exit(pid < 0 ? EXIT_FAILURE : EXIT_SUCCESS);
   }
   UNREACHABLE();

@@ -33,6 +33,7 @@
 
 #include "slave/containerizer/mesos/launch.hpp"
 
+#include "tests/environment.hpp"
 #include "tests/flags.hpp"
 #include "tests/utils.hpp"
 
@@ -57,13 +58,17 @@ public:
       const string& _command,
       const Option<string>& rootfs = None())
   {
-    slave::MesosContainerizerLaunch::Flags launchFlags;
-
     CommandInfo command;
     command.set_value(_command);
 
+    Try<string> directory = environment->mkdtemp();
+    if (directory.isError()) {
+      return Error("Failed to make temporary directory: " + directory.error());
+    }
+
+    slave::MesosContainerizerLaunch::Flags launchFlags;
     launchFlags.command = JSON::protobuf(command);
-    launchFlags.working_directory = "/tmp";
+    launchFlags.working_directory = directory.get();
     launchFlags.pipe_read = open("/dev/zero", O_RDONLY);
     launchFlags.pipe_write = open("/dev/null", O_WRONLY);
     launchFlags.rootfs = rootfs;

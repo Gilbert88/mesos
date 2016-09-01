@@ -77,7 +77,7 @@ public:
       const process::Subprocess::IO& in,
       const process::Subprocess::IO& out,
       const process::Subprocess::IO& err,
-      const Option<flags::FlagsBase>& flags,
+      const flags::FlagsBase* flags,
       const Option<std::map<std::string, std::string>>& environment,
       const Option<int>& namespaces,
       std::vector<process::Subprocess::Hook> parentHooks);
@@ -214,7 +214,7 @@ Try<pid_t> LinuxLauncher::fork(
     const process::Subprocess::IO& in,
     const process::Subprocess::IO& out,
     const process::Subprocess::IO& err,
-    const Option<flags::FlagsBase>& flags,
+    const flags::FlagsBase* flags,
     const Option<map<string, string>>& environment,
     const Option<int>& namespaces,
     vector<Subprocess::Hook> parentHooks)
@@ -546,8 +546,9 @@ Try<pid_t> LinuxLauncherProcess::fork(
 
   int cloneFlags = namespaces.isSome() ? namespaces.get() : 0;
 
-  LOG(INFO) << "Launching container " << containerId
-            << " and cloning with namespaces " << ns::stringify(cloneFlags);
+  LOG(INFO) << "Launching " << (target.isSome() ? "nested " : "")
+            << "container " << containerId << " and cloning with namespaces "
+            << ns::stringify(cloneFlags);
 
   cloneFlags |= SIGCHLD; // Specify SIGCHLD as child termination signal.
 
@@ -766,11 +767,11 @@ Future<Option<int>> LinuxLauncherProcess::wait(const ContainerID& containerId)
   //     because it will fail on reading from the control pipe it has
   //     open with the agent. In such a case, returning `None()` makes
   //     sense because the container will never have truly started yet.
-  if (containers.at(containerId).pid == -1) {//.isNone()) {
+  if (containers.at(containerId).pid == -1) { // .isNone()) {
     return None();
   }
 
-  return process::reap(containers.at(containerId).pid)//.get())
+  return process::reap(containers.at(containerId).pid) // .get())
     .then([=](const Option<int>& status) -> Future<Option<int>> {
       // If the `reap()` call returned the exit
       // status directly, just pass it through.
