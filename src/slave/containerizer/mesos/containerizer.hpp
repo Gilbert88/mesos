@@ -330,7 +330,7 @@ private:
     process::Sequence sequence;
 
     // Containers nested under this container.
-    hashmap<ContainerID, process::Owned<Container>> containers;
+    std::list<ContainerID> containers;
   };
 
   hashmap<ContainerID, process::Owned<Container>> containers_;
