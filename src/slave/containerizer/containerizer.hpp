@@ -92,9 +92,15 @@ public:
 
   // Launch a nested container.
   // TODO(jieyu): Consider combining with the 'launch' above.
+  //
+  // TODO(gilbert): Remove the SlaveID once the executor PID
+  // checkpointing by containerizer is deprecated.
   virtual process::Future<Nothing> launch(
       const ContainerID& containerId,
       const CommandInfo& commandInfo,
+      const std::string& directory,
+      const Option<std::string>& user,
+      const SlaveID& slaveId,
       const Option<ContainerInfo>& containerInfo,
       const Resources& resources)
   {

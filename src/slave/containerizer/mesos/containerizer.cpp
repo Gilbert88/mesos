@@ -490,6 +490,9 @@ Future<bool> MesosContainerizer::launch(
 Future<Nothing> MesosContainerizer::launch(
     const ContainerID& containerId,
     const CommandInfo& commandInfo,
+    const string& directory,
+    const Option<string>& user,
+    const SlaveID& slaveId,
     const Option<ContainerInfo>& containerInfo,
     const Resources& resources)
 {
@@ -497,6 +500,9 @@ Future<Nothing> MesosContainerizer::launch(
   Future<Nothing> (MesosContainerizerProcess::*launch)(
       const ContainerID&,
       const CommandInfo&,
+      const string&,
+      const Option<string>&,
+      const SlaveID&,
       const Option<ContainerInfo>&,
       const Resources&) = &MesosContainerizerProcess::launch;
 
@@ -504,6 +510,9 @@ Future<Nothing> MesosContainerizer::launch(
                   launch,
                   containerId,
                   commandInfo,
+                  directory,
+                  user,
+                  slaveId,
                   containerInfo,
                   resources);
 }
@@ -1383,6 +1392,9 @@ Future<bool> MesosContainerizerProcess::exec(
 Future<Nothing> MesosContainerizerProcess::launch(
     const ContainerID& containerId,
     const CommandInfo& commandInfo,
+    const string& directory,
+    const Option<string>& user,
+    const SlaveID& slaveId,
     const Option<ContainerInfo>& containerInfo,
     const Resources& resources)
 {

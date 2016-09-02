@@ -88,6 +88,9 @@ public:
   virtual process::Future<Nothing> launch(
       const ContainerID& containerId,
       const CommandInfo& commandInfo,
+      const std::string& directory,
+      const Option<std::string>& user,
+      const SlaveID& slaveId,
       const Option<ContainerInfo>& containerInfo,
       const Resources& resources);
 
@@ -152,6 +155,9 @@ public:
   virtual process::Future<Nothing> launch(
       const ContainerID& containerId,
       const CommandInfo& commandInfo,
+      const std::string& directory,
+      const Option<std::string>& user,
+      const SlaveID& slaveId,
       const Option<ContainerInfo>& containerInfo,
       const Resources& resources);
 
