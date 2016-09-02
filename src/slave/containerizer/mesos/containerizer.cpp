@@ -545,21 +545,30 @@ Future<Nothing> MesosContainerizer::launch(
     const ContainerID& containerId,
     const CommandInfo& commandInfo,
     const Option<ContainerInfo>& containerInfo,
-    const Resources& resources)
+    const Resources& resources,
+    const string& directory,
+    const Option<string>& user,
+    const SlaveID& slaveId)
 {
   // Need to disambiguate for the compiler.
   Future<Nothing> (MesosContainerizerProcess::*launch)(
       const ContainerID&,
       const CommandInfo&,
       const Option<ContainerInfo>&,
-      const Resources&) = &MesosContainerizerProcess::launch;
+      const Resources&,
+      const string&,
+      const Option<string>&,
+      const SlaveID&) = &MesosContainerizerProcess::launch;
 
   return dispatch(process.get(),
                   launch,
                   containerId,
                   commandInfo,
                   containerInfo,
-                  resources);
+                  resources,
+                  directory,
+                  user,
+                  slaveId);
 }
 
 
@@ -1481,7 +1490,10 @@ Future<Nothing> MesosContainerizerProcess::launch(
     const ContainerID& containerId,
     const CommandInfo& commandInfo,
     const Option<ContainerInfo>& containerInfo,
-    const Resources& resources)
+    const Resources& resources,
+    const string& directory,
+    const Option<string>& user,
+    const SlaveID& slaveId)
 {
   return Failure("Unsupported");
 }
