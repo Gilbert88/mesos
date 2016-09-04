@@ -95,7 +95,7 @@ public:
   //
   // TODO(gilbert): Remove the 'slaveId' once the fetcher does
   // not rely on SlaveID.
-  virtual process::Future<Nothing> launch(
+  virtual process::Future<bool> launch(
       const ContainerID& containerId,
       const CommandInfo& commandInfo,
       const Option<ContainerInfo>& containerInfo,
