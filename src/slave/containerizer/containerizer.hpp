@@ -95,7 +95,7 @@ public:
   //
   // TODO(gilbert): Remove the SlaveID once the executor PID
   // checkpointing by containerizer is deprecated.
-  virtual process::Future<Nothing> launch(
+  virtual process::Future<bool> launch(
       const ContainerID& containerId,
       const CommandInfo& commandInfo,
       const std::string& directory,

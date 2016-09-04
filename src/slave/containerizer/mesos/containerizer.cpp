@@ -487,7 +487,7 @@ Future<bool> MesosContainerizer::launch(
 }
 
 
-Future<Nothing> MesosContainerizer::launch(
+Future<bool> MesosContainerizer::launch(
     const ContainerID& containerId,
     const CommandInfo& commandInfo,
     const string& directory,
@@ -497,7 +497,7 @@ Future<Nothing> MesosContainerizer::launch(
     const Resources& resources)
 {
   // Need to disambiguate for the compiler.
-  Future<Nothing> (MesosContainerizerProcess::*launch)(
+  Future<bool> (MesosContainerizerProcess::*launch)(
       const ContainerID&,
       const CommandInfo&,
       const string&,
@@ -1389,7 +1389,7 @@ Future<bool> MesosContainerizerProcess::exec(
 }
 
 
-Future<Nothing> MesosContainerizerProcess::launch(
+Future<bool> MesosContainerizerProcess::launch(
     const ContainerID& containerId,
     const CommandInfo& commandInfo,
     const string& directory,
