@@ -1398,7 +1398,44 @@ Future<Nothing> MesosContainerizerProcess::launch(
     const Option<ContainerInfo>& containerInfo,
     const Resources& resources)
 {
-  return Failure("Unsupported");
+  CHECK(containerId.has_parent());
+
+  if (containers_.contains(containerId)) {
+    return Failure(
+        "Sub-container " + stringify(containerId) + " already started");
+  }
+
+  const ContainerID& parentContainerId = containerId.parent();
+
+  if (!containers_.contains(parentContainerId)) {
+    return Failure(
+        "Parent container " + stringify(parentContainerId) +
+        " does not exist");
+  }
+
+  containers_[parentContainerId]->containers.push_back(containerId);
+
+  LOG(INFO) << "Starting sub-container " << containerId;
+
+  ContainerConfig containerConfig;
+  containerConfig.mutable_command_info()->CopyFrom(commandInfo);
+  containerConfig.mutable_resources()->CopyFrom(resources);
+  containerConfig.set_directory(directory);
+
+  if (user.isSome()) {
+    containerConfig.set_user(user.get());
+  }
+
+  if (containerInfo.isSome()) {
+    containerConfig.mutable_container_info()->CopyFrom(containerInfo.get());
+  }
+
+  // For sub-container
+  return launch(containerId,
+                containerConfig,
+                map<string, string>(),
+                slaveId,
+                false);
 }
 
 
