@@ -541,7 +541,7 @@ Future<bool> MesosContainerizer::launch(
 }
 
 
-Future<Nothing> MesosContainerizer::launch(
+Future<bool> MesosContainerizer::launch(
     const ContainerID& containerId,
     const CommandInfo& commandInfo,
     const Option<ContainerInfo>& containerInfo,
@@ -551,7 +551,7 @@ Future<Nothing> MesosContainerizer::launch(
     const SlaveID& slaveId)
 {
   // Need to disambiguate for the compiler.
-  Future<Nothing> (MesosContainerizerProcess::*launch)(
+  Future<bool> (MesosContainerizerProcess::*launch)(
       const ContainerID&,
       const CommandInfo&,
       const Option<ContainerInfo>&,
@@ -1486,7 +1486,7 @@ Future<bool> MesosContainerizerProcess::exec(
 }
 
 
-Future<Nothing> MesosContainerizerProcess::launch(
+Future<bool> MesosContainerizerProcess::launch(
     const ContainerID& containerId,
     const CommandInfo& commandInfo,
     const Option<ContainerInfo>& containerInfo,
