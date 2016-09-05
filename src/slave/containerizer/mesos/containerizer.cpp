@@ -1157,6 +1157,16 @@ Future<bool> MesosContainerizerProcess::_launch(
         "--rootfs=" + container->config.rootfs());
   }
 
+  // For the pod executor case, we add the rootfs flag to the
+  // launch command for the task container.
+  if (!container->config.has_task_info() &&
+      !container->config.has_executor_info() &&
+      container->config.has_rootfs()) {
+    CHECK_SOME(launchCommand);
+    launchCommand->add_arguments(
+        "--rootfs=" + container->config.rootfs());
+  }
+
   // Include any enviroment variables from CommandInfo.
   foreach (const Environment::Variable& variable,
            container->config.command_info().environment().variables()) {
@@ -1302,6 +1312,9 @@ Future<bool> MesosContainerizerProcess::_launch(
       }
     }
 
+    // TODO(gilbert): Call launcher 'wait' to wait for the
+    // sub-container to finish.
+
     // Monitor the executor's pid. We keep the future because we'll
     // refer to it again during container destroy.
     Future<Option<int>> status = process::reap(pid);
@@ -1325,8 +1338,6 @@ Future<bool> MesosContainerizerProcess::isolate(
     const ContainerID& containerId,
     pid_t _pid)
 {
-  CHECK(!containerId.has_parent());
-
   if (!containers_.contains(containerId)) {
     return Failure("Container destroyed during preparing");
   }
