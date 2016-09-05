@@ -1638,10 +1638,8 @@ Future<ContainerStatus> MesosContainerizerProcess::status(
 void MesosContainerizerProcess::destroy(
     const ContainerID& containerId)
 {
-  CHECK(!containerId.has_parent());
-
   if (!containers_.contains(containerId)) {
-    // This can happen due to the race between destroys initiated by
+    // This can happen due to the race between destroys; initiated by
     // the launch failure, the terminated executor and the agent so
     // the same container is destroyed multiple times in reaction to
     // one failure. e.g., a stuck fetcher results in:
@@ -1652,12 +1650,31 @@ void MesosContainerizerProcess::destroy(
     // - The containerizer invoking destroy() for the reaped executor.
     //
     // The guard here and `if (container->state == DESTROYING)` below
-    // make sure redundant destroys short-circuit.
+    // make sure redundant destroys; short-circuit.
     VLOG(1) << "Ignoring destroy of unknown container " << containerId;
     return;
   }
 
   const Owned<Container>& container = containers_[containerId];
+
+  // TODO(gilbert): Consider change the 'Containerizer::destroy()'
+  // return type as 'Future<Nothing>'.
+  auto destroySubContainer = [=](
+      const ContainerID& subContainer) -> Future<Nothing> {
+    destroy(subContainer);
+    return Nothing();
+  };
+
+  list<Future<Nothing>> subContainers;
+  foreach (const ContainerID& child, container->containers) {
+    LOG(INFO) << "Destroying sub-container " << child << " for container "
+              << containerId;
+
+    // Destroy sub-containers parallely.
+    subContainers.push_back(destroySubContainer(child));
+  }
+
+  await(subContainers);
 
   if (container->state == DESTROYING) {
     VLOG(1) << "Destroy has already been initiated for " << containerId;
