@@ -802,7 +802,7 @@ void MesosContainerizerProcess::____recover(
                << (destroy.isFailed() ? destroy.failure() : "discarded");
 
     ++metrics.container_destroy_errors;
-    return
+    return;
   }
 }
 
