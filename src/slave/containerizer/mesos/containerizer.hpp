@@ -206,7 +206,7 @@ private:
 
   void ____recover(
       const ContainerID& containerId,
-      const process::Future<std::bool>& destroy);
+      const process::Future<bool>& destroy);
 
   process::Future<Nothing> prepare(
       const ContainerID& containerId,
