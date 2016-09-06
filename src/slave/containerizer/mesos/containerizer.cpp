@@ -808,7 +808,11 @@ Future<Nothing> MesosContainerizerProcess::__recover(
 
     launcher->destroy(containerId)
       .then(defer(self(), &Self::cleanupIsolators, containerId))
-      .onAny(defer(self(), &Self::___recover, containerId, lambda::_1));
+      .onAny(defer(self(), &Self::___recover, containerId, lambda::_1))
+      .then(defer(self(), [=]() -> Future<bool> {
+        return provisioner->destroy(containerId);
+      }))
+      .onAny(defer(self(), &Self::____recover, containerId, lambda::_1));
   }
 
   return Nothing();
@@ -845,6 +849,23 @@ void MesosContainerizerProcess::___recover(
 
   if (cleanupFailed) {
     ++metrics.container_destroy_errors;
+  }
+}
+
+
+void MesosContainerizerProcess::____recover(
+    const ContainerID& containerId,
+    const Future<bool>& destroy)
+{
+  // NOTE: If 'destroy' is not ready, that indicates launcher destroy
+  // has failed.
+  if (!destroy.isReady()) {
+    LOG(ERROR) << "Failed to deprovision orphan container "
+               << containerId << ": "
+               << (destroy.isFailed() ? destroy.failure() : "discarded");
+
+    ++metrics.container_destroy_errors;
+    return;
   }
 }
 
