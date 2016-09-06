@@ -117,6 +117,8 @@
 #include "slave/containerizer/mesos/containerizer.hpp"
 #include "slave/containerizer/mesos/launch.hpp"
 #include "slave/containerizer/mesos/paths.hpp"
+#include "slave/containerizer/mesos/utils.hpp"
+
 #include "slave/containerizer/mesos/provisioner/provisioner.hpp"
 
 using process::collect;
@@ -662,9 +664,158 @@ Future<Nothing> MesosContainerizerProcess::recover(
     }
   }
 
+  // Recover the executor containers from 'SlaveState'.
+  hashset<ContainerID> alive;
+  foreach (const ContainerState& state, recoverable) {
+    ContainerID containerId = state.container_id();
+    alive.insert(containerId);
+
+    // Contruct the structure for containers from the 'SlaveState'
+    // first, to maintain the children list in the container.
+    Owned<Container> container(new Container());
+    container->status = reap(containerId, state.pid());
+    container->status->onAny(defer(self(), &Self::reaped, containerId));
+
+    // We only checkpoint the containerizer pid after the container
+    // successfully launched, therefore we can assume checkpointed
+    // containers should be running after recover.
+    container->state = RUNNING;
+    container->pid = state.pid();
+    container->directory = state.directory();
+    containers_[containerId] = container;
+  }
+
+  // TODO(gilbert): Draw the logic VENN Diagram here in comment.
+  hashset<ContainerID> orphans;
+
+  // Recover the containers from the runtime directory.
+  Result<vector<ContainerID>> containerIds =
+    containerizer::paths::getContainerIds(flags.runtime_dir);
+
+  if (containerIds.isError()) {
+    return Failure(
+        "Failed to get container ids from the runtime directory: " +
+        containerIds.error());
+  } else if (containerIds.isSome()) {
+    // Reconcile the runtime containers with the containers from
+    // `recoverable`. Treat discovered orphans as "known orphans"
+    // that we aggregate with any orphans that get returned from
+    // calling `launcher->recover`.
+    foreach (const ContainerID& containerId, containerIds.get()) {
+      if (alive.contains(containerId) && !containerId.has_parent()) {
+        continue;
+      }
+
+      // Attempt to read the pid from the container runtime directory.
+      Result<pid_t> pid =
+        containerizer::paths::getContainerPid(flags.runtime_dir, containerId);
+
+      if (pid.isError()) {
+        return Failure("Failed to get container pid: " + pid.error());
+      }
+
+      Option<string> directory;
+      if (containerId.has_parent()) {
+        const ContainerID& parentContainerId = containerId.parent();
+
+        CHECK(containers_.contains(parentContainerId));
+        containers_[parentContainerId]->containers.insert(containerId);
+
+        // Only set the directory for recoverable containers.
+        if (containers_[parentContainerId]->directory.isSome()) {
+          directory = path::join(
+              containers_[parentContainerId]->directory.get(),
+              "containers",
+              containerId.value());
+        }
+      }
+
+      Owned<Container> container(new Container());
+      container->state = RUNNING;
+      container->pid = pid.isSome() ? pid.get() : Option<int>();
+      container->directory = directory;
+
+      // Invoke 'reap' on each 'Container'. However, It's possible
+      // that 'pid' for a container is unknown (e.g., agent crashes
+      // after fork before checkpoint the pid). In that case, simply
+      // assume the child process will exit because of the pipe,
+      // and do not call 'reap' on it.
+      if (pid.isSome()) {
+        container->status = reap(containerId, pid.get());
+        container->status->onAny(defer(self(), &Self::reaped, containerId));
+      } else {
+        container->status = Future<Option<int>>(None());
+      }
+
+      containers_[containerId] = container;
+
+      // Add recoverable nested containers to the list of 'ContainerState'.
+      if (containerId.has_parent() &&
+          alive.contains(getRootContainerId(containerId)) &&
+          pid.isSome()) {
+        if (directory.isNone()) {
+          return Failure(
+              "Failed to get the sandbox for a recoverable nested container");
+        }
+
+        ContainerState state =
+          protobuf::slave::createContainerState(
+              None(),
+              containerId,
+              container->pid.get(),
+              container->directory.get());
+
+        recoverable.push_back(state);
+
+        continue;
+      }
+
+      orphans.insert(containerId);
+    }
+  }
+
   // Try to recover the launcher first.
   return launcher->recover(recoverable)
-    .then(defer(self(), &Self::_recover, recoverable, lambda::_1));
+    .then(defer(self(), [=](
+        const hashset<ContainerID>& launchedOrphans) -> Future<Nothing> {
+      // For the extra part of launcher orphans, which are not included
+      // in the constructed orphan list, the parent-child relationship
+      // has to be distringuished and make sure the children list in the
+      // parent's `Container` struct is correctly maintained, because it
+      // is necessary for cleaning up containers recursively.
+      hashset<ContainerID> extra;
+      foreach (const ContainerID& containerId, launchedOrphans) {
+        if (orphans.contains(containerId)) {
+          continue;
+        }
+
+        Owned<Container> container(new Container());
+        container->state = RUNNING;
+        container->status = Future<Option<int>>(None());
+        containers_[containerId] = container;
+
+        extra.insert(containerId);
+      }
+
+      // Maintain the children list in the `Container` struct.
+      foreach (const ContainerID& containerId, extra) {
+        if (!containerId.has_parent()) {
+          continue;
+        }
+
+        if (!containers_.contains(containerId.parent())) {
+          return Failure(
+              "Unexpected zombie nested container " + stringify(containerId));
+        }
+
+        containers_[containerId.parent()]->containers.insert(containerId);
+      }
+
+      hashset<ContainerID> _orphans = orphans;
+      _orphans.insert(extra.begin(), extra.end());
+
+      return _recover(recoverable, _orphans);
+    }));
 }
 
 
@@ -721,21 +872,14 @@ Future<Nothing> MesosContainerizerProcess::__recover(
   foreach (const ContainerState& run, recovered) {
     const ContainerID& containerId = run.container_id();
 
-    Owned<Container> container(new Container());
-
-    container->status = reap(containerId, run.pid());
-    container->status->onAny(defer(self(), &Self::reaped, containerId));
-
-    // We only checkpoint the containerizer pid after the container
-    // successfully launched, therefore we can assume checkpointed
-    // containers should be running after recover.
-    container->state = RUNNING;
-
-    containers_[containerId] = container;
-
     foreach (const Owned<Isolator>& isolator, isolators) {
       isolator->watch(containerId)
         .onAny(defer(self(), &Self::limited, containerId, lambda::_1));
+    }
+
+    // Skip logger recover for nested containers.
+    if (containerId.has_parent()) {
+      continue;
     }
 
     // Pass recovered containers to the container logger.
@@ -751,51 +895,18 @@ Future<Nothing> MesosContainerizerProcess::__recover(
   }
 
   // Destroy all the orphan containers.
-  // NOTE: We do not fail the recovery if the destroy of orphan
-  // containers failed. See MESOS-2367 for details.
+  list<Future<ContainerTermination>> cleanup = {};
   foreach (const ContainerID& containerId, orphans) {
-    LOG(INFO) << "Removing orphan container " << containerId;
+    LOG(INFO) << "Cleaning up orphan container " << containerId;
 
-    launcher->destroy(containerId)
-      .then(defer(self(), &Self::cleanupIsolators, containerId))
-      .onAny(defer(self(), &Self::___recover, containerId, lambda::_1));
+    destroy(containerId);
+    cleanup.push_back(wait(containerId));
   }
 
-  return Nothing();
-}
-
-
-void MesosContainerizerProcess::___recover(
-    const ContainerID& containerId,
-    const Future<list<Future<Nothing>>>& future)
-{
-  // NOTE: If 'future' is not ready, that indicates launcher destroy
-  // has failed because 'cleanupIsolators' should always return a
-  // ready future.
-  if (!future.isReady()) {
-    LOG(ERROR) << "Failed to destroy orphan container " << containerId << ": "
-               << (future.isFailed() ? future.failure() : "discarded");
-
-    ++metrics.container_destroy_errors;
-    return;
-  }
-
-  // Indicates if the isolator cleanups have any failure or not.
-  bool cleanupFailed = false;
-
-  foreach (const Future<Nothing>& cleanup, future.get()) {
-    if (!cleanup.isReady()) {
-      LOG(ERROR) << "Failed to clean up an isolator when destroying "
-                 << "orphan container " << containerId << ": "
-                 << (cleanup.isFailed() ? cleanup.failure() : "discarded");
-
-      cleanupFailed = true;
-    }
-  }
-
-  if (cleanupFailed) {
-    ++metrics.container_destroy_errors;
-  }
+  return await(cleanup)
+    .then([]() {
+      return Nothing();
+    });
 }
 
 
@@ -1306,7 +1417,7 @@ Future<bool> MesosContainerizerProcess::_launch(
         namespaces); // 'namespaces' will be ignored by PosixLauncher.
 
     if (forked.isError()) {
-      return Failure("Failed to fork executor: " + forked.error());
+      return Failure("Failed to fork: " + forked.error());
     }
     pid_t pid = forked.get();
 
@@ -1501,8 +1612,6 @@ Future<bool> MesosContainerizerProcess::launch(
 Future<Option<ContainerTermination>> MesosContainerizerProcess::wait(
     const ContainerID& containerId)
 {
-  CHECK(!containerId.has_parent());
-
   if (!containers_.contains(containerId)) {
     // See the comments in destroy() for race conditions
     // which lead to "unknown containers".
@@ -1711,6 +1820,11 @@ Future<bool> MesosContainerizerProcess::destroy(
   }
 
   await(cleanup)
+    // TODO(benh): Doesn't this have to be a `.then` otherwise if the
+    // launcher failed to destroy the child container we'll still try
+    // to destroy the parent container which the launcher, isolator,
+    // or provisioner is not expecting because a nested container
+    // still exists?
     .onAny(defer(self(), &Self::_destroy, containerId));
 }
 
@@ -2023,7 +2137,7 @@ void MesosContainerizerProcess::reaped(const ContainerID& containerId)
     return;
   }
 
-  LOG(INFO) << "Executor for container " << containerId << " has exited";
+  LOG(INFO) << "Container " << containerId << " has exited";
 
   // The executor has exited so destroy the container.
   destroy(containerId);
