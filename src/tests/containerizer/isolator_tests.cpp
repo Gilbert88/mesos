@@ -211,6 +211,7 @@ TYPED_TEST_CASE(CpuIsolatorTest, CpuIsolatorTypes);
 TYPED_TEST(CpuIsolatorTest, UserCpuUsage)
 {
   slave::Flags flags = this->CreateSlaveFlags();
+  flags.launcher = "posix";
 
   Try<Isolator*> _isolator = TypeParam::create(flags);
   ASSERT_SOME(_isolator);
@@ -323,6 +324,7 @@ TYPED_TEST(CpuIsolatorTest, UserCpuUsage)
 TYPED_TEST(CpuIsolatorTest, SystemCpuUsage)
 {
   slave::Flags flags = this->CreateSlaveFlags();
+  flags.launcher = "posix";
 
   Try<Isolator*> _isolator = TypeParam::create(flags);
   ASSERT_SOME(_isolator);
@@ -525,6 +527,7 @@ class RevocableCpuIsolatorTest : public MesosTest {};
 TEST_F(RevocableCpuIsolatorTest, ROOT_CGROUPS_RevocableCpu)
 {
   slave::Flags flags;
+  flags.launcher = "posix";
 
   Try<Isolator*> _isolator = CgroupsCpushareIsolatorProcess::create(flags);
   ASSERT_SOME(_isolator);
