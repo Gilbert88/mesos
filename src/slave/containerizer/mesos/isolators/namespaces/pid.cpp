@@ -130,6 +130,12 @@ Future<Nothing> NamespacesPidIsolatorProcess::recover(
     recovered.insert(state.container_id());
   }
 
+  hashset<ContainerID> orphans;
+  foreach (const ContainerID& containerId,
+           containerRecoverInfo.orphan_container_ids()) {
+    orphans.insert(containerId);
+  }
+
   // Clean up any unknown orphaned bind mounts and empty files. Known
   // orphan bind mounts and empty files will be destroyed by the
   // containerizer using the normal cleanup path. See MESOS-2367 for
