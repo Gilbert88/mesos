@@ -45,8 +45,7 @@ public:
   // (known to the launcher but not known to the slave) detected by
   // the launcher.
   virtual process::Future<Nothing> recover(
-      const std::list<ContainerState>& states,
-      const hashset<ContainerID>& orphans)
+      const ContainerRecoverInfo& containerRecoverInfo)
   {
     return Nothing();
   }

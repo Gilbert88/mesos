@@ -168,8 +168,7 @@ XfsDiskIsolatorProcess::~XfsDiskIsolatorProcess() {}
 
 
 Future<Nothing> XfsDiskIsolatorProcess::recover(
-    const list<ContainerState>& states,
-    const hashset<ContainerID>& orphans)
+    const ContainerRecoverInfo& containerRecoverInfo)
 {
   // We don't need to explicitly deal with orphans since we are primarily
   // concerned with the on-disk state. We scan all the sandbox directories
@@ -191,8 +190,15 @@ Future<Nothing> XfsDiskIsolatorProcess::recover(
 
   hashset<ContainerID> alive;
 
-  foreach (const ContainerState& state, states) {
+  foreach (const ContainerState& state,
+           containerRecoverInfo.checkpointed_container()) {
     alive.insert(state.container_id());
+  }
+
+  hashset<ContainerID> orphans;
+  foreach (const ContainerID& containerId,
+           containerRecoverInfo.orphan_container_ids()) {
+    orphans.insert(containerId);
   }
 
   foreach (const string& sandbox, sandboxes.get()) {

@@ -35,6 +35,7 @@ using std::string;
 using mesos::slave::ContainerConfig;
 using mesos::slave::ContainerLaunchInfo;
 using mesos::slave::ContainerLimitation;
+using mesos::slave::ContainerRecoverInfo;
 using mesos::slave::ContainerState;
 using mesos::slave::Isolator;
 
@@ -61,10 +62,10 @@ Try<Isolator*> PosixFilesystemIsolatorProcess::create(const Flags& flags)
 
 
 Future<Nothing> PosixFilesystemIsolatorProcess::recover(
-    const list<ContainerState>& states,
-    const hashset<ContainerID>& orphans)
+    const ContainerRecoverInfo& containerRecoverInfo)
 {
-  foreach (const ContainerState& state, states) {
+  foreach (const ContainerState& state,
+           containerRecoverInfo.checkpointed_containers()) {
     infos.put(state.container_id(), Owned<Info>(new Info(state.directory())));
   }
 

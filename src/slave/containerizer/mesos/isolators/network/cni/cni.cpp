@@ -56,6 +56,7 @@ using process::Subprocess;
 using mesos::slave::ContainerConfig;
 using mesos::slave::ContainerLaunchInfo;
 using mesos::slave::ContainerLimitation;
+using mesos::slave::ContainerRecoverInfo;
 using mesos::slave::ContainerState;
 using mesos::slave::Isolator;
 
@@ -352,8 +353,7 @@ Try<Isolator*> NetworkCniIsolatorProcess::create(const Flags& flags)
 
 
 Future<Nothing> NetworkCniIsolatorProcess::recover(
-    const list<ContainerState>& states,
-    const hashset<ContainerID>& orphans)
+    const ContainerRecoverInfo& containerRecoverInfo)
 {
   // If the `network/cni` isolator is providing network isolation to a
   // container its `rootDir` should always be set. This property of the
@@ -365,7 +365,8 @@ Future<Nothing> NetworkCniIsolatorProcess::recover(
     return Nothing();
   }
 
-  foreach (const ContainerState& state, states) {
+  foreach (const ContainerState& state,
+           containerRecoverInfo.checkpointed_containers()) {
     const ContainerID& containerId = state.container_id();
 
     Try<Nothing> recover = _recover(containerId, state);
@@ -381,6 +382,12 @@ Future<Nothing> NetworkCniIsolatorProcess::recover(
     return Failure(
         "Unable to list CNI network information root directory '" +
         rootDir.get() + "': " + entries.error());
+  }
+
+  hashset<ContainerID> orphans;
+  foreach (const ContainerID& containerId,
+           containerRecoverInfo.orphan_container_ids()) {
+    orphans.insert(containerId);
   }
 
   foreach (const string& entry, entries.get()) {

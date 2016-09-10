@@ -68,14 +68,6 @@ Try<Isolator*> DockerRuntimeIsolatorProcess::create(const Flags& flags)
 }
 
 
-Future<Nothing> DockerRuntimeIsolatorProcess::recover(
-    const list<ContainerState>& states,
-    const hashset<ContainerID>& orphans)
-{
-  return Nothing();
-}
-
-
 Future<Option<ContainerLaunchInfo>> DockerRuntimeIsolatorProcess::prepare(
     const ContainerID& containerId,
     const ContainerConfig& containerConfig)

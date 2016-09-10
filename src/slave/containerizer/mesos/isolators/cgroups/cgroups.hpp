@@ -51,8 +51,7 @@ public:
   virtual ~CgroupsIsolatorProcess();
 
   virtual process::Future<Nothing> recover(
-      const std::list<mesos::slave::ContainerState>& states,
-      const hashset<ContainerID>& orphans);
+      const mesos::slave::ContainerRecoverInfo& containerRecoverInfo);
 
   virtual process::Future<Option<mesos::slave::ContainerLaunchInfo>> prepare(
       const ContainerID& containerId,
@@ -107,7 +106,7 @@ private:
       const std::list<process::Future<Nothing>>& futures);
 
   process::Future<Nothing> __recover(
-      const hashset<ContainerID>& unknownOrphans,
+      const hashset<ContainerID>& orphans,
       const std::list<process::Future<Nothing>>& futures);
 
   process::Future<Nothing> ___recover(

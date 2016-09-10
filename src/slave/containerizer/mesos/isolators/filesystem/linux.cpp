@@ -53,9 +53,10 @@ using std::string;
 using std::vector;
 
 using mesos::slave::ContainerConfig;
-using mesos::slave::ContainerState;
 using mesos::slave::ContainerLaunchInfo;
 using mesos::slave::ContainerLimitation;
+using mesos::slave::ContainerRecoverInfo;
+using mesos::slave::ContainerState;
 using mesos::slave::Isolator;
 
 namespace mesos {
@@ -210,10 +211,10 @@ LinuxFilesystemIsolatorProcess::~LinuxFilesystemIsolatorProcess() {}
 
 
 Future<Nothing> LinuxFilesystemIsolatorProcess::recover(
-    const list<ContainerState>& states,
-    const hashset<ContainerID>& orphans)
+    const ContainerRecoverInfo& containerRecoverInfo)
 {
-  foreach (const ContainerState& state, states) {
+  foreach (const ContainerState& state,
+           containerRecoverInfo.checkpointed_containers()) {
     Owned<Info> info(new Info(
         state.directory(),
         state.executor_info()));
@@ -225,6 +226,12 @@ Future<Nothing> LinuxFilesystemIsolatorProcess::recover(
   Try<fs::MountInfoTable> table = fs::MountInfoTable::read();
   if (table.isError()) {
     return Failure("Failed to get mount table: " + table.error());
+  }
+
+  hashset<ContainerID> orphans;
+  foreach (const ContainerID& containerId,
+           containerRecoverInfo.orphan_container_ids()) {
+    orphans.insert(containerId);
   }
 
   foreach (const fs::MountInfoTable::Entry& entry, table->entries) {
