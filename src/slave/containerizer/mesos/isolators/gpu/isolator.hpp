@@ -84,8 +84,7 @@ public:
       const NvidiaComponents& components);
 
   virtual process::Future<Nothing> recover(
-      const std::list<mesos::slave::ContainerState>& states,
-      const hashset<ContainerID>& orphans);
+      const mesos::slave::ContainerRecoverInfo& containerRecoverInfo);
 
   virtual process::Future<Option<mesos::slave::ContainerLaunchInfo>> prepare(
       const ContainerID& containerId,

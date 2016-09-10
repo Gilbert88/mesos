@@ -37,11 +37,10 @@ public:
     return new slave::MesosIsolator(process);
   }
 
-  MOCK_METHOD2(
+  MOCK_METHOD1(
       recover,
       process::Future<Nothing>(
-          const std::list<mesos::slave::ContainerState>&,
-          const hashset<ContainerID>&));
+          const mesos::slave::ContainerRecoverInfo& containerRecoverInfo));
 
   virtual process::Future<Option<mesos::slave::ContainerLaunchInfo>> prepare(
       const ContainerID& containerId,

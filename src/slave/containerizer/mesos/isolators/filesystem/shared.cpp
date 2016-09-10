@@ -33,6 +33,7 @@ using std::string;
 using mesos::slave::ContainerConfig;
 using mesos::slave::ContainerLaunchInfo;
 using mesos::slave::ContainerLimitation;
+using mesos::slave::ContainerRecoverInfo;
 using mesos::slave::ContainerState;
 using mesos::slave::Isolator;
 

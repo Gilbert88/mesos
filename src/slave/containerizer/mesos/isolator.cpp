@@ -26,6 +26,7 @@ using std::list;
 using mesos::slave::ContainerConfig;
 using mesos::slave::ContainerLaunchInfo;
 using mesos::slave::ContainerLimitation;
+using mesos::slave::ContainerRecoverInfo;
 using mesos::slave::ContainerState;
 
 namespace mesos {
@@ -47,13 +48,11 @@ MesosIsolator::~MesosIsolator()
 
 
 Future<Nothing> MesosIsolator::recover(
-    const list<ContainerState>& state,
-    const hashset<ContainerID>& orphans)
+    const ContainerRecoverInfo& containerRecoverInfo)
 {
   return dispatch(process.get(),
                   &MesosIsolatorProcess::recover,
-                  state,
-                  orphans);
+                  containerRecoverInfo);
 }
 
 

@@ -73,6 +73,7 @@ using mesos::slave::ContainerConfig;
 using mesos::slave::ContainerLaunchInfo;
 using mesos::slave::ContainerLimitation;
 using mesos::slave::ContainerLogger;
+using mesos::slave::ContainerRecoverInfo;
 using mesos::slave::ContainerState;
 using mesos::slave::ContainerTermination;
 using mesos::slave::Isolator;
@@ -563,11 +564,10 @@ public:
       .WillRepeatedly(Invoke(this, &MockIsolator::_prepare));
   }
 
-  MOCK_METHOD2(
+  MOCK_METHOD1(
       recover,
       Future<Nothing>(
-          const list<ContainerState>&,
-          const hashset<ContainerID>&));
+          const ContainerRecoverInfo&));
 
   MOCK_METHOD2(
       prepare,

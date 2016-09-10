@@ -109,6 +109,7 @@ using filter::ip::PortRange;
 using mesos::slave::ContainerConfig;
 using mesos::slave::ContainerLaunchInfo;
 using mesos::slave::ContainerLimitation;
+using mesos::slave::ContainerRecoverInfo;
 using mesos::slave::ContainerState;
 using mesos::slave::Isolator;
 
@@ -2014,8 +2015,7 @@ Try<Isolator*> PortMappingIsolatorProcess::create(const Flags& flags)
 
 
 Future<Nothing> PortMappingIsolatorProcess::recover(
-    const list<ContainerState>& states,
-    const hashset<ContainerID>& orphans)
+    const ContainerRecoverInfo& containerRecoverInfo)
 {
   // Extract pids from virtual device names (veth). This tells us
   // about all the potential live containers on this slave.
@@ -2182,7 +2182,8 @@ Future<Nothing> PortMappingIsolatorProcess::recover(
   }
 
   // Now, actually recover the isolator from slave's state.
-  foreach (const ContainerState& state, states) {
+  foreach (const ContainerState& state,
+           containerRecoverInfo.checkpointed_containers()) {
     const ContainerID& containerId = state.container_id();
     pid_t pid = state.pid();
 
@@ -2227,6 +2228,12 @@ Future<Nothing> PortMappingIsolatorProcess::recover(
 
     // Remove the successfully recovered pid.
     pids.erase(pid);
+  }
+
+  hashset<ContainerID> orphans;
+  foreach (const ContainerID& containerId,
+           containerRecoverInfo.orphan_container_ids()) {
+    orphans.insert(containerId);
   }
 
   // Recover orphans. Known orphans will be destroyed by containerizer

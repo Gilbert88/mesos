@@ -77,6 +77,7 @@ using process::terminate;
 using mesos::slave::ContainerConfig;
 using mesos::slave::ContainerLaunchInfo;
 using mesos::slave::ContainerLimitation;
+using mesos::slave::ContainerRecoverInfo;
 using mesos::slave::ContainerState;
 using mesos::slave::Isolator;
 
@@ -109,10 +110,10 @@ PosixDiskIsolatorProcess::~PosixDiskIsolatorProcess() {}
 
 
 Future<Nothing> PosixDiskIsolatorProcess::recover(
-    const list<ContainerState>& states,
-    const hashset<ContainerID>& orphans)
+    const ContainerRecoverInfo& containerRecoverInfo)
 {
-  foreach (const ContainerState& state, states) {
+  foreach (const ContainerState& state,
+           containerRecoverInfo.checkpointed_containers()) {
     // Since we checkpoint the executor after we create its working
     // directory, the working directory should definitely exist.
     CHECK(os::exists(state.directory()))

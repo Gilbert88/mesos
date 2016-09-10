@@ -187,8 +187,7 @@ private:
       const hashset<ContainerID>& orphans);
 
   process::Future<std::list<Nothing>> recoverIsolators(
-      const std::list<mesos::slave::ContainerState>& recoverable,
-      const hashset<ContainerID>& orphans);
+      const mesos::slave::ContainerRecoverInfo& containerRecoverInfo);
 
   process::Future<Nothing> recoverProvisioner(
       const std::list<mesos::slave::ContainerState>& recoverable,

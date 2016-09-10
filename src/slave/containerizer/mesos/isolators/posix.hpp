@@ -42,10 +42,10 @@ class PosixIsolatorProcess : public MesosIsolatorProcess
 {
 public:
   virtual process::Future<Nothing> recover(
-      const std::list<mesos::slave::ContainerState>& state,
-      const hashset<ContainerID>& orphans)
+      const mesos::slave::ContainerRecoverInfo& containerRecoverInfo)
   {
-    foreach (const mesos::slave::ContainerState& run, state) {
+    foreach (const mesos::slave::ContainerState& run,
+             containerRecoverInfo.checkpointed_containers()) {
       // This should (almost) never occur: see comment in
       // PosixLauncher::recover().
       if (pids.contains(run.container_id())) {

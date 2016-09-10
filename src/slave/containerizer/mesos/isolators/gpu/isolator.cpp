@@ -54,6 +54,7 @@ using docker::spec::v1::ImageManifest;
 using mesos::slave::ContainerConfig;
 using mesos::slave::ContainerLaunchInfo;
 using mesos::slave::ContainerLimitation;
+using mesos::slave::ContainerRecoverInfo;
 using mesos::slave::ContainerState;
 using mesos::slave::Isolator;
 
@@ -181,12 +182,12 @@ Try<Isolator*> NvidiaGpuIsolatorProcess::create(
 
 
 Future<Nothing> NvidiaGpuIsolatorProcess::recover(
-    const list<ContainerState>& states,
-    const hashset<ContainerID>& orphans)
+    const ContainerRecoverInfo& containerRecoverInfo)
 {
   list<Future<Nothing>> futures;
 
-  foreach (const ContainerState& state, states) {
+  foreach (const ContainerState& state,
+           containerRecoverInfo.checkpointed_containers()) {
     const ContainerID& containerId = state.container_id();
     const string cgroup = path::join(flags.cgroups_root, containerId.value());
 

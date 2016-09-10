@@ -40,6 +40,7 @@ using mesos::internal::slave::docker::volume::DriverClient;
 using mesos::slave::ContainerConfig;
 using mesos::slave::ContainerLaunchInfo;
 using mesos::slave::ContainerLimitation;
+using mesos::slave::ContainerRecoverInfo;
 using mesos::slave::ContainerState;
 using mesos::slave::Isolator;
 
@@ -129,8 +130,7 @@ Try<Isolator*> DockerVolumeIsolatorProcess::_create(
 
 
 Future<Nothing> DockerVolumeIsolatorProcess::recover(
-    const list<ContainerState>& states,
-    const hashset<ContainerID>& orphans)
+    const ContainerRecoverInfo& containerRecoverInfo)
 {
   if (!os::exists(rootDir)) {
     VLOG(1) << "The checkpoint directory at '" << rootDir
@@ -139,7 +139,8 @@ Future<Nothing> DockerVolumeIsolatorProcess::recover(
     return Nothing();
   }
 
-  foreach (const ContainerState& state, states) {
+  foreach (const ContainerState& state,
+           containerRecoverInfo.checkpointed_containers()) {
     const ContainerID& containerId = state.container_id();
 
     Try<Nothing> recover = _recover(containerId);
@@ -148,6 +149,12 @@ Future<Nothing> DockerVolumeIsolatorProcess::recover(
           "Failed to recover docker volumes for container " +
           stringify(containerId) + ": " + recover.error());
     }
+  }
+
+  hashset<ContainerID> orphans;
+  foreach (const ContainerID& containerId,
+           containerRecoverInfo.orphan_container_ids()) {
+    orphans.insert(containerId);
   }
 
   Try<list<string>> entries = os::ls(rootDir);

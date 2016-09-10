@@ -143,6 +143,7 @@ using mesos::slave::ContainerConfig;
 using mesos::slave::ContainerLaunchInfo;
 using mesos::slave::ContainerLimitation;
 using mesos::slave::ContainerLogger;
+using mesos::slave::ContainerRecoverInfo;
 using mesos::slave::ContainerState;
 using mesos::slave::ContainerTermination;
 using mesos::slave::Isolator;
@@ -659,23 +660,36 @@ Future<Nothing> MesosContainerizerProcess::_recover(
     const list<ContainerState>& recoverable,
     const hashset<ContainerID>& orphans)
 {
+  // Construct the 'ContainerRecoverInfo'.
+  ContainerRecoverInfo containerRecoverInfo;
+
+  foreach (const ContainerState& state, recoverable) {
+    containerRecoverInfo.add_checkpointed_containers()->CopyFrom(state);
+  }
+
+  // TODO(gilbert): Update this to 'known_container_ids', once
+  // the launcher returns a full list of known containers. The
+  // orphan list should be figured out by the containerizer.
+  foreach (const ContainerID& containerId, orphans) {
+    containerRecoverInfo.add_orphan_container_ids()->CopyFrom(containerId);
+  }
+
   // Recover isolators first then recover the provisioner, because of
   // possible cleanups on unknown containers.
-  return recoverIsolators(recoverable, orphans)
+  return recoverIsolators(containerRecoverInfo)
     .then(defer(self(), &Self::recoverProvisioner, recoverable, orphans))
     .then(defer(self(), &Self::__recover, recoverable, orphans));
 }
 
 
 Future<list<Nothing>> MesosContainerizerProcess::recoverIsolators(
-    const list<ContainerState>& recoverable,
-    const hashset<ContainerID>& orphans)
+    const ContainerRecoverInfo& containerRecoverInfo)
 {
   list<Future<Nothing>> futures;
 
   // Then recover the isolators.
   foreach (const Owned<Isolator>& isolator, isolators) {
-    futures.push_back(isolator->recover(recoverable, orphans));
+    futures.push_back(isolator->recover(containerRecoverInfo));
   }
 
   // If all isolators recover then continue.

@@ -40,6 +40,7 @@ using std::string;
 using mesos::slave::ContainerConfig;
 using mesos::slave::ContainerLaunchInfo;
 using mesos::slave::ContainerLimitation;
+using mesos::slave::ContainerRecoverInfo;
 using mesos::slave::ContainerState;
 using mesos::slave::Isolator;
 
@@ -121,12 +122,18 @@ Result<ino_t> NamespacesPidIsolatorProcess::getNamespace(
 
 
 Future<Nothing> NamespacesPidIsolatorProcess::recover(
-    const list<ContainerState>& states,
-    const hashset<ContainerID>& orphans)
+    const ContainerRecoverInfo& containerRecoverInfo)
 {
   hashset<ContainerID> recovered;
-  foreach (const ContainerState& state, states) {
+  foreach (const ContainerState& state,
+           containerRecoverInfo.checkpointed_containers()) {
     recovered.insert(state.container_id());
+  }
+
+  hashset<ContainerID> orphans;
+  foreach (const ContainerID& containerId,
+           containerRecoverInfo.orphan_container_ids()) {
+    orphans.insert(containerId);
   }
 
   // Clean up any unknown orphaned bind mounts and empty files. Known
