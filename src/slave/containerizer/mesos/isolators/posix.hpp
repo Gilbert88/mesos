@@ -45,7 +45,7 @@ public:
       const mesos::slave::ContainerRecoverInfo& containerRecoverInfo)
   {
     foreach (const mesos::slave::ContainerState& run,
-             containerRecoverInfo.checkpointed_containers()) {
+             containerRecoverInfo.checkpointed_container_states()) {
       // This should (almost) never occur: see comment in
       // PosixLauncher::recover().
       if (pids.contains(run.container_id())) {

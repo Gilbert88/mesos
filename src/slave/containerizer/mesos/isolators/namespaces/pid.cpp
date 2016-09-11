@@ -126,7 +126,7 @@ Future<Nothing> NamespacesPidIsolatorProcess::recover(
 {
   hashset<ContainerID> recovered;
   foreach (const ContainerState& state,
-           containerRecoverInfo.checkpointed_containers()) {
+           containerRecoverInfo.checkpointed_container_states()) {
     recovered.insert(state.container_id());
   }
 

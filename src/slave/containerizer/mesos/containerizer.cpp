@@ -664,7 +664,7 @@ Future<Nothing> MesosContainerizerProcess::_recover(
   ContainerRecoverInfo containerRecoverInfo;
 
   foreach (const ContainerState& state, recoverable) {
-    containerRecoverInfo.add_checkpointed_containers()->CopyFrom(state);
+    containerRecoverInfo.add_checkpointed_container_states()->CopyFrom(state);
   }
 
   // TODO(gilbert): Update this to 'known_container_ids', once

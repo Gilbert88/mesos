@@ -162,7 +162,7 @@ Future<Nothing> CgroupsIsolatorProcess::recover(
   // Recover active containers first.
   list<Future<Nothing>> recovers;
   foreach (const ContainerState& state,
-           containerRecoverInfo.checkpointed_containers()) {
+           containerRecoverInfo.checkpointed_container_states()) {
     recovers.push_back(___recover(state.container_id()));
   }
 

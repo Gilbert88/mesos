@@ -2183,7 +2183,7 @@ Future<Nothing> PortMappingIsolatorProcess::recover(
 
   // Now, actually recover the isolator from slave's state.
   foreach (const ContainerState& state,
-           containerRecoverInfo.checkpointed_containers()) {
+           containerRecoverInfo.checkpointed_container_states()) {
     const ContainerID& containerId = state.container_id();
     pid_t pid = state.pid();
 

@@ -113,7 +113,7 @@ Future<Nothing> PosixDiskIsolatorProcess::recover(
     const ContainerRecoverInfo& containerRecoverInfo)
 {
   foreach (const ContainerState& state,
-           containerRecoverInfo.checkpointed_containers()) {
+           containerRecoverInfo.checkpointed_container_states()) {
     // Since we checkpoint the executor after we create its working
     // directory, the working directory should definitely exist.
     CHECK(os::exists(state.directory()))

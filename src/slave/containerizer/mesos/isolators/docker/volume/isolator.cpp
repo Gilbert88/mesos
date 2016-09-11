@@ -140,7 +140,7 @@ Future<Nothing> DockerVolumeIsolatorProcess::recover(
   }
 
   foreach (const ContainerState& state,
-           containerRecoverInfo.checkpointed_containers()) {
+           containerRecoverInfo.checkpointed_container_states()) {
     const ContainerID& containerId = state.container_id();
 
     Try<Nothing> recover = _recover(containerId);

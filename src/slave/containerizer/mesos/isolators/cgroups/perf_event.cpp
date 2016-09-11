@@ -132,7 +132,7 @@ Future<Nothing> CgroupsPerfEventIsolatorProcess::recover(
     const ContainerRecoverInfo& containerRecoverInfo)
 {
   foreach (const ContainerState& state,
-           containerRecoverInfo.checkpointed_containers()) {
+           containerRecoverInfo.checkpointed_container_states()) {
     const ContainerID& containerId = state.container_id();
     const string cgroup = path::join(flags.cgroups_root, containerId.value());
 

@@ -65,7 +65,7 @@ Future<Nothing> PosixFilesystemIsolatorProcess::recover(
     const ContainerRecoverInfo& containerRecoverInfo)
 {
   foreach (const ContainerState& state,
-           containerRecoverInfo.checkpointed_containers()) {
+           containerRecoverInfo.checkpointed_container_states()) {
     infos.put(state.container_id(), Owned<Info>(new Info(state.directory())));
   }
 

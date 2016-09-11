@@ -214,7 +214,7 @@ Future<Nothing> LinuxFilesystemIsolatorProcess::recover(
     const ContainerRecoverInfo& containerRecoverInfo)
 {
   foreach (const ContainerState& state,
-           containerRecoverInfo.checkpointed_containers()) {
+           containerRecoverInfo.checkpointed_container_states()) {
     Owned<Info> info(new Info(
         state.directory(),
         state.executor_info()));
