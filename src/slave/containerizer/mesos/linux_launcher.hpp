@@ -61,12 +61,6 @@ public:
   virtual process::Future<ContainerStatus> status(
       const ContainerID& containerId);
 
-  virtual std::string getExitStatusCheckpointPath(
-      const ContainerID& containerId);
-
-  virtual process::Future<Option<int>> wait(
-      const ContainerID& containerId);
-
 private:
   LinuxLauncher(
       const Flags& flags,

@@ -47,33 +47,6 @@ namespace mesos {
 namespace internal {
 namespace slave {
 
-string Launcher::buildPathForContainer(
-    const ContainerID& containerId,
-    const string& prefix)
-{
-  if (!containerId.has_parent()) {
-    return path::join(prefix, containerId.value());
-  } else {
-    return path::join(
-        buildPathForContainer(containerId.parent(), prefix),
-        prefix,
-        containerId.value());
-  }
-}
-
-
-string Launcher::getRuntimePathForContainer(
-    const Flags& flags,
-    const ContainerID& containerId)
-{
-  return path::join(
-      flags.runtime_dir,
-      "launcher",
-      flags.launcher,
-      buildPathForContainer(containerId, "containers"));
-}
-
-
 Try<Launcher*> PosixLauncher::create(const Flags& flags)
 {
   return new PosixLauncher(flags);
@@ -206,27 +179,6 @@ Future<ContainerStatus> PosixLauncher::status(const ContainerID& containerId)
   status.set_executor_pid(pids[containerId]);
 
   return status;
-}
-
-
-string PosixLauncher::getExitStatusCheckpointPath(
-    const ContainerID& containerId)
-{
-  return path::join(
-      getRuntimePathForContainer(flags, containerId),
-      "exit_status");
-}
-
-
-Future<Option<int>> PosixLauncher::wait(const ContainerID& containerId)
-{
-  if (!pids.contains(containerId)) {
-    return Failure("Unknown container");
-  }
-
-  pid_t pid = pids.get(containerId).get();
-
-  return process::reap(pid);
 }
 
 

@@ -638,6 +638,16 @@ Future<Nothing> MesosContainerizerProcess::recover(
     }
   }
 
+  // TODO(benh|gilbert): Recover the containers from the runtime
+  // directory.
+
+  // TODO(gilbert): Reconcile the runtime containers with the
+  // containers from `recoverable`. Treat discovered orphans as "known
+  // orphans" that we aggregate with any orphans that get returned
+  // from calling `launcher->recover`.
+  //
+  // VENN DIAGRAM ORPHANS HERE!
+
   // Try to recover the launcher first.
   return launcher->recover(recoverable)
     .then(defer(self(), &Self::_recover, recoverable, lambda::_1));
@@ -664,6 +674,8 @@ Future<list<Nothing>> MesosContainerizerProcess::recoverIsolators(
 
   // Then recover the isolators.
   foreach (const Owned<Isolator>& isolator, isolators) {
+    // TODO(gilbert): Make sure we don't pass nested containers or
+    // orphans to non-nesting aware isolators.
     futures.push_back(isolator->recover(recoverable, orphans));
   }
 
@@ -688,6 +700,113 @@ Future<Nothing> MesosContainerizerProcess::recoverProvisioner(
 }
 
 
+// Returns a path representation of a ContainerID that can be used
+// for creating cgroups or writing to the filesystem. A ContainerID
+// can represent a nested container (i.e, it has a parent
+// ContainerID) and the path representation includes all of the
+// parents as directories in the path. The `prefix` parameter is
+// prepended to each ContainerID as we build the path. For example,
+// given two containers, one with ID 'a9dd' and one nested within
+// 'a9dd' with ID '4e3a' and a prefix of 'foo' we'd get:
+// 'foo/a9dd/foo/4e3a').
+static std::string buildPathForContainer(
+    const ContainerID& containerId,
+    const std::string& prefix = "")
+{
+  if (!containerId.has_parent()) {
+    return path::join(prefix, containerId.value());
+  } else {
+    return path::join(
+        buildPathForContainer(containerId.parent(), prefix),
+        prefix,
+        containerId.value());
+  }
+}
+
+// The containerizer uses the runtime directory (flag 'runtime_dir')
+// to checkpoint things for each container, e.g., the PID of the first
+// process executed within a container (i.e., the "PID 1") gets
+// checkpointed in a file called 'pid'. The following helper function
+// constructs the path for a container given the 'flags' that was used
+// as well as the container `containeId`. For example, given two
+// containers, one with ID 'a9dd' and one nested within 'a9dd' with ID
+// '4e3a' and with the flag 'runtime_dir' set to '/var/run/mesos' you
+// would have a directory structure that looks like:
+//
+// /var/run/mesos/containers/a9dd
+// /var/run/mesos/containers/a9dd/pid
+// /var/run/mesos/containers/a9dd/containers/4e3a/pid
+static std::string getRuntimePathForContainer(
+    const Flags& flags,
+    const ContainerID& containerId)
+{
+  return path::join(
+      flags.runtime_dir,
+      buildPathForContainer(containerId, "containers"));
+}
+
+
+
+static string getExitStatusCheckpointPath(
+    const Flags& flags,
+    const ContainerID& containerId)
+{
+  return path::join(
+      getRuntimePathForContainer(flags, containerId),
+      "exit_status");
+}
+
+
+
+// Helper for reaping the 'init' of a container.
+static Future<Option<int>> reap(const ContainerID& containerId, pid_t pid)
+{
+  return process::reap(pid)
+    .then([=](const Option<int>& status) -> Future<Option<int>> {
+      // If the `reap()` call returned the exit
+      // status directly, just pass it through.
+      if (status.isSome()) {
+        return status.get();
+      }
+
+      // Extract the exit status from its checkpoint file.
+      string path = getExitStatusCheckpointPath(containerId);
+
+      // It's possible that the file was never created if the 'init'
+      // process received a SIGKILL before creating the file. Also,
+      // legacy top-level containers will not have this file created
+      // for them (because they were launched with a legacy
+      // containerizer that didn't pass '--exit_status_path'). In both
+      // cases we should return `None()` because no exit status can be
+      // reaped from the non-existent checkpointed file.
+      if (!os::exists(path)) {
+        return None();
+      }
+
+      Try<string> read = os::read(path);
+      if (read.isError()) {
+        return Failure("Unable to read exit status from checkpoint file"
+                       " '" + path + "': " + read.error());
+      }
+
+      // It's possible that the file was never written
+      // to if the 'init' process received a SIGKILL
+      // before it's child exited.
+      if (read.get() == "") {
+        return None();
+      }
+
+      Try<int> exitStatus = numify<int>(read.get());
+      if (exitStatus.isError()) {
+        return Failure("Cannot read checkpointed exit"
+                       " status as integer: " + read.get());
+      }
+
+      return exitStatus.get();
+    });
+}
+
+
 Future<Nothing> MesosContainerizerProcess::__recover(
     const list<ContainerState>& recovered,
     const hashset<ContainerID>& orphans)
@@ -697,9 +816,8 @@ Future<Nothing> MesosContainerizerProcess::__recover(
 
     Owned<Container> container(new Container());
 
-    Future<Option<int>> status = launcher->wait(containerId);
-    status.onAny(defer(self(), &Self::reaped, containerId));
-    container->status = status;
+    container->status = reap(containerId, run.pid());
+    container->status.onAny(defer(self(), &Self::reaped, containerId));
 
     // We only checkpoint the containerizer pid after the container
     // successfully launched, therefore we can assume checkpointed
@@ -730,6 +848,10 @@ Future<Nothing> MesosContainerizerProcess::__recover(
   // containers failed. See MESOS-2367 for details.
   foreach (const ContainerID& containerId, orphans) {
     LOG(INFO) << "Removing orphan container " << containerId;
+
+
+    // TODO(gilbert): Make sure that this is also cleaning up any
+    // orphans we discovered above in VENN DIAGRAM calculation.
 
     launcher->destroy(containerId)
       .then(defer(self(), &Self::cleanupIsolators, containerId))
@@ -1269,6 +1391,33 @@ Future<bool> MesosContainerizerProcess::_launch(
     }
     pid_t pid = forked.get();
 
+
+
+    // TODO(gilbert): Always checkpoint in runtime directory for
+    // both top-level and nested containers.
+
+    string directory = getRuntimePathForContainer(flags, containerId);
+
+    // TODO(benh): Should really just have `os::write` create the
+    // directories recursively as needed.
+    Try<Nothing> mkdir = os::mkdir(directory);
+    if (mkdir.isError()) {
+      return Error(
+          "Failed to make directory '" + directory + "': " + mkdir.error());
+    }
+
+    const string path = path::join(directory, "pid");
+
+    Try<Nothing> write = os::write(path, stringify(pid));
+
+    if (write.isError()) {
+      LOG(ERROR) << "Failed to checkpoint container pid to '"
+                 << path << "': " << write.error();
+
+      return Failure("Could not checkpoint container pid");
+    }
+
+
     // Checkpoint the executor's pid if requested.
     if (checkpoint) {
       const string& path = slave::paths::getForkedPidPath(
@@ -1294,10 +1443,8 @@ Future<bool> MesosContainerizerProcess::_launch(
 
     // Monitor the forked process's pid. We keep the future because
     // we'll refer to it again during container destroy.
-    Future<Option<int>> status = launcher->wait(containerId);
-    status.onAny(defer(self(), &Self::reaped, containerId));
-
-    container->status = status;
+    container->status = reap(containerId, pid);
+    container->status.onAny(defer(self(), &Self::reaped, containerId));
 
     return isolate(containerId, pid)
       .then(defer(self(),
@@ -1400,8 +1547,6 @@ Future<Nothing> MesosContainerizerProcess::launch(
 Future<ContainerTermination> MesosContainerizerProcess::wait(
     const ContainerID& containerId)
 {
-  CHECK(!containerId.has_parent());
-
   if (!containers_.contains(containerId)) {
     // See the comments in destroy() for race conditions which lead
     // to "unknown containers".
@@ -1577,6 +1722,9 @@ Future<ContainerStatus> MesosContainerizerProcess::status(
 void MesosContainerizerProcess::destroy(
     const ContainerID& containerId)
 {
+  // TODO(gilbert): Make sure we destroy nested containers before
+  // outer containers!
+
   CHECK(!containerId.has_parent());
 
   if (!containers_.contains(containerId)) {
