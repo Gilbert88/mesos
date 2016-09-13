@@ -61,27 +61,27 @@ const string MesosContainerizerLaunch::NAME = "launch";
 
 MesosContainerizerLaunch::Flags::Flags()
 {
-  add(&command,
+  add(&Flags::command,
       "command",
       "The command to execute.");
 
-  add(&working_directory,
+  add(&Flags::working_directory,
       "working_directory",
       "The working directory for the command. It has to be an absolute path \n"
       "w.r.t. the root filesystem used for the command.");
 
 #ifndef __WINDOWS__
-  add(&rootfs,
+  add(&Flags::rootfs,
       "rootfs",
       "Absolute path to the container root filesystem. The command will be \n"
       "interpreted relative to this path");
 
-  add(&user,
+  add(&Flags::user,
       "user",
       "The user to change to.");
 #endif // __WINDOWS__
 
-  add(&pipe_read,
+  add(&Flags::pipe_read,
       "pipe_read",
       "The read end of the control pipe. This is a file descriptor \n"
       "on Posix, or a handle on Windows. It's caller's responsibility \n"
@@ -89,7 +89,7 @@ MesosContainerizerLaunch::Flags::Flags()
       "properly in the subprocess. It's used to synchronize with the \n"
       "parent process. If not specified, no synchronization will happen.");
 
-  add(&pipe_write,
+  add(&Flags::pipe_write,
       "pipe_write",
       "The write end of the control pipe. This is a file descriptor \n"
       "on Posix, or a handle on Windows. It's caller's responsibility \n"
@@ -97,17 +97,17 @@ MesosContainerizerLaunch::Flags::Flags()
       "properly in the subprocess. It's used to synchronize with the \n"
       "parent process. If not specified, no synchronization will happen.");
 
-  add(&pre_exec_commands,
+  add(&Flags::pre_exec_commands,
       "pre_exec_commands",
       "The additional preparation commands to execute before\n"
       "executing the command.");
 
 #ifdef __linux__
-  add(&exit_status_path,
+  add(&Flags::exit_status_path,
       "exit_status_path",
       "The path to write the exit status of the launched process to");
 
-  add(&unshare_namespace_mnt,
+  add(&Flags::unshare_namespace_mnt,
       "unshare_namespace_mnt",
       "Whether to launch the command in a new mount namespace.",
       false);

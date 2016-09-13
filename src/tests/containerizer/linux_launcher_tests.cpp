@@ -27,7 +27,9 @@
 
 #include <process/future.hpp>
 #include <process/gtest.hpp>
+#include <process/reap.hpp>
 
+#include "linux/cgroups.hpp"
 #include "linux/ns.hpp"
 
 #include "slave/containerizer/mesos/launch.hpp"
@@ -37,6 +39,8 @@
 #include "tests/mesos.hpp"
 
 using namespace process;
+
+using mesos::slave::ContainerState;
 
 using std::string;
 using std::vector;
@@ -53,7 +57,10 @@ protected:
   {
     vector<string> argv;
     string path;
-    slave::MesosContainerizerLaunch::Flags* flags;
+    Subprocess::IO stdin = Subprocess::FD(STDIN_FILENO);
+    Subprocess::IO stdout = Subprocess::FD(STDOUT_FILENO);
+    Subprocess::IO stderr = Subprocess::FD(STDERR_FILENO);
+    slave::MesosContainerizerLaunch::Flags flags;
   };
 
   Try<Parameters> prepare(
@@ -65,30 +72,28 @@ protected:
 
     parameters.path = path::join(flags.launcher_dir, "mesos-containerizer");
 
+    // TODO(benh): Reset `parameters.stdin`, `parameters.stdout`,
+    // `parameters.stderr` if `flags.verbose` is false.
+
     parameters.argv.resize(2);
     parameters.argv[0] = "mesos-containerizer";
     parameters.argv[1] = slave::MesosContainerizerLaunch::NAME;
-
-    parameters.flags = new slave::MesosContainerizerLaunch::Flags();
 
     CommandInfo commandInfo;
     commandInfo.set_shell(true);
     commandInfo.set_value(command);
 
-    parameters.flags->command = JSON::protobuf(commandInfo);
+    parameters.flags.command = JSON::protobuf(commandInfo);
 
     Try<string> directory = environment->mkdtemp();
     if (directory.isError()) {
       return Error("Failed to create directory: " + directory.error());
     }
 
-    parameters.flags->working_directory = directory.get();
-
-    parameters.flags->pipe_read = open("/dev/zero", O_RDONLY);
-    parameters.flags->pipe_write = open("/dev/null", O_WRONLY);
+    parameters.flags.working_directory = directory.get();
 
     if (exitStatusCheckpointPath.isSome()) {
-      parameters.flags->exit_status_path = exitStatusCheckpointPath.get();
+      parameters.flags.exit_status_path = exitStatusCheckpointPath.get();
     }
 
     return parameters;
@@ -111,26 +116,20 @@ TEST_F(LinuxLauncherTest, ROOT_CGROUPS_ForkNoCheckpointExitStatus)
   Try<Parameters> parameters = prepare(flags, "exit 0");
   ASSERT_SOME(parameters);
 
-  Parameters parameters_ = parameters.get();
-
   Try<pid_t> pid = launcher->fork(
       containerId,
       parameters->path,
       parameters->argv,
-      Subprocess::FD(STDIN_FILENO),
-      Subprocess::FD(STDOUT_FILENO), // TODO(benh): Don't output unnecessarily.
-      Subprocess::FD(STDERR_FILENO),
-      parameters->flags,
+      parameters->stdin,
+      parameters->stdout,
+      parameters->stderr,
+      &parameters->flags,
       None(),
       CLONE_NEWUTS | CLONE_NEWNET | CLONE_NEWPID);
 
   ASSERT_SOME(pid);
 
-  Future<Option<int>> wait = launcher->wait(containerId);
-  AWAIT_READY(wait);
-  ASSERT_SOME(wait.get());
-  ASSERT_TRUE(WIFEXITED(wait.get().get()));
-  EXPECT_EQ(0, WEXITSTATUS(wait.get().get()));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, launcher->wait(containerId));
 
   AWAIT_READY(launcher->destroy(containerId));
 }
@@ -159,20 +158,16 @@ TEST_F(LinuxLauncherTest, ROOT_CGROUPS_Fork)
       containerId,
       parameters->path,
       parameters->argv,
-      Subprocess::FD(STDIN_FILENO),
-      Subprocess::FD(STDOUT_FILENO), // TODO(benh): Don't output unnecessarily.
-      Subprocess::FD(STDERR_FILENO),
-      parameters->flags,
+      parameters->stdin,
+      parameters->stdout,
+      parameters->stderr,
+      &parameters->flags,
       None(),
       CLONE_NEWUTS | CLONE_NEWNET | CLONE_NEWPID);
 
   ASSERT_SOME(pid);
 
-  Future<Option<int>> wait = launcher->wait(containerId);
-  AWAIT_READY(wait);
-  ASSERT_SOME(wait.get());
-  ASSERT_TRUE(WIFEXITED(wait.get().get()));
-  EXPECT_EQ(0, WEXITSTATUS(wait.get().get()));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, launcher->wait(containerId));
 
   AWAIT_READY(launcher->destroy(containerId));
 }
@@ -201,10 +196,10 @@ TEST_F(LinuxLauncherTest, ROOT_CGROUPS_Recover)
       containerId,
       parameters->path,
       parameters->argv,
-      Subprocess::FD(STDIN_FILENO),
-      Subprocess::FD(STDOUT_FILENO), // TODO(benh): Don't output unnecessarily.
-      Subprocess::FD(STDERR_FILENO),
-      parameters->flags,
+      parameters->stdin,
+      parameters->stdout,
+      parameters->stderr,
+      &parameters->flags,
       None(),
       CLONE_NEWUTS | CLONE_NEWNET | CLONE_NEWPID);
 
@@ -223,13 +218,83 @@ TEST_F(LinuxLauncherTest, ROOT_CGROUPS_Recover)
   AWAIT_READY(status);
   EXPECT_EQ(pid.get(), status->executor_pid());
 
-  Future<Option<int>> wait = launcher->wait(containerId);
-  AWAIT_READY(wait);
-  ASSERT_SOME(wait.get());
-  ASSERT_TRUE(WIFEXITED(wait.get().get()));
-  EXPECT_EQ(0, WEXITSTATUS(wait.get().get()));
+  // Since process is just exiting we can `wait` before we `destroy`.
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, launcher->wait(containerId));
 
   AWAIT_READY(launcher->destroy(containerId));
+}
+
+
+  // uncheckpointed container (i.e., an unknown launched container)
+
+  // orphan cgroup (i.e., a legacy partially launched container)
+
+
+TEST_F(LinuxLauncherTest, ROOT_CGROUPS_RecoverUncheckpointed)
+{
+  slave::Flags flags = CreateSlaveFlags();
+
+  Try<slave::Launcher*> create = slave::LinuxLauncher::create(flags);
+  ASSERT_SOME(create);
+
+  slave::Launcher* launcher = create.get();
+
+  // Launch a process in a cgroup that the LinuxLauncher will assume
+  // is an uncheckpointed container.
+  //
+  // NOTE: we need to call `cgroups::hierarchy` this AFTER
+  // `LinuxLauncher::create` so that a `cgroups::prepare` will have
+  // been called already.
+  Result<string> hierarchy = cgroups::hierarchy("freezer");
+  ASSERT_SOME(hierarchy);
+
+  ContainerID containerId;
+  containerId.set_value("kevin");
+
+  string cgroup = path::join(
+      flags.cgroups_root,
+      slave::Launcher::buildPathForContainer(containerId));
+
+  Try<string> directory = environment->mkdtemp();
+  ASSERT_SOME(directory);
+
+  Try<Subprocess> child = subprocess(
+      "exit 0",
+      Subprocess::FD(STDIN_FILENO),
+      Subprocess::FD(STDOUT_FILENO),
+      Subprocess::FD(STDERR_FILENO),
+      SETSID,
+      None(),
+      None(),
+      {Subprocess::Hook([=](pid_t pid) {
+        return cgroups::isolate(hierarchy.get(), cgroup, pid);
+      })},
+      directory.get());
+
+  ASSERT_SOME(child);
+
+  ContainerState state;
+  state.mutable_executor_info()->mutable_executor_id()->set_value("executor");
+  state.mutable_container_id()->CopyFrom(containerId);
+  state.set_pid(child->pid());
+  state.set_directory(directory.get());
+
+  // Now make sure we can recover.
+  AWAIT_ASSERT_EQ(hashset<ContainerID>::EMPTY, launcher->recover({state}));
+
+  Future<ContainerStatus> status = launcher->status(containerId);
+  AWAIT_READY(status);
+  EXPECT_EQ(child->pid(), status->executor_pid());
+
+  // And now make sure we can wait on it, but not since this is an
+  // uncheckpointed container not launched by the launcher the exit
+  // status will be `None`.
+  Future<Option<int>> wait = launcher->wait(containerId);
+
+  AWAIT_READY(launcher->destroy(containerId));
+
+  AWAIT_READY(wait);
+  EXPECT_NONE(wait.get());
 }
 
 
@@ -247,7 +312,7 @@ TEST_F(LinuxLauncherTest, ROOT_CGROUPS_NestedForkNoNamespaces)
 
   Try<Parameters> parameters = prepare(
       flags,
-      "sleep 1", // Keep outer container around for entire test.
+      "read", // Keep outer container around by blocking on stdin.
       launcher->getExitStatusCheckpointPath(containerId));
 
   ASSERT_SOME(parameters);
@@ -256,15 +321,12 @@ TEST_F(LinuxLauncherTest, ROOT_CGROUPS_NestedForkNoNamespaces)
       containerId,
       parameters->path,
       parameters->argv,
-      Subprocess::FD(STDIN_FILENO),
-      Subprocess::FD(STDOUT_FILENO), // TODO(benh): Don't output unnecessarily.
-      Subprocess::FD(STDERR_FILENO),
-      parameters->flags,
+      parameters->stdin,
+      parameters->stdout,
+      parameters->stderr,
+      &parameters->flags,
       None(),
       CLONE_NEWUTS | CLONE_NEWNET | CLONE_NEWPID);
-
-  close(parameters->flags->pipe_read.get());
-  close(parameters->flags->pipe_write.get());
 
   ASSERT_SOME(pid);
 
@@ -284,15 +346,12 @@ TEST_F(LinuxLauncherTest, ROOT_CGROUPS_NestedForkNoNamespaces)
       nestedContainerId,
       nestedParameters->path,
       nestedParameters->argv,
-      Subprocess::FD(STDIN_FILENO),
-      Subprocess::FD(STDOUT_FILENO), // TODO(benh): Don't output unnecessarily.
-      Subprocess::FD(STDERR_FILENO),
-      nestedParameters->flags,
+      parameters->stdin,
+      parameters->stdout,
+      parameters->stderr,
+      &nestedParameters->flags,
       None(),
       None());
-
-  close(nestedParameters->flags->pipe_read.get());
-  close(nestedParameters->flags->pipe_write.get());
 
   ASSERT_SOME(nestedPid);
 
@@ -314,21 +373,153 @@ TEST_F(LinuxLauncherTest, ROOT_CGROUPS_NestedForkNoNamespaces)
   EXPECT_SOME_NE(inode.get(), ns::getns(getpid(), "pid"));
   EXPECT_SOME_EQ(inode.get(), ns::getns(nestedPid.get(), "pid"));
 
-  Future<Option<int>> wait = launcher->wait(nestedContainerId);
-  AWAIT_READY(wait);
-  ASSERT_SOME(wait.get());
-  ASSERT_TRUE(WIFEXITED(wait.get().get()));
-  EXPECT_EQ(42, WEXITSTATUS(wait.get().get()));
-  // EXPECT_EXIT_STATUS(42, launcher->wait(nestedContainerId));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(42, launcher->wait(nestedContainerId));
+  AWAIT_READY(launcher->destroy(nestedContainerId));
 
-  wait = launcher->wait(containerId);
-  AWAIT_READY(wait);
-  ASSERT_TRUE(WIFEXITED(wait.get().get()));
-  EXPECT_EQ(0, WEXITSTATUS(wait.get().get()));
-  // EXPECT_EXIT_STATUS(42, launcher->wait(containerId));
+  AWAIT_READY(launcher->destroy(containerId));
+  AWAIT_EXPECT_WEXITSTATUS_NE(0, launcher->wait(containerId));
+}
+
+
+TEST_F(LinuxLauncherTest, ROOT_CGROUPS_NestedForkDestroyNoNamespaces)
+{
+  slave::Flags flags = CreateSlaveFlags();
+
+  Try<slave::Launcher*> create = slave::LinuxLauncher::create(flags);
+  ASSERT_SOME(create);
+
+  slave::Launcher* launcher = create.get();
+
+  ContainerID containerId;
+  containerId.set_value("kevin");
+
+  Try<Parameters> parameters = prepare(
+      flags,
+      "read", // Keep outer container around by blocking on stdin.
+      launcher->getExitStatusCheckpointPath(containerId));
+
+  ASSERT_SOME(parameters);
+
+  Try<pid_t> pid = launcher->fork(
+      containerId,
+      parameters->path,
+      parameters->argv,
+      parameters->stdin,
+      parameters->stdout,
+      parameters->stderr,
+      &parameters->flags,
+      None(),
+      CLONE_NEWUTS | CLONE_NEWNET | CLONE_NEWPID);
+
+  ASSERT_SOME(pid);
+
+  // Now launch nested container.
+  ContainerID nestedContainerId;
+  nestedContainerId.mutable_parent()->CopyFrom(containerId);
+  nestedContainerId.set_value("ben");
+
+  Try<Parameters> nestedParameters = prepare(
+      flags,
+      "read", // Keep nested container around by blocking on stdin.
+      launcher->getExitStatusCheckpointPath(nestedContainerId));
+
+  ASSERT_SOME(nestedParameters);
+
+  Try<pid_t> nestedPid = launcher->fork(
+      nestedContainerId,
+      nestedParameters->path,
+      nestedParameters->argv,
+      parameters->stdin,
+      parameters->stdout,
+      parameters->stderr,
+      &nestedParameters->flags,
+      None(),
+      None());
+
+  ASSERT_SOME(nestedPid);
+
+  // Now destroy outer container.
+  Future<Option<int>> wait = launcher->wait(containerId);
+  Future<Option<int>> nestedWait = launcher->wait(nestedContainerId);
+
+  AWAIT_READY(launcher->destroy(containerId));
+
+  AWAIT_EXPECT_WEXITSTATUS_NE(0, wait);
+  AWAIT_EXPECT_WEXITSTATUS_NE(0, nestedWait);
 
   AWAIT_READY(launcher->destroy(nestedContainerId));
+}
+
+
+TEST_F(LinuxLauncherTest, ROOT_CGROUPS_NestedForkNestedDestroyNoNamespaces)
+{
+  slave::Flags flags = CreateSlaveFlags();
+
+  Try<slave::Launcher*> create = slave::LinuxLauncher::create(flags);
+  ASSERT_SOME(create);
+
+  slave::Launcher* launcher = create.get();
+
+  ContainerID containerId;
+  containerId.set_value("kevin");
+
+  Try<Parameters> parameters = prepare(
+      flags,
+      "read", // Keep outer container around by blocking on stdin.
+      launcher->getExitStatusCheckpointPath(containerId));
+
+  ASSERT_SOME(parameters);
+
+  Try<pid_t> pid = launcher->fork(
+      containerId,
+      parameters->path,
+      parameters->argv,
+      parameters->stdin,
+      parameters->stdout,
+      parameters->stderr,
+      &parameters->flags,
+      None(),
+      CLONE_NEWUTS | CLONE_NEWNET | CLONE_NEWPID);
+
+  ASSERT_SOME(pid);
+
+  // Now launch nested container.
+  ContainerID nestedContainerId;
+  nestedContainerId.mutable_parent()->CopyFrom(containerId);
+  nestedContainerId.set_value("ben");
+
+  Try<Parameters> nestedParameters = prepare(
+      flags,
+      "read", // Keep nested container around by blocking on stdin.
+      launcher->getExitStatusCheckpointPath(nestedContainerId));
+
+  ASSERT_SOME(nestedParameters);
+
+  Try<pid_t> nestedPid = launcher->fork(
+      nestedContainerId,
+      nestedParameters->path,
+      nestedParameters->argv,
+      parameters->stdin,
+      parameters->stdout,
+      parameters->stderr,
+      &nestedParameters->flags,
+      None(),
+      None());
+
+  ASSERT_SOME(nestedPid);
+
+  // Now destroy nested container.
+  Future<Option<int>> nestedWait = launcher->wait(nestedContainerId);
+
+  AWAIT_READY(launcher->destroy(nestedContainerId));
+
+  AWAIT_EXPECT_WEXITSTATUS_NE(0, nestedWait);
+
+  Future<Option<int>> wait = launcher->wait(containerId);
+
   AWAIT_READY(launcher->destroy(containerId));
+
+  AWAIT_EXPECT_WTERMSIG_EQ(SIGKILL, wait);
 }
 
 
@@ -346,7 +537,7 @@ TEST_F(LinuxLauncherTest, ROOT_CGROUPS_NestedRecoverNoNamespaces)
 
   Try<Parameters> parameters = prepare(
       flags,
-      "sleep 1", // Keep outer container around for entire test.
+      "read", // Keep outer container around by blocking on stdin.
       launcher->getExitStatusCheckpointPath(containerId));
 
   ASSERT_SOME(parameters);
@@ -355,15 +546,12 @@ TEST_F(LinuxLauncherTest, ROOT_CGROUPS_NestedRecoverNoNamespaces)
       containerId,
       parameters->path,
       parameters->argv,
-      Subprocess::FD(STDIN_FILENO),
-      Subprocess::FD(STDOUT_FILENO), // TODO(benh): Don't output unnecessarily.
-      Subprocess::FD(STDERR_FILENO),
-      parameters->flags,
+      parameters->stdin,
+      parameters->stdout,
+      parameters->stderr,
+      &parameters->flags,
       None(),
       CLONE_NEWUTS | CLONE_NEWNET | CLONE_NEWPID);
-
-  close(parameters->flags->pipe_read.get());
-  close(parameters->flags->pipe_write.get());
 
   ASSERT_SOME(pid);
 
@@ -374,7 +562,7 @@ TEST_F(LinuxLauncherTest, ROOT_CGROUPS_NestedRecoverNoNamespaces)
 
   Try<Parameters> nestedParameters = prepare(
       flags,
-      "exit 42",
+      "read", // Keep nested container around by blocking on stdin.
       launcher->getExitStatusCheckpointPath(nestedContainerId));
 
   ASSERT_SOME(nestedParameters);
@@ -383,15 +571,12 @@ TEST_F(LinuxLauncherTest, ROOT_CGROUPS_NestedRecoverNoNamespaces)
       nestedContainerId,
       nestedParameters->path,
       nestedParameters->argv,
-      Subprocess::FD(STDIN_FILENO),
-      Subprocess::FD(STDOUT_FILENO), // TODO(benh): Don't output unnecessarily.
-      Subprocess::FD(STDERR_FILENO),
-      nestedParameters->flags,
+      parameters->stdin,
+      parameters->stdout,
+      parameters->stderr,
+      &nestedParameters->flags,
       None(),
       None());
-
-  close(nestedParameters->flags->pipe_read.get());
-  close(nestedParameters->flags->pipe_write.get());
 
   ASSERT_SOME(nestedPid);
 
@@ -430,21 +615,17 @@ TEST_F(LinuxLauncherTest, ROOT_CGROUPS_NestedRecoverNoNamespaces)
   AWAIT_READY(status);
   EXPECT_EQ(nestedPid.get(), status->executor_pid());
 
-  Future<Option<int>> wait = launcher->wait(nestedContainerId);
-  AWAIT_READY(wait);
-  ASSERT_SOME(wait.get());
-  ASSERT_TRUE(WIFEXITED(wait.get().get()));
-  EXPECT_EQ(42, WEXITSTATUS(wait.get().get()));
-  // EXPECT_EXIT_STATUS(42, launcher->wait(nestedContainerId));
-
-  wait = launcher->wait(containerId);
-  AWAIT_READY(wait);
-  ASSERT_TRUE(WIFEXITED(wait.get().get()));
-  EXPECT_EQ(0, WEXITSTATUS(wait.get().get()));
-  // EXPECT_EXIT_STATUS(42, launcher->wait(containerId));
+  Future<Option<int>> nestedWait = launcher->wait(nestedContainerId);
 
   AWAIT_READY(launcher->destroy(nestedContainerId));
+
+  AWAIT_EXPECT_WEXITSTATUS_NE(0, nestedWait);
+
+  Future<Option<int>> wait = launcher->wait(containerId);
+
   AWAIT_READY(launcher->destroy(containerId));
+
+  AWAIT_EXPECT_WTERMSIG_EQ(SIGKILL, wait);
 }
 
 } // namespace tests {
