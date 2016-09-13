@@ -1453,7 +1453,7 @@ Future<bool> MesosContainerizerProcess::launch(
         " does not exist");
   }
 
-  containers_[parentContainerId]->containers.push_back(containerId);
+  containers_[parentContainerId]->containers.insert(containerId);
 
   LOG(INFO) << "Starting nested container " << containerId;
 
