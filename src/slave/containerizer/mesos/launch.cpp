@@ -22,8 +22,6 @@
 
 #include <iostream>
 
-#include <process/subprocess.hpp>
-
 #include <stout/foreach.hpp>
 #include <stout/os.hpp>
 #include <stout/protobuf.hpp>
@@ -44,8 +42,6 @@ using std::cout;
 using std::endl;
 using std::string;
 using std::vector;
-
-using process::Subprocess;
 
 #ifdef __linux__
 using mesos::internal::capabilities::Capabilities;
@@ -230,37 +226,67 @@ int MesosContainerizerLaunch::execute()
 
       cout << "Executing pre-exec command '" << value << "'" << endl;
 
-      Try<Subprocess> s = Error("Not launched");
+      // We use fork/exec here to avoid calling `process:subprocess()`
+      // and initializing all of `libprocess` (and subsequently
+      // creating a whole bunch of unused threads, etc.) just to run
+      // this simple script. In the past, we used `os::system()` here
+      // to avoid initializing libprocess, but this caused security
+      // issues with allowing arbitrary shell commands to be appended
+      // to root-level pre-exec commands that take strings as their
+      // last argument (e.g. mount --bind <src> <target>, where target
+      // is user supplied and is set to "target_dir; rm -rf /"). We
+      // now handle this case by invoking `execvp` directly (which
+      // ensures that exactly one command is invoked and that all of
+      // the strings passed to it are treated as direct arguments to
+      // that one command).
+      //
+      // TODO(klueska): Refactor `libprocess::subprocess()` to pull
+      // the base functionality into stout to avoid initializing
+      // libprocess for simple use cases like this one.
+      pid_t pid = ::fork();
 
-      if (parse->shell()) {
-        s = subprocess(parse->value(), Subprocess::PATH("/dev/null"));
-      } else {
-        // Launch non-shell command as a subprocess to avoid injecting
-        // arbitrary shell commands.
-        vector<string> args;
-        foreach (const string& arg, parse->arguments()) {
-          args.push_back(arg);
+      if (pid == -1) {
+        cerr << "Failed to fork() the pre-exec command: "
+             << os::strerror(errno) << endl;
+        return EXIT_FAILURE;
+      }
+
+      if (pid == 0) {
+        if (parse->shell()) {
+          // Execute the command using the shell.
+          os::execlp(os::Shell::name,
+                     os::Shell::arg0,
+                     os::Shell::arg1,
+                     parse->value().c_str(),
+                     (char*) nullptr);
+        } else {
+          // Use execvp to launch the command.
+          os::execvp(parse->value().c_str(),
+                 os::raw::Argv(parse->arguments()));
         }
 
-        s = subprocess(parse->value(), args, Subprocess::PATH("/dev/null"));
+        cerr << "Failed to execute pre-exec command:"
+             << " " << os::strerror(errno) << endl;
+        UNREACHABLE();
       }
 
-      if (s.isError()) {
-        cerr << "Failed to create the pre-exec subprocess: "
-             << s.error() << endl;
+      int exitStatus = 0;
+      Result<pid_t> waitpid = os::waitpid(pid, &exitStatus, 0);
+
+      if (waitpid.isError()) {
+        cerr << "Failed to os::waitpid() on pre-exec command"
+             << " '" << value << "': " << waitpid.error() << endl;
+        return EXIT_FAILURE;
+      } else if (waitpid.isNone()) {
+        cerr << "Calling os::waitpid() with blocking semantics"
+             << "returned asynchronously for pre-exec command"
+             << " '" << value << "': " << waitpid.error() << endl;
         return EXIT_FAILURE;
       }
 
-      s->status().await();
-
-      Option<int> status = s->status().get();
-      if (status.isNone()) {
-        cerr << "Failed to reap the pre-exec subprocess "
-             << "'" << value << "'" << endl;
-        return EXIT_FAILURE;
-      } else if (status.get() != 0) {
-        cerr << "The pre-exec subprocess '" << value << "' "
-             << "failed" << endl;
+      if (exitStatus != 0) {
+        cerr << "The pre-exec command '" << value << "'"
+             << " failed with exit status " << exitStatus << endl;
         return EXIT_FAILURE;
       }
     }
