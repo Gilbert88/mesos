@@ -40,6 +40,7 @@
 #include "mesos/resources.hpp"
 
 #include "slave/containerizer/mesos/linux_launcher.hpp"
+#include "slave/containerizer/mesos/paths.hpp"
 
 #include "slave/containerizer/mesos/isolators/namespaces/pid.hpp"
 
@@ -647,7 +648,8 @@ Future<Nothing> LinuxLauncherProcess::destroy(const ContainerID& containerId)
                  << container->id << " so assuming partially launched "
                  << "or partially destroyed";
 
-    string path = Launcher::getRuntimePathForContainer(flags, container->id);
+    string path =
+      containerizer::paths::getRuntimePathForContainer(flags, container->id);
     if (os::exists(path)) {
       Try<Nothing> rmdir = os::rmdir(path);
       if (rmdir.isError()) {
@@ -666,7 +668,8 @@ Future<Nothing> LinuxLauncherProcess::destroy(const ContainerID& containerId)
       cgroup(container->id),
       cgroups::DESTROY_TIMEOUT)
     .then([=]() -> Future<Nothing> {
-      string path = Launcher::getRuntimePathForContainer(flags, container->id);
+      string path =
+        containerizer::paths::getRuntimePathForContainer(flags, container->id);
       if (os::exists(path)) {
         Try<Nothing> rmdir = os::rmdir(path);
         if (rmdir.isError()) {
@@ -698,7 +701,7 @@ string LinuxLauncherProcess::cgroup(const ContainerID& containerId)
 {
   return path::join(
       flags.cgroups_root,
-      Launcher::buildPathForContainer(containerId));
+      containerizer::paths::buildPathForContainer(containerId));
 }
 
 } // namespace slave {

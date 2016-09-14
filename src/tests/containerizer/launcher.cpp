@@ -40,12 +40,6 @@ ACTION_P(InvokeDestroy, launcher)
 }
 
 
-ACTION_P(InvokeGetExitStatusCheckpointPath, launcher)
-{
-  return launcher->real->getExitStatusCheckpointPath(arg0);
-}
-
-
 ACTION_P(InvokeWait, launcher)
 {
   return launcher->real->wait(arg0);
@@ -71,11 +65,6 @@ TestLauncher::TestLauncher(const process::Owned<slave::Launcher>& _real)
   ON_CALL(*this, destroy(_))
     .WillByDefault(InvokeDestroy(this));
   EXPECT_CALL(*this, destroy(_))
-    .WillRepeatedly(DoDefault());
-
-  ON_CALL(*this, getExitStatusCheckpointPath(_))
-    .WillByDefault(InvokeGetExitStatusCheckpointPath(this));
-  EXPECT_CALL(*this, getExitStatusCheckpointPath(_))
     .WillRepeatedly(DoDefault());
 
   ON_CALL(*this, wait(_))

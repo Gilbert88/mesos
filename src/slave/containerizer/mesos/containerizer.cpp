@@ -25,6 +25,7 @@
 #include <process/defer.hpp>
 #include <process/io.hpp>
 #include <process/owned.hpp>
+#include <process/reap.hpp>
 #include <process/subprocess.hpp>
 
 #include <process/metrics/metrics.hpp>
@@ -759,7 +760,10 @@ static string getExitStatusCheckpointPath(
 
 
 // Helper for reaping the 'init' of a container.
-static Future<Option<int>> reap(const ContainerID& containerId, pid_t pid)
+static Future<Option<int>> reap(
+    const Flags& flags,
+    const ContainerID& containerId,
+    pid_t pid)
 {
   return process::reap(pid)
     .then([=](const Option<int>& status) -> Future<Option<int>> {
@@ -770,7 +774,7 @@ static Future<Option<int>> reap(const ContainerID& containerId, pid_t pid)
       }
 
       // Extract the exit status from its checkpoint file.
-      string path = getExitStatusCheckpointPath(containerId);
+      string path = getExitStatusCheckpointPath(flags, containerId);
 
       // It's possible that the file was never created if the 'init'
       // process received a SIGKILL before creating the file. Also,
@@ -816,8 +820,8 @@ Future<Nothing> MesosContainerizerProcess::__recover(
 
     Owned<Container> container(new Container());
 
-    container->status = reap(containerId, run.pid());
-    container->status.onAny(defer(self(), &Self::reaped, containerId));
+    container->status = reap(flags, containerId, run.pid());
+    container->status->onAny(defer(self(), &Self::reaped, containerId));
 
     // We only checkpoint the containerizer pid after the container
     // successfully launched, therefore we can assume checkpointed
@@ -1361,7 +1365,7 @@ Future<bool> MesosContainerizerProcess::_launch(
     // in the `PosixLauncher` in the future.
     if (flags.launcher == "linux") {
       launchFlags.exit_status_path =
-        launcher->getExitStatusCheckpointPath(containerId);
+        getExitStatusCheckpointPath(flags, containerId);
     }
 #endif // __linux__
 
@@ -1402,7 +1406,7 @@ Future<bool> MesosContainerizerProcess::_launch(
     // directories recursively as needed.
     Try<Nothing> mkdir = os::mkdir(directory);
     if (mkdir.isError()) {
-      return Error(
+      return Failure(
           "Failed to make directory '" + directory + "': " + mkdir.error());
     }
 
@@ -1443,8 +1447,8 @@ Future<bool> MesosContainerizerProcess::_launch(
 
     // Monitor the forked process's pid. We keep the future because
     // we'll refer to it again during container destroy.
-    container->status = reap(containerId, pid);
-    container->status.onAny(defer(self(), &Self::reaped, containerId));
+    container->status = reap(flags, containerId, pid);
+    container->status->onAny(defer(self(), &Self::reaped, containerId));
 
     return isolate(containerId, pid)
       .then(defer(self(),

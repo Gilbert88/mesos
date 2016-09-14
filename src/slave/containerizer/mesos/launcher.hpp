@@ -115,9 +115,6 @@ public:
   virtual process::Future<ContainerStatus> status(
       const ContainerID& containerId);
 
-  virtual process::Future<Option<int>> wait(
-      const ContainerID& containerId);
-
 protected:
   PosixLauncher(const Flags& _flags)
     : flags(_flags) {}
