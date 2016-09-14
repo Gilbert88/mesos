@@ -188,6 +188,10 @@ public:
       const process::Future<std::list<process::Future<Nothing>>>& future);
 
 private:
+  // Helper for recovering containers at some relative `directory`
+  // within the launcher runtime directory.
+  Option<Error> recover(const std::string& directory);
+
   process::Future<Nothing> _recover(
       const std::list<mesos::slave::ContainerState>& recoverable,
       const hashset<ContainerID>& orphans);
@@ -294,6 +298,12 @@ private:
 
     // Promise for futures returned from wait().
     process::Promise<mesos::slave::ContainerTermination> promise;
+
+    // NOTE: this represents 'PID 1', i.e., the "init" of the
+    // container that we created (it may be for an executor, or any
+    // arbitrary process that has been launched in the event of nested
+    // containers).
+    pid_t pid;
 
     // We keep track of the future exit status for the container if it
     // has been launched. If the container has not been launched yet,
