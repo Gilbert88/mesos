@@ -120,10 +120,10 @@ mesos::slave::ContainerLimitation createContainerLimitation(
 
 
 mesos::slave::ContainerState createContainerState(
-    const ExecutorInfo& executorInfo,
+    const Option<ExecutorInfo>& executorInfo,
     const ContainerID& id,
     pid_t pid,
-    const std::string& directory);
+    const Option<std::string>& directory);
 
 } // namespace slave {
 

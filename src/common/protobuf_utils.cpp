@@ -368,16 +368,24 @@ ContainerLimitation createContainerLimitation(
 
 
 ContainerState createContainerState(
-    const ExecutorInfo& executorInfo,
+    const Option<ExecutorInfo>& executorInfo,
     const ContainerID& container_id,
     pid_t pid,
-    const string& directory)
+    const Option<string>& directory)
 {
   ContainerState state;
-  state.mutable_executor_info()->CopyFrom(executorInfo);
+
+  if (executorInfo.isSome()) {
+    state.mutable_executor_info()->CopyFrom(executorInfo.get());
+  }
+
   state.mutable_container_id()->CopyFrom(container_id);
   state.set_pid(pid);
-  state.set_directory(directory);
+
+  if (directory.isSome()) {
+    state.set_directory(directory.get());
+  }
+
   return state;
 }
 
