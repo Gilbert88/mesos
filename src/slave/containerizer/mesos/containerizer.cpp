@@ -1940,16 +1940,14 @@ void MesosContainerizerProcess::destroy(
 
   const Owned<Container>& container = containers_[containerId];
 
-  list<Future<Nothing>> cleanup;
+  list<Future<ContainerTermination>> cleanup = {};
   foreach (const ContainerID& child, container->containers) {
     LOG(INFO) << "Destroying nested container " << child;
 
     // Destroy nested containers parallely.
     destroy(child);
-    Future<Nothing> future = await(wait(child))
-      .then([]() -> Future<Nothing> { return Nothing(); });
 
-    cleanup.push_back(future);
+    cleanup.push_back(wait(child));
   }
 
   await(cleanup)
