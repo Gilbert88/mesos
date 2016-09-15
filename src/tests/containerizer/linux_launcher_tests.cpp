@@ -16,6 +16,7 @@
 
 #include <sys/wait.h>
 
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -50,6 +51,7 @@ using mesos::internal::slave::state::SlaveState;
 using mesos::slave::ContainerState;
 using mesos::slave::ContainerTermination;
 
+using std::ostringstream;
 using std::string;
 using std::vector;
 
@@ -664,6 +666,14 @@ TEST_F(MesosContainerizerTest, NestedContainerID)
   EXPECT_TRUE(ids.contains(id2));
   EXPECT_TRUE(ids.contains(id3));
   EXPECT_FALSE(ids.contains(id1));
+
+  ostringstream out1;
+  out1 << id1;
+  EXPECT_EQ(id1.value(), out1.str());
+
+  ostringstream out2;
+  out2 << id3;
+  EXPECT_EQ(strings::join(".", id2.value(), id3.value()), out2.str());
 }
 
 
