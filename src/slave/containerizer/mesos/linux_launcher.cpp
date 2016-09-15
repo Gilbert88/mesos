@@ -95,13 +95,14 @@ private:
   {
     ContainerID id;
 
-    // NOTE: this represents 'PID 1', i.e., the "init" of the
-    // container that we created (it may be for an executor, or any
-    // arbitrary process that has been launched in the event of nested
-    // containers).
-    pid_t pid;
-
-    Option<Future<Nothing>> destroy;
+    // NOTE: this represents the "init" of the container that we
+    // created (it may be for an executor, or any arbitrary process
+    // that has been launched in the event of nested containers).
+    //
+    // This is none when it's an orphan container (i.e., we have a
+    // freezer cgroup but we were not expecting the container during
+    // `LinuxLauncher::recover`).
+    Option<pid_t> pid = None();
   };
 
   // Helper for recovering containers at some relative `directory`
@@ -250,46 +251,33 @@ LinuxLauncherProcess::LinuxLauncherProcess(
     systemdHierarchy(_systemdHierarchy) {}
 
 
-Option<Error> LinuxLauncherProcess::recover(const string& directory)
+Future<hashset<ContainerID>> LinuxLauncherProcess::recover(
+    const list<ContainerState>& states)
 {
-  // Loop through each container at the path, if it exists.
-  const string path = path::join(
-      flags.runtime_dir,
-      "launcher",
-      flags.launcher,
-      directory);
+  // For backwards compatibility we need to return top-level "orphan
+  // containers" that we find a cgroup for but don't have either (1) a
+  // checkpointed pid for because they were launched before we started
+  // checkpointing or (2) a ContainerState for because their
+  // information was not properly checkpointed elsewhere. We treat
+  // these as normal containers that can be destroyed by including
+  // them in `containers` just with a `pid` of -1. Because these
+  // containers were not part of ContainerState they will be
+  // considered "unexpected" below and returned as orphans.
+  Try<vector<string>> cgroups =
+    cgroups::get(freezerHierarchy, flags.cgroups_root);
 
-  if (!os::exists(path)) {
-    return None();
+  if (cgroups.isError()) {
+    return Failure(cgroups.error());
   }
 
-  Try<list<string>> entries = os::ls(path);
-
-  if (entries.isError()) {
-    return Error("Failed to list '" + path + "': " + entries.error());
-  }
-
-  foreach (const string& entry, entries.get()) {
-    // We're not expecting anything else but directories here
-    // representing each container.
-    CHECK(os::stat::isdir(path::join(path, entry)));
-
-    // TODO(benh): Validate that the entry looks like a ContainerID?
-
+  foreach (string cgroup, cgroups.get()) {
     Container container;
 
-    // Determine the ContainerID from 'directory/entry' (we explicitly
-    // do not want use `path` because it contains things that we don't
-    // want in our ContainerID and even still we have to skip all
-    // instances of 'containers' as well).
-    vector<string> tokens =
-      strings::tokenize(path::join(directory, entry), "/");
-    foreach (const string& token, tokens) {
-      // Skip the directory separator 'containers'.
-      if (token == "containers") {
-        continue;
-      }
+    // Determine ContainerID from cgroup, but first remove
+    // `flags.cgroups_root` prefix.
+    cgroup = strings::remove(cgroup, flags.cgroups_root, strings::PREFIX);
 
+    foreach (const string& token, strings::tokenize(cgroup, "/")) {
       ContainerID id;
       id.set_value(token);
 
@@ -300,90 +288,39 @@ Option<Error> LinuxLauncherProcess::recover(const string& directory)
       container.id = id;
     }
 
-    // Validate the ID (there should be at least one level).
-    if (!container.id.has_value()) {
-      return Error("Failed to determine ContainerID from path '" + path + "'");
-    }
-
-    // Recover the checkpointed 'PID 1' for this container.
-    if (!os::exists(path::join(path, entry, "pid"))) {
-      // This is possible because we don't atomically create the
-      // directory and write the 'pid' file and thus we might
-      // terminate/restart after we've created the directory but
-      // before we've written the file.
-      LOG(WARNING) << "Found a container without a 'pid' file";
-      container.pid = -1; // TODO(benh): Make `pid` optional?
-    } else {
-      Try<string> read = os::read(path::join(path, entry, "pid"));
-      if (read.isError()) {
-        return Error("Failed to recover pid of container: " + read.error());
-      }
-
-      Try<pid_t> pid = numify<pid_t>(read.get());
-      if (pid.isError()) {
-        return Error("Failed to numify pid '" + read.get() +
-                     "'of container at '" + path + "': " + pid.error());
-      }
-
-      container.pid = pid.get();
-    }
-
-    // TODO(benh): Should we preemptively destroy partially launched
-    // or partially destroyed containers? What about if they're
-    // nested!?
-
+    // Add this to `containers` so when `destroy` gets called we
+    // properly destroy the container, even if we determine it's an
+    // orphan below.
     containers.put(container.id, container);
 
-    LOG(INFO) << "Recovered checkpointed container " << container.id;
-
-    // Now recursively recover nested containers.
-    Option<Error> error = recover(path::join(directory, entry, "containers"));
-
-    if (error.isSome()) {
-      return error.get();
-    }
+    LOG(INFO) << "Recovered container " << container.id;
   }
 
-  return None();
-}
-
-
-Future<hashset<ContainerID>> LinuxLauncherProcess::recover(
-    const list<ContainerState>& states)
-{
-  // Recover containers from the launcher runtime directory.
-  Option<Error> error = recover("containers");
-
-  if (error.isSome()) {
-    return Failure(error.get().message);
-  }
-
-  // Now loop through the containers expected by ContainerState, which
-  // should only be top-level containers, because we might have some
-  // containers that we need to recover that either (1) we haven't
-  // checkpointed because those containers were launched before we
-  // started checkpointing or (2) had already been asked to be
-  // destroyed and have successfully been destroyed (thus we didn't
-  // recover them) but nobody else knows that because we
-  // terminated/restarted before returning from `destroy`.
+  // Now loop through the containers expected by ContainerState so we
+  // can have a complete list of the containers we might ever want to
+  // destroy as well as be able to determine orphans below.
   hashset<ContainerID> expected = {};
 
   foreach (const ContainerState& state, states) {
     expected.insert(state.container_id());
 
-    // Only add containers we don't know about.
     if (!containers.contains(state.container_id())) {
+      // The fact that we did not have a freezer cgroup for this
+      // container implies this container has already been destroyed
+      // but we need to add it to `containers` so that when
+      // `LinuxLauncher::destroy` does get called below for this
+      // container we will not fail.
       Container container;
       container.id = state.container_id();
       container.pid = state.pid();
 
-      // NOTE: as noted above, it's possible that this container has
-      // already been destroyed but we still add it to `containers` so
-      // that when `destroy` does get called for this container we
-      // will not fail.
       containers.put(container.id, container);
 
-      LOG(INFO) << "Recovered uncheckpointed container " << container.id;
+      LOG(INFO) << "Recovered (destroyed) container " << container.id;
+    } else {
+      // This container exists, so we save the pid so we can check
+      // that it's part of the systemd "Mesos executor slice" below.
+      containers[state.container_id()].pid = state.pid();
     }
   }
 
@@ -391,7 +328,8 @@ Future<hashset<ContainerID>> LinuxLauncherProcess::recover(
   // multiple containers that had the same pid. This seemed pretty
   // random, and is highly unlikely to occur in practice. That being
   // said, a good sanity check we could do here is to make sure that
-  // the pid is actually contained within each container.
+  // the pid is actually contained within each container's freezer
+  // cgroup.
 
   // If we are on a systemd environment, check that container pids are
   // still in the `MESOS_EXECUTORS_SLICE`. If they are not, warn the
@@ -411,14 +349,18 @@ Future<hashset<ContainerID>> LinuxLauncherProcess::recover(
 
     if (mesosExecutorSlicePids.isSome()) {
       foreachvalue (const Container& container, containers) {
-        if (mesosExecutorSlicePids.get().count(container.pid) <= 0) {
+        if (container.pid.isNone()) {
+          continue;
+        }
+
+        if (mesosExecutorSlicePids.get().count(container.pid.get()) <= 0) {
           // TODO(jmlvanre): Add a flag that enforces this rather
           // than just logs a warning (i.e., we exit if a pid was
           // found in the freezer but not in the
           // `MESOS_EXECUTORS_SLICE`. We need a flag to support the
           // upgrade path.
           LOG(WARNING)
-            << "Couldn't find pid '" << container.pid << "' in '"
+            << "Couldn't find pid '" << container.pid.get() << "' in '"
             << systemd::mesos::MESOS_EXECUTORS_SLICE << "'. This can lead to"
             << " lack of proper resource isolation";
         }
@@ -426,55 +368,17 @@ Future<hashset<ContainerID>> LinuxLauncherProcess::recover(
     }
   }
 
-  // For backwards compatibility we need to return top-level "orphan
-  // containers" that we find a cgroup for but don't have either (1) a
-  // checkpointed pid for because they were launched before we started
-  // checkpointing or (2) a ContainerState for because their
-  // information was not properly checkpointed elsewhere. We treat
-  // these as normal containers that can be destroyed by including
-  // them in `containers` just with a `pid` of -1. Because these
-  // containers were not part of ContainerState they will be
-  // considered "unexpected" below and returned as orphans.
-  Try<vector<string>> cgroups =
-    cgroups::get(freezerHierarchy, flags.cgroups_root);
-
-  if (cgroups.isError()) {
-    return Failure(cgroups.error());
-  }
-
-  foreach (const string& cgroup, cgroups.get()) {
-    // Only look for top-level containers.
-    if (strings::contains(cgroup, "/")) {
-      continue;
-    }
-
-    ContainerID id;
-    id.set_value(cgroup);
-
-    if (!containers.contains(id)) {
-      Container container;
-      container.id = id;
-      container.pid = -1; // TODO(benh): Make `pid` optional?
-
-      // Add this to `containers` so when `destroy` gets called we
-      // properly destroy the container.
-      containers.put(container.id, container);
-
-      LOG(INFO) << "Recovered orphaned container " << container.id;
-    }
-  }
-
-  // Return the list of top-level orphaned containers, i.e., a
-  // container that we recovered but was not expected during
-  // recovery (this could happen for example because we
-  // terminate/restart before `fork` returns the pid of the container
-  // to the caller).
+  // Return the list of top-level AND nested orphaned containers,
+  // i.e., a container that we recovered but was not expected during
+  // recovery.
   hashset<ContainerID> orphans = {};
+
   foreachvalue (const Container& container, containers) {
-    if (!container.id.has_parent() && !expected.contains(container.id)) {
+    if (!expected.contains(container.id)) {
       orphans.insert(container.id);
     }
   }
+
   return orphans;
 }
 
@@ -505,15 +409,15 @@ Try<pid_t> LinuxLauncherProcess::fork(
       return Error("Unknown parent container");
     }
 
-    if (container->pid == -1) {
+    if (container->pid.isNone()) {
       // TODO(benh): Could also look up a pid in the container and use
       // that in order to enter the namespaces? This would be best
       // effort because we don't know the namespaces that had been
       // created for the original pid.
-      return Error("Unknown parent container pid");
+      return Error("Unknown parent container pid, can not enter namespaces");
     }
 
-    target = container->pid;
+    target = container->pid.get();
   }
 
   int cloneFlags = namespaces.isSome() ? namespaces.get() : 0;
@@ -524,17 +428,13 @@ Try<pid_t> LinuxLauncherProcess::fork(
 
   cloneFlags |= SIGCHLD; // Specify SIGCHLD as child termination signal.
 
-  // NOTE: The ordering of hooks is VERY important here!
+  // NOTE: The ordering of the hooks is:
   //
-  // (1) Add the pid to the systemd slice.
-  // (2) Checkpoint the pid for the container.
-  // (3) Create the freezer cgroup for the container.
+  // (1) Add the child to the systemd slice.
+  // (2) Create the freezer cgroup for the child.
   //
-  // We must do (2) before (3) so that during recovery we can destroy
-  // any partially launched containers. We do (1) first because if we
-  // ever enforce all pids being in the systemd slice then the
-  // recovery logic above expects the pid to be in the slice if we've
-  // recovered the container.
+  // But since both have to happen or the child will terminate the
+  // ordering is immaterial.
 
   // Hook to extend the life of the child (and all of it's
   // descendants) using a systemd slice.
@@ -563,7 +463,9 @@ Try<pid_t> LinuxLauncherProcess::fork(
       environment,
       [target, cloneFlags](const lambda::function<int()>& child) {
         if (target.isSome()) {
-          // TODO(benh): Explain why we only enter these namesapces.
+          // TODO(benh): Factor out this set of namespaces that we
+          // enter and give a healthy comment for why these are the
+          // only ones we enter.
           Try<pid_t> pid = ns::clone(
               target.get(),
               CLONE_NEWUTS | CLONE_NEWNET | CLONE_NEWPID,
@@ -591,7 +493,7 @@ Try<pid_t> LinuxLauncherProcess::fork(
 
   containers.put(container.id, container);
 
-  return container.pid;
+  return container.pid.get();
 }
 
 
@@ -614,25 +516,19 @@ Future<Nothing> LinuxLauncherProcess::destroy(const ContainerID& containerId)
     }
   }
 
-  // TODO(benh): Explain why we do this now and what kind of memory
-  // safety we have to be weary of.
+  // We remove the container so that we don't attempt multiple
+  // destroys simultaneously. However, this implies that if the
+  // destroy fails the caller won't be able to retry because we won't
+  // know about the container anymore.
+  //
+  // NOTE: it's safe to use `container->id` from here on because it's
+  // a copy of the Container that we're about to delete.
   containers.erase(container->id);
 
-  // Determine if this is a partially launched or partially
-  // destroyed container. A container is considered partially
-  // launched or partially destroyed if we have recovered it from
-  // the runtime directory but we don't have a freezer cgroup for
-  // it.
-  //
-  // Even though we can't actually tell if the container was partially
-  // launched or partially destroyed (i.e., because both don't have a
-  // freezer cgroup), we treat both situations the same and just
-  // (re)destroy the container. It should always be safe to call
-  // `destroy` on these containers because we can assume that these
-  // containers don't have any nested containers because if they were
-  // partially launched nothing could have been nested and if they
-  // were partially destroyed we shouldn't have started to destroy
-  // them in the first place if they had anything nested.
+  // Determine if this is a partially destroyed container. A container
+  // is considered partially destroyed if we have recovered it from
+  // ContainerState but we don't have a freezer cgroup for it. If this
+  // is a partially destroyed container than there is nothing to do.
   Try<bool> exists = cgroups::exists(freezerHierarchy, cgroup(container->id));
   if (exists.isError()) {
     return Failure("Failed to determine if cgroup exists: " + exists.error());
@@ -640,9 +536,7 @@ Future<Nothing> LinuxLauncherProcess::destroy(const ContainerID& containerId)
 
   if (!exists.get()) {
     LOG(WARNING) << "Couldn't find freezer cgroup for container "
-                 << container->id << " so assuming partially launched "
-                 << "or partially destroyed";
-
+                 << container->id << " so assuming partially destroyed";
     return Nothing();
   }
 
@@ -667,7 +561,10 @@ Future<ContainerStatus> LinuxLauncherProcess::status(
   }
 
   ContainerStatus status;
-  status.set_executor_pid(container->pid);
+
+  if (container->pid.isSome()) {
+    status.set_executor_pid(container->pid.get());
+  }
 
   return status;
 }
