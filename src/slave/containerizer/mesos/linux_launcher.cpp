@@ -375,6 +375,7 @@ Future<hashset<ContainerID>> LinuxLauncherProcess::recover(
 
   foreachvalue (const Container& container, containers) {
     if (!expected.contains(container.id)) {
+      LOG(INFO) << container.id << " is a known orphaned container";
       orphans.insert(container.id);
     }
   }
