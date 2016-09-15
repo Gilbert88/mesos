@@ -1676,8 +1676,6 @@ Future<ContainerStatus> MesosContainerizerProcess::status(
 Future<bool> MesosContainerizerProcess::destroy(
     const ContainerID& containerId)
 {
-  CHECK(!containerId.has_parent());
-
   if (!containers_.contains(containerId)) {
     // This can happen due to the race between destroys initiated by
     // the launch failure, the terminated executor and the agent so
@@ -1702,6 +1700,31 @@ Future<bool> MesosContainerizerProcess::destroy(
 
   const Owned<Container>& container = containers_.at(containerId);
 
+  list<Future<ContainerTermination>> cleanup = {};
+  foreach (const ContainerID& child, container->containers) {
+    LOG(INFO) << "Destroying nested container " << child;
+
+    // Destroy nested containers parallely.
+    destroy(child);
+
+    cleanup.push_back(wait(child));
+  }
+
+  await(cleanup)
+    .onAny(defer(self(), &Self::_destroy, containerId));
+}
+
+
+void MesosContainerizerProcess::_destroy(
+    const ContainerID& containerId)
+{
+  if (!containers_.contains(containerId)) {
+    VLOG(1) << "Ignoring destroy of unknown container " << containerId;
+    return;
+  }
+
+  const Owned<Container>& container = containers_[containerId];
+
   if (container->state == DESTROYING) {
     return container->termination.future()
       .then([]() { return true; });
@@ -1720,7 +1743,7 @@ Future<bool> MesosContainerizerProcess::destroy(
     container->provisioning
       .onAny(defer(
           self(),
-          &Self::____destroy,
+          &Self::_____destroy,
           containerId,
           list<Future<Nothing>>()));
 
@@ -1748,7 +1771,7 @@ Future<bool> MesosContainerizerProcess::destroy(
           container->status.isSome()
             ? container->status.get()
             : None())
-      .onAny(defer(self(), &Self::___destroy, containerId));
+      .onAny(defer(self(), &Self::____destroy, containerId));
 
     return container->termination.future()
       .then([]() { return true; });
@@ -1763,7 +1786,7 @@ Future<bool> MesosContainerizerProcess::destroy(
     // Wait for the isolators to finish isolating before we start
     // to destroy the container.
     container->isolation
-      .onAny(defer(self(), &Self::_destroy, containerId));
+      .onAny(defer(self(), &Self::__destroy, containerId));
 
     return container->termination.future()
       .then([]() { return true; });
@@ -1775,25 +1798,22 @@ Future<bool> MesosContainerizerProcess::destroy(
   }
 
   container->state = DESTROYING;
-  _destroy(containerId);
-
-  return container->termination.future()
-    .then([]() { return true; });
+  __destroy(containerId);
 }
 
 
-void MesosContainerizerProcess::_destroy(
+void MesosContainerizerProcess::__destroy(
     const ContainerID& containerId)
 {
   CHECK(containers_.contains(containerId));
 
   // Kill all processes then continue destruction.
   launcher->destroy(containerId)
-    .onAny(defer(self(), &Self::__destroy, containerId, lambda::_1));
+    .onAny(defer(self(), &Self::___destroy, containerId, lambda::_1));
 }
 
 
-void MesosContainerizerProcess::__destroy(
+void MesosContainerizerProcess::___destroy(
     const ContainerID& containerId,
     const Future<Nothing>& future)
 {
@@ -1824,21 +1844,21 @@ void MesosContainerizerProcess::__destroy(
   CHECK_SOME(container->status);
 
   container->status.get()
-    .onAny(defer(self(), &Self::___destroy, containerId));
+    .onAny(defer(self(), &Self::____destroy, containerId));
 }
 
 
-void MesosContainerizerProcess::___destroy(
+void MesosContainerizerProcess::____destroy(
     const ContainerID& containerId)
 {
   CHECK(containers_.contains(containerId));
 
   cleanupIsolators(containerId)
-    .onAny(defer(self(), &Self::____destroy, containerId, lambda::_1));
+    .onAny(defer(self(), &Self::_____destroy, containerId, lambda::_1));
 }
 
 
-void MesosContainerizerProcess::____destroy(
+void MesosContainerizerProcess::_____destroy(
     const ContainerID& containerId,
     const Future<list<Future<Nothing>>>& cleanups)
 {
@@ -1873,11 +1893,11 @@ void MesosContainerizerProcess::____destroy(
   }
 
   provisioner->destroy(containerId)
-    .onAny(defer(self(), &Self::_____destroy, containerId, lambda::_1));
+    .onAny(defer(self(), &Self::______destroy, containerId, lambda::_1));
 }
 
 
-void MesosContainerizerProcess::_____destroy(
+void MesosContainerizerProcess::______destroy(
     const ContainerID& containerId,
     const Future<bool>& destroy)
 {
@@ -1897,12 +1917,6 @@ void MesosContainerizerProcess::_____destroy(
   }
 
   ContainerTermination termination;
-
-  if (container->status.isSome() &&
-      container->status->isReady() &&
-      container->status->get().isSome()) {
-    termination.set_status(container->status->get().get());
-  }
 
   // NOTE: We may not see a limitation in time for it to be
   // registered. This could occur if the limitation (e.g., an OOM)
@@ -1925,6 +1939,27 @@ void MesosContainerizerProcess::_____destroy(
     termination.set_message(strings::join("; ", messages));
   }
 
+  if (container->status.isSome()) {
+    // If we haven't reaped the pid we should eventually and we should
+    // wait until then before we decide whether or not we have a wait
+    // status.
+    container->status
+      ->onAny(defer(self(), [=](const Future<Option<int>>& status) {
+        // TODO(benh): Enable passing `mutable` lambdas to `defer` so
+        // we don't need to do gross things like the next line.
+        ContainerTermination termination_ = termination;
+        if (status.isReady() && status->isSome()) {
+          termination_.set_status(status->get());
+        }
+
+        container->promise.set(termination_);
+        containers_.erase(containerId);
+      }));
+  } else {
+    container->promise.set(termination);
+    containers_.erase(containerId);
+  }
+
   Try<Nothing> rmdir = os::rmdir(
       containerizer::paths::getRuntimePath(flags.runtime_dir, containerId));
 
@@ -1932,9 +1967,6 @@ void MesosContainerizerProcess::_____destroy(
     VLOG(1) << "Failed to remove the runtime directory"
             << " for container " << containerId;
   }
-
-  container->termination.set(termination);
-  containers_.erase(containerId);
 }
 
 

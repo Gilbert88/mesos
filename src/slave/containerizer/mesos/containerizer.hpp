@@ -231,25 +231,29 @@ private:
       const ContainerID& containerId,
       pid_t _pid);
 
-  // Continues 'destroy()' once isolators has completed.
+  // Continuss 'destroy()' once nested containers are handled.
   void _destroy(const ContainerID& containerId);
 
-  // Continues '_destroy()' once all processes have been killed by the launcher.
-  void __destroy(
+  // Continues '_destroy()' once isolators has completed.
+  void __destroy(const ContainerID& containerId);
+
+  // Continues '__destroy()' once all processes have been killed
+  // by the launcher.
+  void ___destroy(
       const ContainerID& containerId,
       const process::Future<Nothing>& future);
 
-  // Continues '__destroy()' once we get the exit status of the executor.
-  void ___destroy(const ContainerID& containerId);
+  // Continues '___destroy()' once we get the exit status of the executor.
+  void ____destroy(const ContainerID& containerId);
 
-  // Continues '___destroy()' once all isolators have completed
+  // Continues '____destroy()' once all isolators have completed
   // cleanup.
-  void ____destroy(
+  void _____destroy(
       const ContainerID& containerId,
       const process::Future<std::list<process::Future<Nothing>>>& cleanups);
 
-  // Continues '____destroy()' once provisioner have completed destroy.
-  void _____destroy(
+  // Continues '_____destroy()' once provisioner have completed destroy.
+  void ______destroy(
       const ContainerID& containerId,
       const process::Future<bool>& destroy);
 
