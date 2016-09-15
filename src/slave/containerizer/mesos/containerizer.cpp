@@ -951,6 +951,9 @@ Future<Nothing> MesosContainerizerProcess::recover(
   return launcher->recover(recoverable)
     .then(defer(self(), [=](
         const hashset<ContainerID>& launchedOrphans) -> Future<Nothing> {
+      foreach (const ContainerID& containerId, launchedOrphans) {
+        std::cout << containerId << std::endl;
+      }
       hashset<ContainerID> _orphans = orphans;
       _orphans.insert(launchedOrphans.begin(), launchedOrphans.end());
       return _recover(recoverable, orphans);
