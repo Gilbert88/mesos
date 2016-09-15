@@ -45,6 +45,8 @@ using namespace process;
 using mesos::internal::slave::Fetcher;
 using mesos::internal::slave::MesosContainerizer;
 
+using mesos::internal::slave::state::SlaveState;
+
 using mesos::slave::ContainerState;
 using mesos::slave::ContainerTermination;
 
@@ -638,7 +640,34 @@ namespace tests {
 class MesosContainerizerTest : public MesosTest {};
 
 
-TEST_F(MesosContainerizerTest, ROOT_CGROUPS_Basic)
+TEST_F(MesosContainerizerTest, NestedContainerID)
+{
+  ContainerID id1;
+  id1.set_value(UUID::random().toString());
+
+  ContainerID id2;
+  id2.set_value(UUID::random().toString());
+
+  EXPECT_EQ(id1, id1);
+  EXPECT_NE(id1, id2);
+
+  ContainerID id3 = id1;
+  id3.mutable_parent()->CopyFrom(id2);
+
+  EXPECT_EQ(id3, id3);
+  EXPECT_NE(id3, id1);
+
+  hashset<ContainerID> ids;
+  ids.insert(id2);
+  ids.insert(id3);
+
+  EXPECT_TRUE(ids.contains(id2));
+  EXPECT_TRUE(ids.contains(id3));
+  EXPECT_FALSE(ids.contains(id1));
+}
+
+
+TEST_F(MesosContainerizerTest, ROOT_CGROUPS_Launch)
 {
   slave::Flags flags = CreateSlaveFlags();
   flags.launcher = "linux";
@@ -655,8 +684,17 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_Basic)
 
   MesosContainerizer* containerizer = create.get();
 
+  SlaveState state;
+  state.id = SlaveID();
+
+  AWAIT_READY(containerizer->recover(state));
+
   ContainerID containerId;
   containerId.set_value("kevin");
+
+  ExecutorInfo executor = CREATE_EXECUTOR_INFO("executor", "exit 42");
+  executor.mutable_resources()->CopyFrom(
+      Resources::parse("cpus:1;mem:32").get());
 
   Try<string> directory = environment->mkdtemp();
   ASSERT_SOME(directory);
@@ -664,7 +702,7 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_Basic)
   Future<bool> launch = containerizer->launch(
       containerId,
       None(),
-      CREATE_EXECUTOR_INFO("executor", "exit 42"),
+      executor,
       directory.get(),
       None(),
       SlaveID(),
@@ -681,6 +719,92 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_Basic)
   int status = wait->status();
   ASSERT_TRUE(WIFEXITED(status));
   EXPECT_EQ(42, WEXITSTATUS(status));
+
+  delete containerizer;
+}
+
+
+TEST_F(MesosContainerizerTest, ROOT_CGROUPS_NestedLaunch)
+{
+  slave::Flags flags = CreateSlaveFlags();
+  flags.launcher = "linux";
+  flags.isolation = "cgroups/cpu,cgroups/mem,namespaces/pid";
+
+  Fetcher fetcher;
+
+  Try<MesosContainerizer*> create = MesosContainerizer::create(
+      flags,
+      false,
+      &fetcher);
+
+  ASSERT_SOME(create);
+
+  MesosContainerizer* containerizer = create.get();
+
+  SlaveState state;
+  state.id = SlaveID();
+
+  AWAIT_READY(containerizer->recover(state));
+
+  ContainerID containerId;
+  containerId.set_value("kevin");
+
+  ExecutorInfo executor = CREATE_EXECUTOR_INFO("executor", "read");
+  executor.mutable_resources()->CopyFrom(
+      Resources::parse("cpus:1;mem:32").get());
+
+  Try<string> directory = environment->mkdtemp();
+  ASSERT_SOME(directory);
+
+  Future<bool> launch = containerizer->launch(
+      containerId,
+      None(),
+      executor,
+      directory.get(),
+      None(),
+      state.id,
+      map<string, string>(),
+      true); // TODO(benh): Ever want to check not-checkpointing?
+
+  AWAIT_ASSERT_TRUE(launch);
+
+  // Now launch nested container.
+  ContainerID nestedContainerId;
+  nestedContainerId.mutable_parent()->CopyFrom(containerId);
+  nestedContainerId.set_value("ben");
+
+  directory = environment->mkdtemp();
+  ASSERT_SOME(directory);
+
+  launch = containerizer->launch(
+      nestedContainerId,
+      CREATE_COMMAND_INFO("exit 42"),
+      None(),
+      Resources::parse("cpus:1;mem:32").get(),
+      directory.get(),
+      None(),
+      state.id);
+
+  AWAIT_ASSERT_TRUE(launch);
+
+  Future<ContainerTermination> wait = containerizer->wait(nestedContainerId);
+
+  AWAIT_READY(wait);
+
+  ASSERT_TRUE(wait->has_status());
+  int status = wait->status();
+  ASSERT_TRUE(WIFEXITED(status));
+  EXPECT_EQ(42, WEXITSTATUS(status));
+
+  wait = containerizer->wait(containerId);
+
+  containerizer->destroy(containerId);
+
+  AWAIT_READY(wait);
+  ASSERT_TRUE(wait->has_status());
+  status = wait->status();
+  ASSERT_TRUE(WIFSIGNALED(status));
+  EXPECT_EQ(SIGKILL, WTERMSIG(status));
 
   delete containerizer;
 }
