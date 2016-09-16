@@ -961,7 +961,7 @@ Future<Nothing> MesosContainerizerProcess::recoverProvisioner(
 
 Future<Nothing> MesosContainerizerProcess::__recover(
     const list<ContainerState>& recovered,
-    const hashset<ContainerID>& orphans)
+    const hashset<ContainerID>& orphans_)
 {
   foreach (const ContainerState& run, recovered) {
     const ContainerID& containerId = run.container_id();
@@ -989,21 +989,72 @@ Future<Nothing> MesosContainerizerProcess::__recover(
   }
 
   // Destroy all the orphan containers.
-  // NOTE: We do not fail the recovery if the destroy of orphan
-  // containers failed. See MESOS-2367 for details.
-  foreach (const ContainerID& containerId, orphans) {
-    LOG(INFO) << "Removing orphan container " << containerId;
 
-    launcher->destroy(containerId)
-      .then(defer(self(), &Self::cleanupIsolators, containerId))
-      .onAny(defer(self(), &Self::___recover, containerId, lambda::_1))
+  // Helper for destroying a container.
+  auto destroy = [=](const ContainerID& containerId) {
+    return launcher->destroy(containerId)
+      .then(defer(self(), [=]() {
+        return cleanupIsolators(containerId);
+      }))
+      .onAny(defer(self(), [=](const Future<list<Future<Nothing>>>& future) {
+        ___recover(containerId, future);
+      }))
       .then(defer(self(), [=]() -> Future<bool> {
         return provisioner->destroy(containerId);
       }))
-      .onAny(defer(self(), &Self::____recover, containerId, lambda::_1));
+      .onAny(defer(self(), [=](const Future<bool>& future) {
+        // NOTE: if `future` is not ready, that indicates the
+        // `provisioner->destroy` has failed.
+        if (!future.isReady()) {
+          LOG(ERROR) << "Failed to deprovision orphan container "
+                     << containerId << ": "
+                     << (future.isFailed() ? future.failure() : "discarded");
+
+          ++metrics.container_destroy_errors;
+        }
+      }));
+  };
+
+  // Helper for determining if the specfied `containerId` has any
+  // descendants in the specified hashset.
+  auto hasDescendants = [](
+      const ContainerID& containerId,
+      const hashset<ContainerID>& containerIds) {
+    foreach (ContainerID descendant, containerIds) {
+      while (descendant.has_parent()) {
+        if (descendant.parent() == containerId) {
+          return true;
+        }
+        descendant = descendant.parent();
+      }
+    }
+    return false;
+  };
+
+  hashset<ContainerID> orphans = orphans_;
+  list<Future<bool>> destroys = {};
+
+  while (!orphans.empty()) {
+    foreach (const ContainerID& containerId, orphans) {
+      if (!hasDescendants(containerId, orphans)) {
+        LOG(INFO) << "Removing orphan container " << containerId;
+        destroys.push_back(destroy(containerId));
+        orphans.erase(containerId);
+        break; // MUST BREAK HERE AS WE ARE INVALIDATING THE ITERATOR!
+      }
+    }
   }
 
-  return Nothing();
+  return await(destroys)
+    // NOTE: We `recover` instead of fail the recovery if the
+    // destroy of an orphan container fails. See MESOS-2367 for
+    // details.
+    .then([]() {
+      return Nothing();
+    })
+    .repair([](const Future<Nothing>&) {
+      return Nothing();
+    });
 }
 
 
@@ -1037,23 +1088,6 @@ void MesosContainerizerProcess::___recover(
 
   if (cleanupFailed) {
     ++metrics.container_destroy_errors;
-  }
-}
-
-
-void MesosContainerizerProcess::____recover(
-    const ContainerID& containerId,
-    const Future<bool>& destroy)
-{
-  // NOTE: If 'destroy' is not ready, that indicates launcher destroy
-  // has failed.
-  if (!destroy.isReady()) {
-    LOG(ERROR) << "Failed to deprovision orphan container "
-               << containerId << ": "
-               << (destroy.isFailed() ? destroy.failure() : "discarded");
-
-    ++metrics.container_destroy_errors;
-    return;
   }
 }
 
@@ -1549,7 +1583,7 @@ Future<bool> MesosContainerizerProcess::_launch(
         namespaces); // 'namespaces' will be ignored by PosixLauncher.
 
     if (forked.isError()) {
-      return Failure("Failed to fork executor: " + forked.error());
+      return Failure("Failed to fork: " + forked.error());
     }
     pid_t pid = forked.get();
 
@@ -2223,7 +2257,7 @@ void MesosContainerizerProcess::reaped(const ContainerID& containerId)
     return;
   }
 
-  LOG(INFO) << "Executor for container " << containerId << " has exited";
+  LOG(INFO) << "Container " << containerId << " has exited";
 
   // The executor has exited so destroy the container.
   destroy(containerId);

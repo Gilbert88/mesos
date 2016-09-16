@@ -208,10 +208,6 @@ private:
       const std::list<mesos::slave::ContainerState>& recovered,
       const hashset<ContainerID>& orphans);
 
-  void ____recover(
-      const ContainerID& containerId,
-      const process::Future<bool>& destroy);
-
   process::Future<Nothing> prepare(
       const ContainerID& containerId,
       const Option<ProvisionInfo>& provisionInfo);
