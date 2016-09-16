@@ -908,7 +908,7 @@ Future<Nothing> MesosContainerizerProcess::recover(
         const hashset<ContainerID>& launchedOrphans) -> Future<Nothing> {
       hashset<ContainerID> _orphans = orphans;
       _orphans.insert(launchedOrphans.begin(), launchedOrphans.end());
-      return _recover(recoverable, orphans);
+      return _recover(recoverable, _orphans);
     }));
 }
 
