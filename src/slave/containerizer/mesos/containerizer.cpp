@@ -729,6 +729,72 @@ Option<Error> MesosContainerizerProcess::recover(const string& directory)
 }
 
 
+static Result<hashset<ContainerID>> recoverOrphans(
+    const ContainerID& containerId,
+    const string& path,
+    const string& directory)
+{
+  if (!os::exists(path::join(path, directory))) {
+    return None();
+  }
+
+  Try<list<string>> entries = os::ls(path::join(path, directory));
+  if (entries.isError()) {
+    return Error("Failed to list '" + directory + "': " + entries.error());
+  }
+
+  hashset<ContainerID> orphans;
+
+  foreach (const string& entry, entries.get()) {
+    CHECK(os::stat::isdir(path::join(directory, entry)));
+
+    ContainerID child;
+
+    vector<string> tokens =
+      strings::tokenize(path::join(directory, entry), "/");
+
+    foreach (const string& token, tokens) {
+      if (token == "containers") {
+        continue;
+      }
+
+      ContainerID id;
+      id.set_value(token);
+
+      if (child.has_value()) {
+        id.mutable_parent()->CopyFrom(child);
+      }
+
+      child = id;
+    }
+
+    if (!child.has_value()) {
+      return Error("Failed to determine ContainerID from path '" +
+                   path::join(path, directory) + "'");
+    }
+
+    Result<hashset<ContainerID>> _orphans = recoverOrphans(
+        child,
+        path,
+        path::join(directory, child.value(), "containers"));
+
+    if (_orphans.isError()) {
+      return Error("Failed to collect orphans list: " + _orphans.error());
+    }
+
+    if (_orphans.isNone()) {
+      continue;
+    }
+
+    orphans.insert(_orphans->begin(), _orphans->end());
+  }
+
+  orphans.insert(containerId);
+
+  return orphans;
+}
+
+
 Future<Nothing> MesosContainerizerProcess::recover(
     const Option<state::SlaveState>& state)
 {
@@ -872,7 +938,18 @@ Future<Nothing> MesosContainerizerProcess::recover(
       containerId.set_value(entry);
 
       if (!alive.contains(containerId)) {
-        orphans.insert(containerId);
+        Result<hashset<ContainerID>> _orphans = recoverOrphans(
+            containerId,
+            path::join(flags.runtime_dir, "containers"),
+            path::join(containerId.value(), "containers"));
+
+        if (_orphans.isError()) {
+          return Failure("Failed to get orphans list: " + _orphans.error());
+        } else if (_orphans.isNone()) {
+          return Failure("Unexpected empty orphans list");
+        }
+
+        orphans.insert(_orphans->begin(), _orphans->end());
         continue;
       }
 
