@@ -123,7 +123,7 @@ mesos::slave::ContainerState createContainerState(
     const Option<ExecutorInfo>& executorInfo,
     const ContainerID& id,
     pid_t pid,
-    const Option<std::string>& directory);
+    const std::string& directory);
 
 } // namespace slave {
 

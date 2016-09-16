@@ -305,6 +305,12 @@ private:
     // containers).
     pid_t pid;
 
+    // This is the sandbox directory for the container. We keep this
+    // information because it is included in 'ContainerState', and
+    // isolator recover may need the sandbox directory for recover
+    // containers.
+    std::string directory;
+
     // We keep track of the future exit status for the container if it
     // has been launched. If the container has not been launched yet,
     // 'status' will be set to None().

@@ -683,7 +683,15 @@ Option<Error> MesosContainerizerProcess::recover(const string& directory)
     // Maintain the children list under the parent, which is used
     // for 'Containerizer::destroy' recursively.
     if (containerId.has_parent()) {
-      containers_[containerId.parent()]->containers.insert(containerId);
+      const ContainerID& parent = containerId.parent();
+
+      CHECK(containers_.contains(parent));
+
+      containers_[parent]->containers.insert(containerId);
+      container->directory = path::join(
+          containers_[parent]->directory,
+          ".containers",
+          containerId.value());
     }
 
     // Recover the checkpointed 'PID 1' for this container.
@@ -905,6 +913,7 @@ Future<Nothing> MesosContainerizerProcess::recover(
     container->state = RUNNING;
 
     container->pid = state.pid();
+    container->directory = state.directory();
 
     containers_[containerId] = container;
   }
@@ -972,7 +981,7 @@ Future<Nothing> MesosContainerizerProcess::recover(
               None(),
               containerId,
               container->pid,
-              None());
+              container->directory);
 
         recoverable.push_back(state);
       }
