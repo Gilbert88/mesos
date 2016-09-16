@@ -59,6 +59,12 @@ DockerRuntimeIsolatorProcess::DockerRuntimeIsolatorProcess(
 DockerRuntimeIsolatorProcess::~DockerRuntimeIsolatorProcess() {}
 
 
+bool DockerRuntimeIsolatorProcess::supportsNesting()
+{
+  return true;
+}
+
+
 Try<Isolator*> DockerRuntimeIsolatorProcess::create(const Flags& flags)
 {
   process::Owned<MesosIsolatorProcess> process(
@@ -80,13 +86,11 @@ Future<Option<ContainerLaunchInfo>> DockerRuntimeIsolatorProcess::prepare(
     const ContainerID& containerId,
     const ContainerConfig& containerConfig)
 {
-  const ExecutorInfo& executorInfo = containerConfig.executor_info();
-
-  if (!executorInfo.has_container()) {
+  if (!containerConfig.has_container_info()) {
     return None();
   }
 
-  if (executorInfo.container().type() != ContainerInfo::MESOS) {
+  if (containerConfig.container_info().type() != ContainerInfo::MESOS) {
     return Failure("Can only prepare docker runtime for a MESOS container");
   }
 
@@ -136,16 +140,7 @@ Future<Option<ContainerLaunchInfo>> DockerRuntimeIsolatorProcess::prepare(
   // custom executor case, info will be included in 'launchInfo', and
   // will be passed back to containerizer. For command task case, info
   // will be passed to command executor as flags.
-  if (!containerConfig.has_task_info()) {
-    // Custom executor case.
-    if (workingDirectory.isSome()) {
-      launchInfo.set_working_directory(workingDirectory.get());
-    }
-
-    if (command.isSome()) {
-      launchInfo.mutable_command()->CopyFrom(command.get());
-    }
-  } else {
+  if (containerConfig.has_task_info()) {
     // Command task case. The 'executorCommand' below is the
     // command with value as 'mesos-executor'.
     CommandInfo executorCommand = containerConfig.executor_info().command();
@@ -165,6 +160,15 @@ Future<Option<ContainerLaunchInfo>> DockerRuntimeIsolatorProcess::prepare(
     }
 
     launchInfo.mutable_command()->CopyFrom(executorCommand);
+  } else {
+    // Other cases.
+    if (workingDirectory.isSome()) {
+      launchInfo.set_working_directory(workingDirectory.get());
+    }
+
+    if (command.isSome()) {
+      launchInfo.mutable_command()->CopyFrom(command.get());
+    }
   }
 
   return launchInfo;
@@ -231,14 +235,13 @@ Result<CommandInfo> DockerRuntimeIsolatorProcess::getLaunchCommand(
   // it is neccessary to mutate.
   CommandInfo command;
 
-  if (!containerConfig.has_task_info()) {
-    // Custom executor case.
-    CHECK(containerConfig.executor_info().has_command());
-    command = containerConfig.executor_info().command();
-  } else {
+  if (containerConfig.has_task_info()) {
     // Command task case.
     CHECK(containerConfig.task_info().has_command());
     command = containerConfig.task_info().command();
+  } else {
+    // Other cases.
+    command = containerConfig.command_info();
   }
 
   // We merge the CommandInfo following the logic:
