@@ -265,6 +265,19 @@ string getExecutorRunPath(
 }
 
 
+string getSandboxPath(
+    const string& base,
+    const ContainerID& containerId)
+{
+  return containerId.has_parent()
+    ? path::join(
+        getSandboxPath(base, containerId.parent()),
+        ".containers",
+        containerId.value())
+    : path::join(base, containerId.value());
+}
+
+
 string getExecutorHttpMarkerPath(
     const string& rootDir,
     const SlaveID& slaveId,
