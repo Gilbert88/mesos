@@ -198,6 +198,11 @@ std::string getExecutorRunPath(
     const ContainerID& containerId);
 
 
+std::string getSandboxPath(
+    const std::string& base,
+    const ContainerID& containerId);
+
+
 std::string getExecutorHttpMarkerPath(
     const std::string& rootDir,
     const SlaveID& slaveId,
