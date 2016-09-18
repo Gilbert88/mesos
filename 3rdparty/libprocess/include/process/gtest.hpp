@@ -23,9 +23,11 @@
 #include <process/http.hpp>
 
 #include <stout/duration.hpp>
+#include <stout/gtest.hpp>
 #include <stout/option.hpp>
 #include <stout/os.hpp>
 #include <stout/stopwatch.hpp>
+#include <stout/strings.hpp>
 
 namespace process {
 
@@ -505,26 +507,15 @@ inline ::testing::AssertionResult AwaitAssertExited(
     AwaitAssertReady(actualExpr, durationExpr, actual, duration);
 
   if (result) {
+    CHECK_READY(actual);
     if (actual->isNone()) {
       return ::testing::AssertionFailure()
         << "(" << actualExpr << ").get() is NONE";
-    } else if (WIFEXITED(actual->get())) {
-      return ::testing::AssertionSuccess();
-    } else if (WIFSIGNALED(actual->get())) {
-      return ::testing::AssertionFailure()
-        << "Expecting WIFEXITED((" << actualExpr << ").get()) but "
-        << " WIFSIGNALED(...) is true and WTERMSIG(...) is "
-        << strsignal(WTERMSIG(actual->get()));
-    } else if (WIFSTOPPED(actual->get())) {
-      return ::testing::AssertionFailure()
-        << "Expecting WIFEXITED((" << actualExpr << ").get()) but"
-        << " WIFSTOPPED(...) is true and WSTOPSIG(...) is "
-        << strsignal(WSTOPSIG(actual->get()));
-    } else {
-      return ::testing::AssertionFailure()
-        << "Expecting WIFEXITED((" << actualExpr << ").get()) but got"
-        << " unknown value: " << ::testing::PrintToString(actual->get());
     }
+
+    return AssertExited(
+        strings::join("(", actualExpr, ")->get()").c_str(),
+        actual->get());
   }
 
   return result;
@@ -560,15 +551,12 @@ inline ::testing::AssertionResult AwaitAssertExitStatusEq(
 
   if (result) {
     CHECK_READY(actual);
-    if (WEXITSTATUS(actual->get()) == expected) {
-      return ::testing::AssertionSuccess();
-    } else {
-      return ::testing::AssertionFailure()
-        << "Value of: WEXITSTATUS((" << actualExpr << ").get())\n"
-        << "  Actual: " << ::testing::PrintToString(actual->get()) << "\n"
-        << "Expected: " << expectedExpr << "\n"
-        << "Which is: " << ::testing::PrintToString(expected);
-    }
+    CHECK_SOME(actual.get());
+    return AssertExitStatusEq(
+        expectedExpr,
+        strings::join("(", actualExpr, ")->get()").c_str(),
+        expected,
+        actual->get());
   }
 
   return result;
@@ -604,15 +592,12 @@ inline ::testing::AssertionResult AwaitAssertExitStatusNe(
 
   if (result) {
     CHECK_READY(actual);
-    if (WEXITSTATUS(actual->get()) != expected) {
-      return ::testing::AssertionSuccess();
-    } else {
-      return ::testing::AssertionFailure()
-        << "Value of: WEXITSTATUS((" << actualExpr << ").get())\n"
-        << "  Actual: " << ::testing::PrintToString(actual->get()) << "\n"
-        << "Expected: " << expectedExpr << "\n"
-        << "Which is: " << ::testing::PrintToString(expected);
-    }
+    CHECK_SOME(actual.get());
+    return AssertExitStatusNe(
+        expectedExpr,
+        strings::join("(", actualExpr, ")->get()").c_str(),
+        expected,
+        actual->get());
   }
 
   return result;
@@ -645,26 +630,15 @@ inline ::testing::AssertionResult AwaitAssertSignaled(
     AwaitAssertReady(actualExpr, durationExpr, actual, duration);
 
   if (result) {
+    CHECK_READY(actual);
     if (actual->isNone()) {
       return ::testing::AssertionFailure()
-        << "(" << actualExpr << ").get() is NONE";
-    } else if (WIFEXITED(actual->get())) {
-      return ::testing::AssertionFailure()
-        << "Expecting WIFSIGNALED((" << actualExpr << ").get()) but "
-        << " WIFEXITED(...) is true and WEXITSTATUS(...) is "
-        << WEXITSTATUS(actual->get());
-    } else if (WIFSIGNALED(actual->get())) {
-      return ::testing::AssertionSuccess();
-    } else if (WIFSTOPPED(actual->get())) {
-      return ::testing::AssertionFailure()
-        << "Expecting WIFSIGNALED((" << actualExpr << ").get()) but"
-        << " WIFSTOPPED(...) is true and WSTOPSIG(...) is "
-        << strsignal(WSTOPSIG(actual->get()));
-    } else {
-      return ::testing::AssertionFailure()
-        << "Expecting WIFSIGNALED((" << actualExpr << ").get()) but got"
-        << " unknown value: " << ::testing::PrintToString(actual->get());
+        << "(" << actualExpr << ")->isNone() is true";
     }
+
+    return AssertSignaled(
+        strings::join("(", actualExpr, ")->get()").c_str(),
+        actual->get());
   }
 
   return result;
@@ -700,15 +674,12 @@ inline ::testing::AssertionResult AwaitAssertTermSigEq(
 
   if (result) {
     CHECK_READY(actual);
-    if (WTERMSIG(actual->get()) == expected) {
-      return ::testing::AssertionSuccess();
-    } else {
-      return ::testing::AssertionFailure()
-        << "Value of: WTERMSIG((" << actualExpr << ").get())\n"
-        << "  Actual: " << ::testing::PrintToString(actual->get()) << "\n"
-        << "Expected: " << expectedExpr << "\n"
-        << "Which is: " << ::testing::PrintToString(expected);
-    }
+    CHECK_SOME(actual.get());
+    return AssertTermSigEq(
+        expectedExpr,
+        strings::join("(", actualExpr, ")->get()").c_str(),
+        expected,
+        actual->get());
   }
 
   return result;
@@ -744,15 +715,12 @@ inline ::testing::AssertionResult AwaitAssertTermSigNe(
 
   if (result) {
     CHECK_READY(actual);
-    if (WTERMSIG(actual->get()) != expected) {
-      return ::testing::AssertionSuccess();
-    } else {
-      return ::testing::AssertionFailure()
-        << "Value of: WTERMSIG((" << actualExpr << ").get())\n"
-        << "  Actual: " << ::testing::PrintToString(actual->get()) << "\n"
-        << "Expected: " << expectedExpr << "\n"
-        << "Which is: " << ::testing::PrintToString(expected);
-    }
+    CHECK_SOME(actual.get());
+    return AssertTermSigNe(
+        expectedExpr,
+        strings::join("(", actualExpr, ")->get()").c_str(),
+        expected,
+        actual->get());
   }
 
   return result;

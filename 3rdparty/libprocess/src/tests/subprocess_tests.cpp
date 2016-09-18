@@ -62,19 +62,14 @@ void run_subprocess(const lambda::function<Try<Subprocess>()>& createSubprocess)
 
   // Advance time until the internal reaper reaps the subprocess.
   Clock::pause();
-  while (s->status().isPending()) {
+  while (s.get().status().isPending()) {
     Clock::advance(MAX_REAP_INTERVAL());
     Clock::settle();
   }
   Clock::resume();
 
   // Check process exited cleanly.
-  AWAIT_ASSERT_READY(s->status());
-  ASSERT_SOME(s->status().get());
-
-  int status = s->status().get().get();
-  ASSERT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 }
 
 
@@ -252,12 +247,7 @@ TEST_F(SubprocessTest, Status)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  int status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 
   // Exit 1.
   s = subprocess("exit 1");
@@ -272,12 +262,7 @@ TEST_F(SubprocessTest, Status)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(1, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(1, s.get().status());
 
   // SIGTERM.
   s = subprocess("sleep 60");
@@ -294,12 +279,7 @@ TEST_F(SubprocessTest, Status)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  status = s.get().status().get().get();
-  EXPECT_TRUE(WIFSIGNALED(status));
-  EXPECT_EQ(SIGTERM, WTERMSIG(status));
+  AWAIT_EXPECT_WTERMSIG_EQ(SIGTERM, s.get().status());
 
   // SIGKILL.
   s = subprocess("sleep 60");
@@ -316,12 +296,7 @@ TEST_F(SubprocessTest, Status)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  status = s.get().status().get().get();
-  EXPECT_TRUE(WIFSIGNALED(status));
-  EXPECT_EQ(SIGKILL, WTERMSIG(status));
+  AWAIT_EXPECT_WTERMSIG_EQ(SIGKILL, s.get().status());
 }
 
 
@@ -346,12 +321,7 @@ TEST_F(SubprocessTest, PipeOutput)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  int status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 
   // Standard error.
   s = subprocess(
@@ -372,12 +342,7 @@ TEST_F(SubprocessTest, PipeOutput)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 }
 
 
@@ -404,12 +369,7 @@ TEST_F(SubprocessTest, PipeInput)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  int status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 }
 
 
@@ -449,12 +409,7 @@ TEST_F(SubprocessTest, PipeRedirect)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  int status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 
   // Now make sure all the data is there!
   Try<string> read = os::read(path);
@@ -485,12 +440,7 @@ TEST_F(SubprocessTest, PathOutput)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  int status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 
   Try<string> read = os::read(out);
   ASSERT_SOME(read);
@@ -513,12 +463,7 @@ TEST_F(SubprocessTest, PathOutput)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 
   read = os::read(err);
   ASSERT_SOME(read);
@@ -550,12 +495,7 @@ TEST_F(SubprocessTest, PathInput)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  int status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 }
 
 
@@ -589,12 +529,7 @@ TEST_F(SubprocessTest, FdOutput)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  int status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 
   Try<string> read = os::read(out);
   ASSERT_SOME(read);
@@ -625,12 +560,7 @@ TEST_F(SubprocessTest, FdOutput)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 
   read = os::read(err);
   ASSERT_SOME(read);
@@ -667,12 +597,7 @@ TEST_F(SubprocessTest, FdInput)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  int status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 }
 
 
@@ -690,12 +615,7 @@ TEST_F(SubprocessTest, Default)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  int status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 }
 #endif // __WINDOWS__
 
@@ -779,12 +699,7 @@ TEST_F(SubprocessTest, Flags)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  int status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 
   // Parse the output and make sure that it matches the flags we
   // specified in the beginning.
@@ -848,12 +763,7 @@ TEST_F(SubprocessTest, Environment)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  int status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 
   // Multiple key-value pairs.
   environment.clear();
@@ -880,12 +790,7 @@ TEST_F(SubprocessTest, Environment)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 }
 
 
@@ -915,12 +820,7 @@ TEST_F(SubprocessTest, EnvironmentWithSpaces)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  int status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 }
 
 
@@ -950,12 +850,7 @@ TEST_F(SubprocessTest, EnvironmentWithSpacesAndQuotes)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  int status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 }
 
 
@@ -988,12 +883,7 @@ TEST_F(SubprocessTest, EnvironmentOverride)
   }
   Clock::resume();
 
-  AWAIT_ASSERT_READY(s.get().status());
-  ASSERT_SOME(s.get().status().get());
-
-  int status = s.get().status().get().get();
-  EXPECT_TRUE(WIFEXITED(status));
-  EXPECT_EQ(0, WEXITSTATUS(status));
+  AWAIT_EXPECT_WEXITSTATUS_EQ(0, s.get().status());
 }
 #endif // __WINDOWS__
 
