@@ -278,6 +278,21 @@ string getSandboxPath(
 }
 
 
+string getNestedSandboxPath(
+    const string& rootDir,
+    const SlaveID& slaveId,
+    const FrameworkID& frameworkId,
+    const ExecutorID& executorId,
+    const ContainerID& containerId)
+{
+  return getSandboxPath(
+      path::join(
+          getExecutorPath(rootDir, slaveId, frameworkId, executorId),
+          CONTAINERS_DIR),
+      containerId);
+}
+
+
 string getExecutorHttpMarkerPath(
     const string& rootDir,
     const SlaveID& slaveId,
