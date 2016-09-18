@@ -954,11 +954,12 @@ Future<Nothing> MesosContainerizerProcess::recover(
 
         if (_orphans.isError()) {
           return Failure("Failed to get orphans list: " + _orphans.error());
-        } else if (_orphans.isNone()) {
-          return Failure("Unexpected empty orphans list");
         }
 
-        orphans.insert(_orphans->begin(), _orphans->end());
+        if (_orphans.isSome()) {
+          orphans.insert(_orphans->begin(), _orphans->end());
+        }
+
         continue;
       }
 
