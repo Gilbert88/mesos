@@ -2079,7 +2079,10 @@ void MesosContainerizerProcess::destroy(
 void MesosContainerizerProcess::_destroy(
     const ContainerID& containerId)
 {
-  CHECK(containers_.contains(containerId));
+  if (!containers_.contains(containerId)) {
+    VLOG(1) << "Ignoring destroy of unknown container " << containerId;
+    return;
+  }
 
   const Owned<Container>& container = containers_[containerId];
 
