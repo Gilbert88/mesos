@@ -103,7 +103,7 @@ TEST_F(PathsTest, CreateExecutorDirectory)
 }
 
 
-TEST_F(PathsTest, ParseExecutorRunPath)
+TEST_F(PathsTest, ParseSandboxPath)
 {
   string goodDir = paths::getExecutorRunPath(
       rootDir,
@@ -135,7 +135,7 @@ TEST_F(PathsTest, ParseExecutorRunPath)
       "notruns",
       containerId.value());
 
-  Try<ExecutorRunPath> path = paths::parseExecutorRunPath(rootDir, goodDir);
+  Try<ExecutorRunPath> path = paths::parseSandboxPath(rootDir, goodDir);
   ASSERT_SOME(path);
 
   EXPECT_EQ(slaveId, path->slaveId);
@@ -143,13 +143,13 @@ TEST_F(PathsTest, ParseExecutorRunPath)
   EXPECT_EQ(executorId, path->executorId);
   EXPECT_EQ(containerId, path->containerId);
 
-  path = paths::parseExecutorRunPath(rootDir, badDir1);
+  path = paths::parseSandboxPath(rootDir, badDir1);
   ASSERT_ERROR(path);
 
-  path = paths::parseExecutorRunPath(rootDir, badDir2);
+  path = paths::parseSandboxPath(rootDir, badDir2);
   ASSERT_ERROR(path);
 
-  path = paths::parseExecutorRunPath(rootDir, badDir3);
+  path = paths::parseSandboxPath(rootDir, badDir3);
   ASSERT_ERROR(path);
 }
 
