@@ -231,7 +231,7 @@ Future<Nothing> LinuxFilesystemIsolatorProcess::recover(
     // Check for mounts inside an executor's run path. These are
     // persistent volumes mounts.
     Try<paths::ExecutorRunPath> runPath =
-      paths::parseExecutorRunPath(flags.work_dir, entry.target);
+      paths::parseSandboxPath(flags.work_dir, entry.target);
 
     if (runPath.isError()) {
       continue;

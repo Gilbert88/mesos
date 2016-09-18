@@ -65,7 +65,7 @@ const char EXECUTORS_DIR[] = "executors";
 const char CONTAINERS_DIR[] = "runs";
 
 
-Try<ExecutorRunPath> parseExecutorRunPath(
+Try<ExecutorRunPath> parseSandboxPath(
     const string& _rootDir,
     const string& dir)
 {
@@ -102,6 +102,24 @@ Try<ExecutorRunPath> parseExecutorRunPath(
     path.frameworkId.set_value(tokens[3]);
     path.executorId.set_value(tokens[5]);
     path.containerId.set_value(tokens[7]);
+
+    if (tokens.size() > 8 && tokens[8] == ".containers") {
+      bool isContainersDir = true;
+      for (size_t i = 8; i < tokens.size(); i++) {
+        if (isContainersDir && tokens[i] != ".containers") {
+          break;
+        }
+
+        if (!isContainersDir) {
+          ContainerID id;
+          id.set_value(tokens[i]);
+          id.mutable_parent()->CopyFrom(path.containerId);
+          path.containerId = id;
+        }
+
+        isContainersDir = !isContainersDir;
+      }
+    }
 
     return path;
   }
