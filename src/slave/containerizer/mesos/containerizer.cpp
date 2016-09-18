@@ -113,6 +113,8 @@
 #include "slave/containerizer/mesos/containerizer.hpp"
 #include "slave/containerizer/mesos/launch.hpp"
 #include "slave/containerizer/mesos/paths.hpp"
+#include "slave/containerizer/mesos/utils.hpp"
+
 #include "slave/containerizer/mesos/provisioner/provisioner.hpp"
 
 using process::collect;
@@ -625,7 +627,8 @@ Future<hashset<ContainerID>> MesosContainerizer::containers()
 }
 
 
-Option<Error> MesosContainerizerProcess::recover(const string& directory)
+Result<vector<RuntimeContainer>> MesosContainerizerProcess::recover(
+    const string& directory)
 {
   // Loop through each container at the path, if it exists.
   const string path = path::join(
@@ -641,14 +644,18 @@ Option<Error> MesosContainerizerProcess::recover(const string& directory)
     return Error("Failed to list '" + path + "': " + entries.error());
   }
 
+  // The order always guarantee that a parent container is inserted
+  // before its child containers. This is necessary for constructing
+  // the hashmap 'containers_' in 'Containerizer::recover()'.
+  vector<RuntimeContainer> containers;
+
   foreach (const string& entry, entries.get()) {
     // We're not expecting anything else but directories here
     // representing each container.
     CHECK(os::stat::isdir(path::join(path, entry)));
 
     // TODO(benh): Validate that the entry looks like a ContainerID?
-
-    ContainerID containerId;
+    RuntimeContainer container;
 
     // Determine the ContainerID from 'directory/entry' (we explicitly
     // do not want use `path` because it contains things that we don't
@@ -665,33 +672,16 @@ Option<Error> MesosContainerizerProcess::recover(const string& directory)
       ContainerID id;
       id.set_value(token);
 
-      if (containerId.has_value()) {
-        id.mutable_parent()->CopyFrom(containerId);
+      if (container.id.has_value()) {
+        id.mutable_parent()->CopyFrom(container.id);
       }
 
-      containerId = id;
+      container.id = id;
     }
 
     // Validate the ID (there should be at least one level).
-    if (!containerId.has_value()) {
+    if (!container.id.has_value()) {
       return Error("Failed to determine ContainerID from path '" + path + "'");
-    }
-
-    Owned<Container> container(new Container());
-    container->state = RUNNING;
-
-    // Maintain the children list under the parent, which is used
-    // for 'Containerizer::destroy' recursively.
-    if (containerId.has_parent()) {
-      const ContainerID& parent = containerId.parent();
-
-      CHECK(containers_.contains(parent));
-
-      containers_[parent]->containers.insert(containerId);
-      container->directory = path::join(
-          containers_[parent]->directory,
-          ".containers",
-          containerId.value());
     }
 
     // Recover the checkpointed 'PID 1' for this container.
@@ -701,7 +691,7 @@ Option<Error> MesosContainerizerProcess::recover(const string& directory)
       // terminate/restart after we've created the directory but
       // before we've written the file.
       LOG(WARNING) << "Found a container without a 'pid' file";
-      container->pid = -1; // TODO(benh): Make `pid` optional?
+      container.pid = -1; // TODO(benh): Make `pid` optional?
     } else {
       Try<string> read = os::read(path::join(path, entry, "pid"));
       if (read.isError()) {
@@ -714,92 +704,29 @@ Option<Error> MesosContainerizerProcess::recover(const string& directory)
                      "'of container at '" + path + "': " + pid.error());
       }
 
-      container->pid = pid.get();
+      container.pid = pid.get();
     }
 
     // TODO(benh): Should we preemptively destroy partially launched
     // or partially destroyed containers? What about if they're
     // nested!?
+    containers.push_back(container);
 
-    containers_.put(containerId, container);
-
-    LOG(INFO) << "Recovered checkpointed container " << containerId;
+    LOG(INFO) << "Recovered checkpointed container " << container.id;
 
     // Now recursively recover nested containers.
-    Option<Error> error = recover(path::join(directory, entry, "containers"));
+    Result<vector<RuntimeContainer>> _containers =
+      recover(path::join(directory, entry, "containers"));
 
-    if (error.isSome()) {
-      return error.get();
+    if (_containers.isError()) {
+      return Error(_containers.error());
+    } else if (_containers.isSome()) {
+      containers.insert(
+          containers.end(), _containers->begin(), _containers->end());
     }
   }
 
-  return None();
-}
-
-
-static Result<hashset<ContainerID>> recoverOrphans(
-    const ContainerID& containerId,
-    const string& path,
-    const string& directory)
-{
-  if (!os::exists(path::join(path, directory))) {
-    return None();
-  }
-
-  Try<list<string>> entries = os::ls(path::join(path, directory));
-  if (entries.isError()) {
-    return Error("Failed to list '" + directory + "': " + entries.error());
-  }
-
-  hashset<ContainerID> orphans;
-
-  foreach (const string& entry, entries.get()) {
-    CHECK(os::stat::isdir(path::join(directory, entry)));
-
-    ContainerID child;
-
-    vector<string> tokens =
-      strings::tokenize(path::join(directory, entry), "/");
-
-    foreach (const string& token, tokens) {
-      if (token == "containers") {
-        continue;
-      }
-
-      ContainerID id;
-      id.set_value(token);
-
-      if (child.has_value()) {
-        id.mutable_parent()->CopyFrom(child);
-      }
-
-      child = id;
-    }
-
-    if (!child.has_value()) {
-      return Error("Failed to determine ContainerID from path '" +
-                   path::join(path, directory) + "'");
-    }
-
-    Result<hashset<ContainerID>> _orphans = recoverOrphans(
-        child,
-        path,
-        path::join(directory, child.value(), "containers"));
-
-    if (_orphans.isError()) {
-      return Error("Failed to collect orphans list: " + _orphans.error());
-    }
-
-    if (_orphans.isNone()) {
-      continue;
-    }
-
-    orphans.insert(_orphans->begin(), _orphans->end());
-  }
-
-  orphans.insert(containerId);
-
-  return orphans;
+  return containers;
 }
 
 
@@ -890,11 +817,7 @@ Future<Nothing> MesosContainerizerProcess::recover(
     }
   }
 
-
-  // TODO(benh|gilbert): Recover the containers from the runtime
-  // directory.
-
-
+  // Recover the executor containers from 'SlaveState'.
   hashset<ContainerID> alive;
   foreach (const ContainerState& state, recoverable) {
     ContainerID containerId = state.container_id();
@@ -918,74 +841,60 @@ Future<Nothing> MesosContainerizerProcess::recover(
     containers_[containerId] = container;
   }
 
-
-  // TODO(gilbert): Reconcile the runtime containers with the
-  // containers from `recoverable`. Treat discovered orphans as "known
-  // orphans" that we aggregate with any orphans that get returned
-  // from calling `launcher->recover`.
-  //
-  // VENN DIAGRAM ORPHANS HERE!
-
-
+  // TODO(gilbert): Draw the logic VENN Diagram here in comment.
   hashset<ContainerID> orphans;
 
   // Recover the containers from the runtime directory.
-  const string path = path::join(flags.runtime_dir, "containers");
+  Result<vector<RuntimeContainer>> containers = recover("containers");
+  if (containers.isError()) {
+    return Failure(
+        "Failed to recover containers from runtime directory: " +
+        containers.error());
+  } else if (containers.isSome()) {
+    // Reconcile the runtime containers with the containers from
+    // `recoverable`. Treat discovered orphans as "known orphans"
+    // that we aggregate with any orphans that get returned from
+    // calling `launcher->recover`.
+    foreach (const RuntimeContainer& container, containers.get()) {
+      const ContainerID& containerId = container.id;
 
-  if (os::exists(path)) {
-    Try<list<string>> entries = os::ls(path);
-    if (entries.isError()) {
-      return Failure("Failed to list '" + path + "': " + entries.error());
-    }
-
-    foreach (const string& entry, entries.get()) {
-      // We're not expecting anything else but directories here
-      // representing each container.
-      CHECK(os::stat::isdir(path::join(path, entry)));
-
-      ContainerID containerId;
-      containerId.set_value(entry);
-
-      if (!alive.contains(containerId)) {
-        Result<hashset<ContainerID>> _orphans = recoverOrphans(
-            containerId,
-            path::join(flags.runtime_dir, "containers"),
-            path::join(containerId.value(), "containers"));
-
-        if (_orphans.isError()) {
-          return Failure("Failed to get orphans list: " + _orphans.error());
-        }
-
-        if (_orphans.isSome()) {
-          orphans.insert(_orphans->begin(), _orphans->end());
-        }
-
+      if (alive.contains(containerId) && !containerId.has_parent()) {
         continue;
       }
 
-      // Traverse from the children of top level containers.
-      Option<Error> error =
-        recover(path::join("containers", entry, "containers"));
-      if (error.isSome()) {
-        return Failure(error.get().message);
-      }
-    }
+      if (containerId.has_parent() &&
+          alive.contains(getRootContainerId(containerId))) {
+        Owned<Container> _container(new Container());
+        _container->status = reap(flags, containerId, container.pid);
+        _container->status->onAny(defer(self(), &Self::reaped, containerId));
+        _container->state = RUNNING;
+        _container->pid = container.pid;
 
-    foreachkey (const ContainerID& containerId, containers_) {
-      if (containerId.has_parent()) {
-        Owned<Container> container = containers_[containerId];
-        container->status = reap(flags, containerId, container->pid);
-        container->status->onAny(defer(self(), &Self::reaped, containerId));
+        const ContainerID& parentContainerId = containerId.parent();
+        CHECK(containers_.contains(parentContainerId));
+        containers_[parentContainerId]->containers.insert(containerId);
 
+        _container->directory = path::join(
+            containers_[parentContainerId]->directory,
+            "containers",
+            containerId.value());
+
+        containers_[containerId] = _container;
+
+        // Added the recoverable nested container to 'recoverable' list.
         ContainerState state =
           protobuf::slave::createContainerState(
               None(),
               containerId,
-              container->pid,
-              container->directory);
+              _container->pid,
+              _container->directory);
 
         recoverable.push_back(state);
+        continue;
       }
+
+      // The known orphans.
+      orphans.insert(containerId);
     }
   }
 

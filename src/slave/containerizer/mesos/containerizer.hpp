@@ -49,6 +49,19 @@ namespace slave {
 // Forward declaration.
 class MesosContainerizerProcess;
 
+// Helper struct for recovering container information from the
+// runtime checkpoint directory.
+struct RuntimeContainer
+{
+  ContainerID id;
+
+  // NOTE: this represents the "init" of the container that we
+  // created (it may be for an executor, or any arbitrary process
+  // that has been launched in the event of nested containers).
+  pid_t pid;
+};
+
+
 class MesosContainerizer : public Containerizer
 {
 public:
@@ -190,7 +203,7 @@ public:
 private:
   // Helper for recovering containers at some relative `directory`
   // within the launcher runtime directory.
-  Option<Error> recover(const std::string& directory);
+  Result<std::vector<RuntimeContainer>> recover(const std::string& directory);
 
   process::Future<Nothing> _recover(
       const std::list<mesos::slave::ContainerState>& recoverable,
