@@ -1048,7 +1048,7 @@ Future<Nothing> MesosContainerizerProcess::recoverProvisioner(
 
 Future<Nothing> MesosContainerizerProcess::__recover(
     const list<ContainerState>& recovered,
-    const hashset<ContainerID>& orphans_)
+    const hashset<ContainerID>& orphans)
 {
   foreach (const ContainerState& run, recovered) {
     const ContainerID& containerId = run.container_id();
@@ -1075,71 +1075,95 @@ Future<Nothing> MesosContainerizerProcess::__recover(
       }));
   }
 
-  // Destroy all the orphan containers.
+  // Destroy all the orphan containers. First determine the set of
+  // orphans that are children of other orphans because we need to
+  // destroy the children first.
+  hashmap<ContainerID, hashset<ContainerID>> children = {};
 
-  // Helper for destroying a container.
-  auto destroy = [=](const ContainerID& containerId) {
-    return launcher->destroy(containerId)
-      .then(defer(self(), [=]() {
-        return cleanupIsolators(containerId);
-      }))
-      .onAny(defer(self(), [=](const Future<list<Future<Nothing>>>& future) {
-        ___recover(containerId, future);
-      }))
-      .then(defer(self(), [=]() -> Future<bool> {
-        return provisioner->destroy(containerId);
-      }))
-      .onAny(defer(self(), [=](const Future<bool>& future) {
-        // NOTE: if `future` is not ready, that indicates the
-        // `provisioner->destroy` has failed.
-        if (!future.isReady()) {
-          LOG(ERROR) << "Failed to deprovision orphan container "
-                     << containerId << ": "
-                     << (future.isFailed() ? future.failure() : "discarded");
-
-          ++metrics.container_destroy_errors;
+  foreach (const ContainerID& orphan, orphans) {
+    foreach (const ContainerID& candidate, orphans) {
+      if (candidate != orphan && candidate.has_parent()) {
+        ContainerID parent = candidate.parent();
+        if (parent == orphan) {
+          children[orphan].insert(candidate);
+          break;
         }
-      }));
-  };
-
-  // Helper for determining if the specfied `containerId` has any
-  // descendants in the specified hashset.
-  auto hasDescendants = [](
-      const ContainerID& containerId,
-      const hashset<ContainerID>& containerIds) {
-    foreach (ContainerID descendant, containerIds) {
-      while (descendant.has_parent()) {
-        if (descendant.parent() == containerId) {
-          return true;
-        }
-        descendant = descendant.parent();
-      }
-    }
-    return false;
-  };
-
-  hashset<ContainerID> orphans = orphans_;
-  list<Future<bool>> destroys = {};
-
-  while (!orphans.empty()) {
-    foreach (const ContainerID& containerId, orphans) {
-      if (!hasDescendants(containerId, orphans)) {
-        LOG(INFO) << "Removing orphan container " << containerId;
-        destroys.push_back(destroy(containerId));
-        orphans.erase(containerId);
-        break; // MUST BREAK HERE AS WE ARE INVALIDATING THE ITERATOR!
+        // NOTE: we assume well-formed nesting here! If A is the
+        // parent of B and B is the parent of C then we'll add a
+        // dependency from A to B and B to C but not A to C because
+        // transitively A depends on C through B. It should not be the
+        // case that we B is "missing" (thus because we should not have been
+        // able to launch C without B running or delete B with C
+        // running. We verify that here by checking that either the
+        // `parent` is in orphans and we'll create the dependency when
+        // visiting it later or `parent` is a running container.
+        CHECK(orphans.contains(parent) || containers_.contains(parent));
       }
     }
   }
 
+  // Helper function for doing a destroy of an orphan by first
+  // recursively destroying that orphan's children (as captured in
+  // `children`).
+  std::function<Future<Nothing>(const ContainerID&)> destroy =
+    [&](const ContainerID& containerId) {
+      list<Future<Nothing>> destroys = {};
+      foreach (const ContainerID& child, children[containerId]) {
+        destroys.push_back(destroy(child));
+      }
+      return await(destroys)
+        .then([=]() {
+          return launcher->destroy(containerId)
+            .then(defer(self(), [=]() {
+              return cleanupIsolators(containerId);
+            }))
+            .onAny(defer(self(), [=](const Future<list<Future<Nothing>>>& f) {
+               ___recover(containerId, f);
+            }))
+            .then(defer(self(), [=]() {
+              return provisioner->destroy(containerId);
+            }))
+            .onAny(defer(self(), [=](const Future<bool>& future) {
+              // NOTE: if `future` is not ready, that indicates the
+              // `provisioner->destroy` has failed.
+              if (!future.isReady()) {
+                LOG(ERROR) << "Failed to deprovision orphan container "
+                           << containerId << ": "
+                           << (future.isFailed()
+                               ? future.failure()
+                               : "discarded");
+                ++metrics.container_destroy_errors;
+              }
+            }))
+            // TODO(benh): We previously ignored errors (see
+            // MESOS-2367 for details) but because we can't destroy
+            // a parent container if the nested container can't be
+            // destroyed we can't do that anymore ... should we do
+            // something else here?
+            .then([]() {
+              return Nothing();
+            });
+        });
+    };
+
+  // We only destroy the "root" orphans, i.e., any orphan that is not
+  // a child of some other orphan, and let `destroy` recursively
+  // destroy all orphans that are children.
+  auto roots = orphans;
+
+  foreachvalue (const hashset<ContainerID>& containerIds, children) {
+    foreach (const ContainerID& containerId, containerIds) {
+      roots.erase(containerId);
+    }
+  }
+
+  list<Future<Nothing>> destroys = {};
+  foreach (const ContainerID& root, roots) {
+    destroys.push_back(destroy(root));
+  }
+
   return await(destroys)
-    // NOTE: We `recover` instead of fail the recovery if the
-    // destroy of an orphan container fails. See MESOS-2367 for
-    // details.
     .then([]() {
-      return Nothing();
-    })
-    .repair([](const Future<Nothing>&) {
       return Nothing();
     });
 }
@@ -2072,6 +2096,11 @@ void MesosContainerizerProcess::destroy(
   }
 
   await(cleanup)
+    // TODO(benh): Doesn't this have to be a `.then` otherwise if the
+    // launcher failed to destroy the child container we'll still try
+    // to destroy the parent container which the launcher, isolator,
+    // or provisioner is not expecting because a nested container
+    // still exists?
     .onAny(defer(self(), &Self::_destroy, containerId));
 }
 
