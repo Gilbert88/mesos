@@ -103,7 +103,7 @@ struct ExecutorRunPath
 };
 
 
-Try<ExecutorRunPath> parseExecutorRunPath(
+Try<ExecutorRunPath> parseSandboxPath(
     const std::string& rootDir,
     const std::string& dir);
 
