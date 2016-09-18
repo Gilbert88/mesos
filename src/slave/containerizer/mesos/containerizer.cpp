@@ -2329,12 +2329,6 @@ void MesosContainerizerProcess::______destroy(
 
   ContainerTermination termination;
 
-  if (container->status.isSome() &&
-      container->status->isReady() &&
-      container->status->get().isSome()) {
-    termination.set_status(container->status->get().get());
-  }
-
   // NOTE: We may not see a limitation in time for it to be
   // registered. This could occur if the limitation (e.g., an OOM)
   // killed the executor and we triggered destroy() off the executor
@@ -2356,6 +2350,27 @@ void MesosContainerizerProcess::______destroy(
     termination.set_message(strings::join("; ", messages));
   }
 
+  if (container->status.isSome()) {
+    // If we haven't reaped the pid we should eventually and we should
+    // wait until then before we decide whether or not we have a wait
+    // status.
+    container->status
+      ->onAny(defer(self(), [=](const Future<Option<int>>& status) {
+        // TODO(benh): Enable passing `mutable` lambdas to `defer` so
+        // we don't need to do gross things like the next line.
+        ContainerTermination termination_ = termination;
+        if (status.isReady() && status->isSome()) {
+          termination_.set_status(status->get());
+        }
+
+        container->promise.set(termination_);
+        containers_.erase(containerId);
+      }));
+  } else {
+    container->promise.set(termination);
+    containers_.erase(containerId);
+  }
+
   Try<Nothing> rmdir = os::rmdir(
       containerizer::paths::getRuntimePathForContainer(flags, containerId));
 
@@ -2363,10 +2378,6 @@ void MesosContainerizerProcess::______destroy(
     VLOG(1) << "Failed to remove the runtime directory"
             << " for container " << containerId;
   }
-
-  container->promise.set(termination);
-
-  containers_.erase(containerId);
 }
 
 
