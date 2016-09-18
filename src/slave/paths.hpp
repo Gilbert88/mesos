@@ -203,6 +203,14 @@ std::string getSandboxPath(
     const ContainerID& containerId);
 
 
+std::string getNestedSandboxPath(
+    const std::string& rootDir,
+    const SlaveID& slaveId,
+    const FrameworkID& frameworkId,
+    const ExecutorID& executorId,
+    const ContainerID& containerId);
+
+
 std::string getExecutorHttpMarkerPath(
     const std::string& rootDir,
     const SlaveID& slaveId,
