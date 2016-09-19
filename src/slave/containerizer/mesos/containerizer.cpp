@@ -14,6 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <sys/wait.h>
+
 #include <set>
 
 #include <mesos/module/isolator.hpp>
@@ -147,58 +149,6 @@ using mesos::slave::Isolator;
 namespace mesos {
 namespace internal {
 namespace slave {
-
-// Helper for reaping the 'init' process of a container.
-static Future<Option<int>> reap(
-    const Flags& flags,
-    const ContainerID& containerId,
-    pid_t pid)
-{
-  return process::reap(pid)
-    .then([=](const Option<int>& status) -> Future<Option<int>> {
-      // If the `reap()` call returned the exit
-      // status directly, just pass it through.
-      if (status.isSome()) {
-        return status.get();
-      }
-
-      // Extract the status from its checkpoint file.
-      string path =
-        containerizer::paths::getWaitStatusCheckpointPath(flags, containerId);
-
-      // It's possible that the file was never created if the 'init'
-      // process received a SIGKILL before creating the file. Also,
-      // legacy top-level containers will not have this file created
-      // for them (because they were launched with a legacy
-      // containerizer that didn't pass '--wait_status_path'). In both
-      // cases we should return `None()` because no status can be
-      // reaped from the non-existent checkpointed file.
-      if (!os::exists(path)) {
-        return None();
-      }
-
-      Try<string> read = os::read(path);
-      if (read.isError()) {
-        return Failure("Unable to read container status from checkpoint file"
-                       " '" + path + "': " + read.error());
-      }
-
-      // It's possible that the file was never written
-      // to if the 'init' process received a SIGKILL
-      // before it's child exited.
-      if (read.get() == "") {
-        return None();
-      }
-
-      Try<int> exitStatus = numify<int>(read.get());
-      if (exitStatus.isError()) {
-        return Failure("Cannot read checkpointed exit"
-                       " status as integer: " + read.get());
-      }
-
-      return exitStatus.get();
-    });
-}
 
 
 Try<MesosContainerizer*> MesosContainerizer::create(
@@ -904,7 +854,7 @@ Future<Nothing> MesosContainerizerProcess::recover(
     // first, to maintain the children list in the container.
     Owned<Container> container(new Container());
 
-    container->status = reap(flags, containerId, state.pid());
+    container->status = reap(containerId, state.pid());
     container->status->onAny(defer(self(), &Self::reaped, containerId));
 
     // We only checkpoint the containerizer pid after the container
@@ -974,7 +924,7 @@ Future<Nothing> MesosContainerizerProcess::recover(
     foreachkey (const ContainerID& containerId, containers_) {
       if (containerId.has_parent()) {
         Owned<Container> container = containers_[containerId];
-        container->status = reap(flags, containerId, container->pid);
+        container->status = reap(containerId, container->pid);
         container->status->onAny(defer(self(), &Self::reaped, containerId));
 
         ContainerState state =
@@ -1662,7 +1612,30 @@ Future<bool> MesosContainerizerProcess::_launch(
 #endif // __WINDOWS
     launchFlags.pre_exec_commands = preExecCommands;
 
+    // Before we launch the container, we first create the container
+    // runtime directory to hold internal checkpoint information about
+    // the container.
+    //
+    // NOTE: This is different than the checkpoint information
+    // requested by the agent via the `checkpoint` parameter.
+    // The containerizer itself uses the runtime directory created
+    // here to checkpoint state for internal use.
+    const string runtimePath =
+      containerizer::paths::getRuntimePathForContainer(flags, containerId);
+
+    Try<Nothing> mkdir = os::mkdir(runtimePath);
+
+    if (mkdir.isError()) {
+      return Failure(
+          "Failed to make the containerizer runtime directory"
+          " '" + runtimePath + "': " + mkdir.error());
+    }
+
 #ifdef __linux__
+    // Set the `wait_status_path` launcher flag so that the launch
+    // helper knows where to checkpoint the status of the container
+    // once it exits.
+    //
     // TODO(klueska): For now we only support checkpointing the status
     // of the forked process in the `LinuxLauncher`. We plan to
     // support this feature in the `PosixLauncher` in the future.
@@ -1698,32 +1671,6 @@ Future<bool> MesosContainerizerProcess::_launch(
     }
     pid_t pid = forked.get();
 
-    // Checkpoint the forked pid into the container's runtime directory
-    // in addition to any checkpointing requested by the agent.
-    //
-    // TODO(gilbert): This function is only called for top-level
-    // containers. In the future, do this checkpionting for both top
-    // level and nested containers.
-    string directory =
-      containerizer::paths::getRuntimePathForContainer(flags, containerId);
-
-    Try<Nothing> mkdir = os::mkdir(directory);
-    if (mkdir.isError()) {
-      return Failure(
-          "Failed to make directory '" + directory + "': " + mkdir.error());
-    }
-
-    const string path = path::join(directory, "pid");
-
-    Try<Nothing> write = os::write(path, stringify(pid));
-
-    if (write.isError()) {
-      LOG(ERROR) << "Failed to checkpoint container pid to '"
-                 << path << "': " << write.error();
-
-      return Failure("Could not checkpoint container pid");
-    }
-
     // Checkpoint the forked pid if requested by the agent.
     if (checkpoint) {
       const string& path = slave::paths::getForkedPidPath(
@@ -1733,23 +1680,46 @@ Future<bool> MesosContainerizerProcess::_launch(
           container->config.executor_info().executor_id(),
           containerId);
 
-      LOG(INFO) << "Checkpointing executor's forked pid " << pid
+      LOG(INFO) << "Checkpointing container's forked pid " << pid
                 << " to '" << path <<  "'";
 
       Try<Nothing> checkpointed =
         slave::state::checkpoint(path, stringify(pid));
 
       if (checkpointed.isError()) {
-        LOG(ERROR) << "Failed to checkpoint executor's forked pid to '"
+        LOG(ERROR) << "Failed to checkpoint container's forked pid to '"
                    << path << "': " << checkpointed.error();
 
-        return Failure("Could not checkpoint executor's pid");
+        return Failure("Could not checkpoint container's pid");
       }
+    }
+
+    // Checkpoint the forked pid to the container runtime directory.
+    //
+    // NOTE: This checkpoint MUST happen after checkpointing the `pid`
+    // to the meta directory above. This ensures that there will never
+    // be a pid checkpointed to the container runtime directory until
+    // after it has been checkpointed in the agent's meta directory.
+    // By maintaining this invariant we know that the only way a `pid`
+    // could ever exist in the runtime directory and NOT in the agent
+    // meta directory is if the meta directory was wiped clean for
+    // some reason. As such, we know if we run into this situation
+    // that it is safe to treat the relevant containers as orphans and
+    // destroy them.
+    const string pidCheckpointPath =
+      containerizer::paths::getPidCheckpointPath(flags, containerId);
+
+    Try<Nothing> checkpointed =
+      slave::state::checkpoint(pidCheckpointPath, stringify(pid));
+
+    if (checkpointed.isError()) {
+      return Failure("Failed to checkpoint the container pid to"
+                     " '" + pidCheckpointPath + "': " + checkpointed.error());
     }
 
     // Monitor the forked process's pid. We keep the future because
     // we'll refer to it again during container destroy.
-    container->status = reap(flags, containerId, pid);
+    container->status = reap(containerId, pid);
     container->status->onAny(defer(self(), &Self::reaped, containerId));
 
     return isolate(containerId, pid)
@@ -2376,6 +2346,73 @@ void MesosContainerizerProcess::______destroy(
     VLOG(1) << "Failed to remove the runtime directory"
             << " for container " << containerId;
   }
+}
+
+
+Future<Option<int>> MesosContainerizerProcess::reap(
+    const ContainerID& containerId,
+    pid_t pid)
+{
+  return process::reap(pid)
+    .then(defer(self(), [=](const Option<int>& status) -> Future<Option<int>> {
+      // Determine if we just reaped a legacy container or a
+      // non-legacy container. We do this by checking for the
+      // existence of the container runtime directory (which only
+      // exists for new (i.e. non-legacy) containers).
+      // If it is a legacy container, we simply forward the exit
+      // status we reaped back to the caller.
+      const string runtimePath =
+        containerizer::paths::getRuntimePathForContainer(flags, containerId);
+
+      if (!os::exists(runtimePath)) {
+        return status;
+      }
+
+      // If we are a non-legacy container, there are a couple of cases
+      // we need to consider:
+      //
+      // (1) The status we reaped is None()
+      //     -- We know this can only occur due to a SIGKILL sent to
+      //        the init process of the container, so we manually
+      //        construct an exit status for SIGKILL and return it.
+      // (2) The status we reaped != EXIT_SUCCESS
+      //     -- If this happens, we know that the init process itself
+      //        failed and we need to return a failure
+      // (3) The status we reaped == EXIT_SUCCESS
+      //     -- If this happens, we know we have successfully
+      //        checkpointed the status of the container and we simply
+      //        forward it back (after checking its integrity).
+      //
+      // TODO(klueska): Revisit the first case and see if there is a
+      // better way to handle this in the future.
+      if (status.isNone()) {
+        return __W_EXITCODE(0, SIGKILL);
+      }
+
+      if (WEXITSTATUS(status.get()) != EXIT_SUCCESS) {
+        return Failure("The 'init' process of the container exited with"
+                       " exit status: " + WEXITSTATUS(status.get()));
+      }
+
+      const string statusPath =
+        containerizer::paths::getWaitStatusCheckpointPath(flags, containerId);
+
+      CHECK(os::exists(statusPath));
+
+      Try<string> read = os::read(statusPath);
+      if (read.isError()) {
+        return Failure("Unable to read container status from checkpoint file"
+                       " '" + statusPath + "': " + read.error());
+      }
+
+      Try<int> checkpointedStatus = numify<int>(read.get());
+      if (checkpointedStatus.isError()) {
+        return Failure("Cannot read checkpointed status"
+                       " as integer: " + read.get());
+      }
+
+      return checkpointedStatus.get();
+    }));
 }
 
 
