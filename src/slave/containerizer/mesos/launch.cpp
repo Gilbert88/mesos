@@ -141,8 +141,12 @@ static Try<Nothing> forwardSignals(pid_t pid)
 {
   containerPid = pid;
 
-  // Forwarding signal handlers for all relevant signals.
-  for (int i = 1; i < NSIG; i++) {
+  // Forward all non real-time signals to `pid` (i.e. any signal less
+  // or equal to `SIGUNUSED`).
+  //
+  // NOTE: We can't just use `SIGRTMIN` because its value changes
+  // based on signals used internally by glibc.
+  for (int i = 1; i <= SIGUNUSED; i++) {
     // We don't want to forward the SIGCHLD signal, nor do we want to
     // handle it ourselves because we reap all children inline in the
     // `execute` function.
@@ -157,34 +161,12 @@ static Try<Nothing> forwardSignals(pid_t pid)
     }
 
     if (os::signals::install(i, signalHandler) != 0) {
-      // Error out if we cant install a handler for any non real-time
-      // signals (i.e. any signal less or equal to `SIGUNUSED`). For
-      // the real-time signals, we simply ignore the error and move on
-      // to the next signal.
-      //
-      // NOTE: We can't just use `SIGRTMIN` because its value changes
-      // based on signals used internally by glibc.
-      if (i <= SIGUNUSED) {
-        return ErrnoError("Unable to register signal '" + stringify(i) + "'");
-      }
+      return ErrnoError("Unable to register signal"
+                        " '" + stringify(strsignal(i)) + "'");
     }
   }
 
   return Nothing();
-}
-
-
-static void resetSignalHandlers()
-{
-  for (int i = 1; i < NSIG; i++) {
-    // Ignore SIGCHLD/SIGKILL/SIGSTOP as we didn't install handlers
-    // for them in 'forwardSignals'.
-    if (i == SIGCHLD || i == SIGKILL || i == SIGSTOP) {
-      continue;
-    }
-
-    os::signals::reset(i);
-  }
 }
 #endif // __linux__
 
@@ -592,10 +574,9 @@ int MesosContainerizerLaunch::execute()
 
 #ifdef __linux__
   // If we have `waitStatusFd` set, then we need to fork-exec the
-  // command we are launching and write its status out to persistent
-  // storage. We use fork-exec directly (as opposed to
-  // `process::subprocess()`) for the same reasons described above for
-  // the pre-exec commands.
+  // command we are launching and checkpoint its status on exit.  We
+  // use fork-exec directly (as opposed to `process::subprocess()`) to
+  // avoid intializing libprocess for this simple helper binary.
   if (waitStatusFd.isSome()) {
     pid_t pid = ::fork();
 
@@ -605,9 +586,8 @@ int MesosContainerizerLaunch::execute()
       return EXIT_FAILURE;
     }
 
+    // If we are the parent...
     if (pid > 0) {
-      // This is the parent.
-
       // Forward all incoming signals to the newly created process.
       Try<Nothing> signals = forwardSignals(pid);
       if (signals.isError()) {
@@ -621,20 +601,31 @@ int MesosContainerizerLaunch::execute()
 
       // Reap all decendants, but only continue once we reap the
       // process we just launched.
-      do {
+      while (true) {
         waitpid = os::waitpid(-1, &status, 0);
 
         if (waitpid.isError()) {
+          // If the error was an EINTR, we were interrupted by a
+          // signal and should just call `waitpid()` over again.
+          if (errno == EINTR) {
+            continue;
+          }
           cerr << "Failed to os::waitpid(): " << waitpid.error() << endl;
           return EXIT_FAILURE;
-        } else if (waitpid.isNone()) {
+        }
+
+        if (waitpid.isNone()) {
           cerr << "Calling os::waitpid() with blocking semantics"
                << "returned asynchronously" << endl;
           return EXIT_FAILURE;
         }
-      } while (pid != waitpid.get());
 
-      // Checkpoint the status of the command.
+        if (pid == waitpid.get()) {
+          break;
+        }
+      }
+
+      // Checkpoint the status of the completed process.
       // It's ok to block here, so we just `os::write()` directly.
       Try<Nothing> write = os::write(
           waitStatusFd.get(),
@@ -647,19 +638,10 @@ int MesosContainerizerLaunch::execute()
              << " '" << stringify(status) << "' to"
              << " '" << flags.wait_status_path.get() << ":"
              << " " << write.error() << endl;
+        return EXIT_FAILURE;
       }
 
-      if (WIFEXITED(status)) {
-        _exit(WEXITSTATUS(status));
-      } else if (WIFSIGNALED(status)) {
-        // Reset signal handlers in order to terminate self.
-        resetSignalHandlers();
-        os::kill(getpid(), WTERMSIG(status));
-      } else {
-        cerr << "Unexpected status from waitpid " << status << endl;
-      }
-
-      UNREACHABLE();
+      return EXIT_SUCCESS;
     }
   }
 #endif // __linux__
