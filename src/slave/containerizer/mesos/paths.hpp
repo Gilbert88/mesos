@@ -65,6 +65,11 @@ std::string getWaitStatusCheckpointPath(
     const Flags& flags,
     const ContainerID& containerId);
 
+
+std::string getPidCheckpointPath(
+    const Flags& flags,
+    const ContainerID& containerId);
+
 } // namespace paths {
 } // namespace containerizer {
 } // namespace slave {

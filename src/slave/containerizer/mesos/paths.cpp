@@ -61,6 +61,16 @@ string getWaitStatusCheckpointPath(
       "status");
 }
 
+
+string getPidCheckpointPath(
+    const Flags& flags,
+    const ContainerID& containerId)
+{
+  return path::join(
+      getRuntimePathForContainer(flags, containerId),
+      "pid");
+}
+
 } // namespace paths {
 } // namespace containerizer {
 } // namespace slave {
