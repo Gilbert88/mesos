@@ -28,6 +28,8 @@
 #include <stout/os.hpp>
 #include <stout/try.hpp>
 
+#include <stout/os/kill.hpp>
+
 #include <process/future.hpp>
 #include <process/gtest.hpp>
 #include <process/reap.hpp>
@@ -1085,6 +1087,16 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_LaunchNestedParentExit)
 
   AWAIT_ASSERT_TRUE(launch);
 
+  // Wait for the executor process to actually start running.
+  Duration waited = Duration::zero();
+  while (!os::exists(path::join(directory.get(), "running")) &&
+         waited < Seconds(5)) {
+    os::sleep(Milliseconds(200));
+    waited += Milliseconds(200);
+  }
+
+  ASSERT_TRUE(os::exists(path::join(directory.get(), "running")));
+
   // Now launch nested container.
   ContainerID nestedContainerId;
   nestedContainerId.mutable_parent()->CopyFrom(containerId);
@@ -1104,7 +1116,8 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_LaunchNestedParentExit)
 
   AWAIT_ASSERT_TRUE(launch);
 
-  Future<ContainerTermination> wait = containerizer->wait(containerId);
+  Future<ContainerTermination> wait =
+    containerizer->wait(containerId);
 
   Future<ContainerTermination> nestedWait =
     containerizer->wait(nestedContainerId);
@@ -1117,11 +1130,13 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_LaunchNestedParentExit)
 
   AWAIT_READY(nestedWait);
 
-  // We don't expect a wait status because we'll end up destroying the
-  // 'init' process that would be responsible for writing the wait
-  // status and since a nested container is not a direct child we
-  // won't be able to reap the wait status directly.
-  ASSERT_FALSE(nestedWait->has_status());
+  // We expect a wait status of SIGKILL on the nested container
+  // because when the parent container is destroyed we expect any
+  // nested containers to be destroyed as a result of destroying the
+  // parent's pid namespace. Since the kernel will destroy these via a
+  // SIGKILL, we expect a SIGKILL here.
+  ASSERT_TRUE(nestedWait->has_status());
+  EXPECT_WTERMSIG_EQ(SIGKILL, nestedWait->status());
 }
 
 
@@ -1150,7 +1165,8 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_LaunchNestedParentSigterm)
   ContainerID containerId;
   containerId.set_value(UUID::random().toString());
 
-  ExecutorInfo executor = CREATE_EXECUTOR_INFO("executor", "sleep 1000");
+  ExecutorInfo executor =
+    CREATE_EXECUTOR_INFO("executor", "touch running; sleep 1000");
   executor.mutable_resources()->CopyFrom(Resources::parse("cpus:1").get());
 
   Try<string> directory = environment->mkdtemp();
@@ -1197,7 +1213,7 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_LaunchNestedParentSigterm)
 
   ASSERT_TRUE(status->has_executor_pid());
 
-  kill(status->executor_pid(), SIGTERM);
+  ASSERT_EQ(0u, os::kill(status->executor_pid(), SIGTERM));
 
   AWAIT_READY(wait);
   ASSERT_TRUE(wait->has_status());
