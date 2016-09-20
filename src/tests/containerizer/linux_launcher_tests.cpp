@@ -32,6 +32,7 @@
 
 #include <process/future.hpp>
 #include <process/gtest.hpp>
+#include <process/io.hpp>
 #include <process/reap.hpp>
 
 #include "linux/cgroups.hpp"
@@ -1087,16 +1088,6 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_LaunchNestedParentExit)
 
   AWAIT_ASSERT_TRUE(launch);
 
-  // Wait for the executor process to actually start running.
-  Duration waited = Duration::zero();
-  while (!os::exists(path::join(directory.get(), "running")) &&
-         waited < Seconds(5)) {
-    os::sleep(Milliseconds(200));
-    waited += Milliseconds(200);
-  }
-
-  ASSERT_TRUE(os::exists(path::join(directory.get(), "running")));
-
   // Now launch nested container.
   ContainerID nestedContainerId;
   nestedContainerId.mutable_parent()->CopyFrom(containerId);
@@ -1116,8 +1107,7 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_LaunchNestedParentExit)
 
   AWAIT_ASSERT_TRUE(launch);
 
-  Future<ContainerTermination> wait =
-    containerizer->wait(containerId);
+  Future<ContainerTermination> wait = containerizer->wait(containerId);
 
   Future<ContainerTermination> nestedWait =
     containerizer->wait(nestedContainerId);
@@ -1130,13 +1120,11 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_LaunchNestedParentExit)
 
   AWAIT_READY(nestedWait);
 
-  // We expect a wait status of SIGKILL on the nested container
-  // because when the parent container is destroyed we expect any
-  // nested containers to be destroyed as a result of destroying the
-  // parent's pid namespace. Since the kernel will destroy these via a
-  // SIGKILL, we expect a SIGKILL here.
-  ASSERT_TRUE(nestedWait->has_status());
-  EXPECT_WTERMSIG_EQ(SIGKILL, nestedWait->status());
+  // We don't expect a wait status because we'll end up destroying the
+  // 'init' process that would be responsible for writing the wait
+  // status and since a nested container is not a direct child we
+  // won't be able to reap the wait status directly.
+  ASSERT_FALSE(nestedWait->has_status());
 }
 
 
@@ -1165,8 +1153,14 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_LaunchNestedParentSigterm)
   ContainerID containerId;
   containerId.set_value(UUID::random().toString());
 
-  ExecutorInfo executor =
-    CREATE_EXECUTOR_INFO("executor", "touch running; sleep 1000");
+  // Use a pipe to synchronize with the top-level container.
+  int pipes[2] = {-1, -1};
+  ASSERT_SOME(os::pipe(pipes));
+
+  ExecutorInfo executor = CREATE_EXECUTOR_INFO(
+      "executor",
+      "echo running >&" + stringify(pipes[1]) + ";"
+      "sleep 1000");
   executor.mutable_resources()->CopyFrom(Resources::parse("cpus:1").get());
 
   Try<string> directory = environment->mkdtemp();
@@ -1183,6 +1177,8 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_LaunchNestedParentSigterm)
       true); // TODO(benh): Ever want to check not-checkpointing?
 
   AWAIT_ASSERT_TRUE(launch);
+
+  close(pipes[1]);
 
   // Now launch nested container.
   ContainerID nestedContainerId;
@@ -1213,6 +1209,11 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_LaunchNestedParentSigterm)
 
   ASSERT_TRUE(status->has_executor_pid());
 
+  // Wait for the parent container to start running its executor
+  // process before sending it a signal.
+  AWAIT_READY(process::io::poll(pipes[0], process::io::READ));
+  close(pipes[0]);
+
   ASSERT_EQ(0u, os::kill(status->executor_pid(), SIGTERM));
 
   AWAIT_READY(wait);
@@ -1221,11 +1222,13 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_LaunchNestedParentSigterm)
 
   AWAIT_READY(nestedWait);
 
-  // We don't expect a wait status because we'll end up destroying the
-  // 'init' process that would be responsible for writing the wait
-  // status and since a nested container is not a direct child we
-  // won't be able to reap the wait status directly.
-  ASSERT_FALSE(nestedWait->has_status());
+  // We expect a wait status of SIGKILL on the nested container
+  // because when the parent container is destroyed we expect any
+  // nested containers to be destroyed as a result of destroying the
+  // parent's pid namespace. Since the kernel will destroy these via a
+  // SIGKILL, we expect a SIGKILL here.
+  ASSERT_TRUE(nestedWait->has_status());
+  EXPECT_WTERMSIG_EQ(SIGKILL, nestedWait->status());
 }
 
 
