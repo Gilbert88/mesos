@@ -2183,14 +2183,6 @@ void MesosContainerizerProcess::___destroy(
   // TODO(idownes): This is a pretty bad state to be in but we should
   // consider cleaning up here.
   if (!future.isReady()) {
-    Try<Nothing> rmdir = os::rmdir(
-        containerizer::paths::getRuntimePathForContainer(flags, containerId));
-
-    if (rmdir.isError()) {
-      VLOG(1) << "Failed to remove the runtime directory"
-              << " for container " << containerId;
-    }
-
     container->promise.fail(
         "Failed to kill all processes in the container: " +
         (future.isFailed() ? future.failure() : "discarded future"));
@@ -2245,14 +2237,6 @@ void MesosContainerizerProcess::_____destroy(
   }
 
   if (!errors.empty()) {
-    Try<Nothing> rmdir = os::rmdir(
-        containerizer::paths::getRuntimePathForContainer(flags, containerId));
-
-    if (rmdir.isError()) {
-      VLOG(1) << "Failed to remove the runtime directory"
-              << " for container " << containerId;
-    }
-
     container->promise.fail(
         "Failed to clean up an isolator when destroying container: " +
         strings::join("; ", errors));
@@ -2277,14 +2261,6 @@ void MesosContainerizerProcess::______destroy(
   const Owned<Container>& container = containers_[containerId];
 
   if (!destroy.isReady()) {
-    Try<Nothing> rmdir = os::rmdir(
-        containerizer::paths::getRuntimePathForContainer(flags, containerId));
-
-    if (rmdir.isError()) {
-      VLOG(1) << "Failed to remove the runtime directory"
-              << " for container " << containerId;
-    }
-
     container->promise.fail(
         "Failed to destroy the provisioned rootfs when destroying container: " +
         (destroy.isFailed() ? destroy.failure() : "discarded future"));
@@ -2331,20 +2307,30 @@ void MesosContainerizerProcess::______destroy(
           termination_.set_status(status->get());
         }
 
+        Try<Nothing> rmdir = os::rmdir(
+            containerizer::paths::getRuntimePathForContainer(
+                flags, containerId));
+
+        if (rmdir.isError()) {
+          VLOG(1) << "Failed to remove the runtime directory"
+                  << " for container " << containerId;
+        }
+
         container->promise.set(termination_);
         containers_.erase(containerId);
       }));
   } else {
+    Try<Nothing> rmdir = os::rmdir(
+        containerizer::paths::getRuntimePathForContainer(
+            flags, containerId));
+
+    if (rmdir.isError()) {
+      VLOG(1) << "Failed to remove the runtime directory"
+              << " for container " << containerId;
+    }
+
     container->promise.set(termination);
     containers_.erase(containerId);
-  }
-
-  Try<Nothing> rmdir = os::rmdir(
-      containerizer::paths::getRuntimePathForContainer(flags, containerId));
-
-  if (rmdir.isError()) {
-    VLOG(1) << "Failed to remove the runtime directory"
-            << " for container " << containerId;
   }
 }
 
