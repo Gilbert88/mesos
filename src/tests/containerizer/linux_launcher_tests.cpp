@@ -50,6 +50,9 @@ using namespace process;
 using mesos::internal::slave::Fetcher;
 using mesos::internal::slave::MesosContainerizer;
 
+using mesos::internal::slave::state::ExecutorState;
+using mesos::internal::slave::state::FrameworkState;
+using mesos::internal::slave::state::RunState;
 using mesos::internal::slave::state::SlaveState;
 
 using mesos::slave::ContainerState;
@@ -648,7 +651,52 @@ namespace tests {
 
 
 class MesosContainerizerTest
-  : public ContainerizerTest<slave::MesosContainerizer> {};
+  : public ContainerizerTest<slave::MesosContainerizer>
+{
+protected:
+  Try<SlaveState> createSlaveState(
+      const ContainerID& containerId,
+      const pid_t pid,
+      const ExecutorInfo& executorInfo,
+      const SlaveID& slaveId,
+      const string& workDir)
+  {
+    // Construct a mock `SlaveState`.
+    ExecutorState executorState;
+    executorState.id = executorInfo.executor_id();
+    executorState.info = executorInfo;
+    executorState.latest = containerId;
+
+    RunState runState;
+    runState.id = containerId;
+    runState.forkedPid = pid;
+    executorState.runs.put(containerId, runState);
+
+    FrameworkState frameworkState;
+    frameworkState.executors.put(executorInfo.executor_id(), executorState);
+
+    SlaveState slaveState;
+    slaveState.id = slaveId;
+    FrameworkID frameworkId;
+    frameworkId.set_value(UUID::random().toString());
+    slaveState.frameworks.put(frameworkId, frameworkState);
+
+    const string directory = slave::paths::getExecutorRunPath(
+        workDir,
+        slaveId,
+        frameworkState.id,
+        executorState.id,
+        containerId);
+
+    Try<Nothing> mkdir = os::mkdir(directory);
+    if (mkdir.isError()) {
+      return Error(
+          "Failed to create directory '" + directory + "': " + mkdir.error());
+    }
+
+    return slaveState;
+  }
+};
 
 
 TEST_F(MesosContainerizerTest, NestedContainerID)
@@ -1293,6 +1341,11 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_Recover)
 
   containerizer.reset(create.get());
 
+  Try<SlaveState> slaveState =
+    createSlaveState(containerId, pid, executor, state.id, flags.work_dir);
+  ASSERT_SOME(slaveState);
+
+  state = slaveState.get();
   AWAIT_READY(containerizer->recover(state));
 
   status = containerizer->status(containerId);
@@ -1397,6 +1450,11 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_RecoverNested)
 
   containerizer.reset(create.get());
 
+  Try<SlaveState> slaveState =
+    createSlaveState(containerId, pid, executor, state.id, flags.work_dir);
+  ASSERT_SOME(slaveState);
+
+  state = slaveState.get();
   AWAIT_READY(containerizer->recover(state));
 
   status = containerizer->status(containerId);
@@ -1433,6 +1491,52 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_RecoverNested)
 
 
 TEST_F(MesosContainerizerTest, ROOT_CGROUPS_RecoverLauncherOrphans)
+{
+  slave::Flags flags = CreateSlaveFlags();
+  flags.launcher = "linux";
+  flags.isolation = "cgroups/cpu,filesystem/linux,namespaces/pid";
+
+  Fetcher fetcher;
+
+  Try<MesosContainerizer*> create = MesosContainerizer::create(
+      flags,
+      false,
+      &fetcher);
+
+  ASSERT_SOME(create);
+
+  Owned<MesosContainerizer> containerizer(create.get());
+
+  // Now create a freezer cgroup that represents the container so
+  // when the LinuxLauncher recovers we'll treat it as an orphan.
+  //
+  // NOTE: `cgroups::hierarchy` must be called AFTER
+  // `MesosContainerizer::create` which calls `LinuxLauncher::create`
+  // which calls `cgroups::prepare`, otherwise we might not have a
+  // 'freezer' hierarchy prepared yet!
+  Result<string> freezerHierarchy = cgroups::hierarchy("freezer");
+  ASSERT_SOME(freezerHierarchy);
+
+  ContainerID containerId;
+  containerId.set_value(UUID::random().toString());
+
+  const string cgroup = path::join(
+      flags.cgroups_root,
+      slave::containerizer::paths::buildPathForContainer(containerId));
+
+  ASSERT_SOME(cgroups::create(freezerHierarchy.get(), cgroup));
+
+  SlaveState state;
+  state.id = SlaveID();
+
+  AWAIT_READY(containerizer->recover(state));
+
+  Future<ContainerStatus> status = containerizer->status(containerId);
+  AWAIT_FAILED(status);
+}
+
+
+TEST_F(MesosContainerizerTest, ROOT_CGROUPS_RecoverNestedLauncherOrphans)
 {
   slave::Flags flags = CreateSlaveFlags();
   flags.launcher = "linux";
@@ -1513,6 +1617,11 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_RecoverLauncherOrphans)
 
   containerizer.reset(create.get());
 
+  Try<SlaveState> slaveState =
+    createSlaveState(containerId, pid, executor, state.id, flags.work_dir);
+  ASSERT_SOME(slaveState);
+
+  state = slaveState.get();
   AWAIT_READY(containerizer->recover(state));
 
   status = containerizer->status(containerId);
@@ -1530,6 +1639,409 @@ TEST_F(MesosContainerizerTest, ROOT_CGROUPS_RecoverLauncherOrphans)
   AWAIT_READY(wait);
   ASSERT_TRUE(wait->has_status());
   EXPECT_WTERMSIG_EQ(SIGKILL, wait->status());
+}
+
+
+TEST_F(MesosContainerizerTest,
+       ROOT_CGROUPS_RecoverLauncherOrphanAndSingleNestedLauncherOrphan)
+{
+  slave::Flags flags = CreateSlaveFlags();
+  flags.launcher = "linux";
+  flags.isolation = "cgroups/cpu,filesystem/linux,namespaces/pid";
+
+  Fetcher fetcher;
+
+  Try<MesosContainerizer*> create = MesosContainerizer::create(
+      flags,
+      false,
+      &fetcher);
+
+  ASSERT_SOME(create);
+
+  Owned<MesosContainerizer> containerizer(create.get());
+
+  // Now create a freezer cgroup that represents the container so
+  // when the LinuxLauncher recovers we'll treat it as an orphan.
+  //
+  // NOTE: `cgroups::hierarchy` must be called AFTER
+  // `MesosContainerizer::create` which calls `LinuxLauncher::create`
+  // which calls `cgroups::prepare`, otherwise we might not have a
+  // 'freezer' hierarchy prepared yet!
+  Result<string> freezerHierarchy = cgroups::hierarchy("freezer");
+  ASSERT_SOME(freezerHierarchy);
+
+  ContainerID containerId;
+  containerId.set_value(UUID::random().toString());
+
+  string cgroup = path::join(
+      flags.cgroups_root,
+      slave::containerizer::paths::buildPathForContainer(containerId));
+
+  ASSERT_SOME(cgroups::create(freezerHierarchy.get(), cgroup));
+
+  ContainerID nestedContainerId;
+  nestedContainerId.mutable_parent()->CopyFrom(containerId);
+  nestedContainerId.set_value(UUID::random().toString());
+
+  cgroup = path::join(
+      flags.cgroups_root,
+      slave::containerizer::paths::buildPathForContainer(nestedContainerId));
+
+  ASSERT_SOME(cgroups::create(freezerHierarchy.get(), cgroup));
+
+  SlaveState state;
+  state.id = SlaveID();
+
+  AWAIT_READY(containerizer->recover(state));
+
+  Future<ContainerStatus> status = containerizer->status(nestedContainerId);
+  AWAIT_FAILED(status);
+
+  status = containerizer->status(containerId);
+  AWAIT_FAILED(status);
+}
+
+
+TEST_F(MesosContainerizerTest, ROOT_CGROUPS_RecoverMultiNestedLauncherOrphans)
+{
+  slave::Flags flags = CreateSlaveFlags();
+  flags.launcher = "linux";
+  flags.isolation = "cgroups/cpu,filesystem/linux,namespaces/pid";
+
+  Fetcher fetcher;
+
+  Try<MesosContainerizer*> create = MesosContainerizer::create(
+      flags,
+      false,
+      &fetcher);
+
+  ASSERT_SOME(create);
+
+  Owned<MesosContainerizer> containerizer(create.get());
+
+  SlaveState state;
+  state.id = SlaveID();
+
+  AWAIT_READY(containerizer->recover(state));
+
+  ContainerID containerId;
+  containerId.set_value(UUID::random().toString());
+
+  ExecutorInfo executor = CREATE_EXECUTOR_INFO("executor", "sleep 1000");
+  executor.mutable_resources()->CopyFrom(Resources::parse("cpus:1").get());
+
+  Try<string> directory = environment->mkdtemp();
+  ASSERT_SOME(directory);
+
+  Future<bool> launch = containerizer->launch(
+      containerId,
+      None(),
+      executor,
+      directory.get(),
+      None(),
+      SlaveID(),
+      map<string, string>(),
+      true); // TODO(benh): Ever want to check not-checkpointing?
+
+  AWAIT_ASSERT_TRUE(launch);
+
+  Future<ContainerStatus> status = containerizer->status(containerId);
+  AWAIT_READY(status);
+
+  ASSERT_TRUE(status->has_executor_pid());
+
+  pid_t pid = status->executor_pid();
+
+  // Now create a freezer cgroup that represents the nested container
+  // so when the LinuxLauncher recovers we'll treat it as an orphan.
+  //
+  // NOTE: `cgroups::hierarchy` must be called AFTER
+  // `MesosContainerizer::create` which calls `LinuxLauncher::create`
+  // which calls `cgroups::prepare`, otherwise we might not have a
+  // 'freezer' hierarchy prepared yet!
+  Result<string> freezerHierarchy = cgroups::hierarchy("freezer");
+  ASSERT_SOME(freezerHierarchy);
+
+  ContainerID nestedContainerId1;
+  nestedContainerId1.mutable_parent()->CopyFrom(containerId);
+  nestedContainerId1.set_value(UUID::random().toString());
+
+  string cgroup = path::join(
+      flags.cgroups_root,
+      slave::containerizer::paths::buildPathForContainer(nestedContainerId1));
+
+  ASSERT_SOME(cgroups::create(freezerHierarchy.get(), cgroup));
+
+  ContainerID nestedContainerId2;
+  nestedContainerId2.mutable_parent()->CopyFrom(containerId);
+  nestedContainerId2.set_value(UUID::random().toString());
+
+  cgroup = path::join(
+      flags.cgroups_root,
+      slave::containerizer::paths::buildPathForContainer(nestedContainerId2));
+
+  ASSERT_SOME(cgroups::create(freezerHierarchy.get(), cgroup));
+
+  containerizer.reset();
+
+  create = MesosContainerizer::create(
+      flags,
+      false,
+      &fetcher);
+
+  ASSERT_SOME(create);
+
+  containerizer.reset(create.get());
+
+  Try<SlaveState> slaveState =
+    createSlaveState(containerId, pid, executor, state.id, flags.work_dir);
+  ASSERT_SOME(slaveState);
+
+  state = slaveState.get();
+  AWAIT_READY(containerizer->recover(state));
+
+  status = containerizer->status(containerId);
+  AWAIT_READY(status);
+  ASSERT_TRUE(status->has_executor_pid());
+  EXPECT_EQ(pid, status->executor_pid());
+
+  status = containerizer->status(nestedContainerId1);
+  AWAIT_FAILED(status);
+
+  status = containerizer->status(nestedContainerId2);
+  AWAIT_FAILED(status);
+
+  Future<ContainerTermination> wait = containerizer->wait(containerId);
+
+  containerizer->destroy(containerId);
+
+  AWAIT_READY(wait);
+  ASSERT_TRUE(wait->has_status());
+  EXPECT_WTERMSIG_EQ(SIGKILL, wait->status());
+}
+
+
+TEST_F(MesosContainerizerTest,
+       ROOT_CGROUPS_RecoverNestedContainersWithLauncherOrphans)
+{
+  slave::Flags flags = CreateSlaveFlags();
+  flags.launcher = "linux";
+  flags.isolation = "cgroups/cpu,filesystem/linux,namespaces/pid";
+
+  Fetcher fetcher;
+
+  Try<MesosContainerizer*> create = MesosContainerizer::create(
+      flags,
+      false,
+      &fetcher);
+
+  ASSERT_SOME(create);
+
+  Owned<MesosContainerizer> containerizer(create.get());
+
+  SlaveState state;
+  state.id = SlaveID();
+
+  AWAIT_READY(containerizer->recover(state));
+
+  ContainerID containerId;
+  containerId.set_value(UUID::random().toString());
+
+  ExecutorInfo executor = CREATE_EXECUTOR_INFO("executor", "sleep 1000");
+  executor.mutable_resources()->CopyFrom(Resources::parse("cpus:1").get());
+
+  Try<string> directory = environment->mkdtemp();
+  ASSERT_SOME(directory);
+
+  Future<bool> launch = containerizer->launch(
+      containerId,
+      None(),
+      executor,
+      directory.get(),
+      None(),
+      SlaveID(),
+      map<string, string>(),
+      true); // TODO(benh): Ever want to check not-checkpointing?
+
+  AWAIT_ASSERT_TRUE(launch);
+
+  Future<ContainerStatus> status = containerizer->status(containerId);
+  AWAIT_READY(status);
+
+  ASSERT_TRUE(status->has_executor_pid());
+
+  pid_t pid = status->executor_pid();
+
+  // Now launch the first nested container.
+  ContainerID nestedContainerId1;
+  nestedContainerId1.mutable_parent()->CopyFrom(containerId);
+  nestedContainerId1.set_value(UUID::random().toString());
+
+  directory = environment->mkdtemp();
+  ASSERT_SOME(directory);
+
+  launch = containerizer->launch(
+      nestedContainerId1,
+      CREATE_COMMAND_INFO("sleep 1000"),
+      None(),
+      Resources::parse("cpus:1").get(),
+      directory.get(),
+      None(),
+      state.id);
+
+  AWAIT_ASSERT_TRUE(launch);
+
+  status = containerizer->status(nestedContainerId1);
+  AWAIT_READY(status);
+
+  ASSERT_TRUE(status->has_executor_pid());
+
+  pid_t nestedPid1 = status->executor_pid();
+
+  // Now create a freezer cgroup that represents the nested container
+  // so when the LinuxLauncher recovers we'll treat it as an orphan.
+  //
+  // NOTE: `cgroups::hierarchy` must be called AFTER
+  // `MesosContainerizer::create` which calls `LinuxLauncher::create`
+  // which calls `cgroups::prepare`, otherwise we might not have a
+  // 'freezer' hierarchy prepared yet!
+  Result<string> freezerHierarchy = cgroups::hierarchy("freezer");
+  ASSERT_SOME(freezerHierarchy);
+
+  ContainerID nestedContainerId2;
+  nestedContainerId2.mutable_parent()->CopyFrom(containerId);
+  nestedContainerId2.set_value(UUID::random().toString());
+
+  const string cgroup = path::join(
+      flags.cgroups_root,
+      slave::containerizer::paths::buildPathForContainer(nestedContainerId2));
+
+  ASSERT_SOME(cgroups::create(freezerHierarchy.get(), cgroup));
+
+  containerizer.reset();
+
+  create = MesosContainerizer::create(
+      flags,
+      false,
+      &fetcher);
+
+  ASSERT_SOME(create);
+
+  containerizer.reset(create.get());
+
+  Try<SlaveState> slaveState =
+    createSlaveState(containerId, pid, executor, state.id, flags.work_dir);
+  ASSERT_SOME(slaveState);
+
+  state = slaveState.get();
+  AWAIT_READY(containerizer->recover(state));
+
+  status = containerizer->status(containerId);
+  AWAIT_READY(status);
+  ASSERT_TRUE(status->has_executor_pid());
+  EXPECT_EQ(pid, status->executor_pid());
+
+  status = containerizer->status(nestedContainerId1);
+  AWAIT_READY(status);
+  ASSERT_TRUE(status->has_executor_pid());
+  EXPECT_EQ(nestedPid1, status->executor_pid());
+
+  status = containerizer->status(nestedContainerId2);
+  AWAIT_FAILED(status);
+
+  Future<ContainerTermination> nestedWait1 =
+    containerizer->wait(nestedContainerId1);
+
+  containerizer->destroy(nestedContainerId1);
+
+  AWAIT_READY(nestedWait1);
+
+  // We don't expect a wait status because we'll end up destroying the
+  // 'init' process that would be responsible for writing the wait
+  // status and since a nested container is not a direct child we
+  // won't be able to reap the wait status directly.
+  ASSERT_FALSE(nestedWait1->has_status());
+
+  Future<ContainerTermination> wait = containerizer->wait(containerId);
+
+  containerizer->destroy(containerId);
+
+  AWAIT_READY(wait);
+  ASSERT_TRUE(wait->has_status());
+  EXPECT_WTERMSIG_EQ(SIGKILL, wait->status());
+}
+
+
+TEST_F(MesosContainerizerTest,
+       ROOT_CGROUPS_RecoverLauncherOrphanAndMultiNestedLauncherOrphans)
+{
+  slave::Flags flags = CreateSlaveFlags();
+  flags.launcher = "linux";
+  flags.isolation = "cgroups/cpu,filesystem/linux,namespaces/pid";
+
+  Fetcher fetcher;
+
+  Try<MesosContainerizer*> create = MesosContainerizer::create(
+      flags,
+      false,
+      &fetcher);
+
+  ASSERT_SOME(create);
+
+  Owned<MesosContainerizer> containerizer(create.get());
+
+  // Now create a freezer cgroup that represents the container so
+  // when the LinuxLauncher recovers we'll treat it as an orphan.
+  //
+  // NOTE: `cgroups::hierarchy` must be called AFTER
+  // `MesosContainerizer::create` which calls `LinuxLauncher::create`
+  // which calls `cgroups::prepare`, otherwise we might not have a
+  // 'freezer' hierarchy prepared yet!
+  Result<string> freezerHierarchy = cgroups::hierarchy("freezer");
+  ASSERT_SOME(freezerHierarchy);
+
+  ContainerID containerId;
+  containerId.set_value(UUID::random().toString());
+
+  string cgroup = path::join(
+      flags.cgroups_root,
+      slave::containerizer::paths::buildPathForContainer(containerId));
+
+  ASSERT_SOME(cgroups::create(freezerHierarchy.get(), cgroup));
+
+  ContainerID nestedContainerId1;
+  nestedContainerId1.mutable_parent()->CopyFrom(containerId);
+  nestedContainerId1.set_value(UUID::random().toString());
+
+  cgroup = path::join(
+      flags.cgroups_root,
+      slave::containerizer::paths::buildPathForContainer(nestedContainerId1));
+
+  ASSERT_SOME(cgroups::create(freezerHierarchy.get(), cgroup));
+
+  ContainerID nestedContainerId2;
+  nestedContainerId2.mutable_parent()->CopyFrom(containerId);
+  nestedContainerId2.set_value(UUID::random().toString());
+
+  cgroup = path::join(
+      flags.cgroups_root,
+      slave::containerizer::paths::buildPathForContainer(nestedContainerId2));
+
+  ASSERT_SOME(cgroups::create(freezerHierarchy.get(), cgroup));
+
+  SlaveState state;
+  state.id = SlaveID();
+
+  AWAIT_READY(containerizer->recover(state));
+
+  Future<ContainerStatus> status = containerizer->status(nestedContainerId1);
+  AWAIT_FAILED(status);
+
+  status = containerizer->status(nestedContainerId2);
+  AWAIT_FAILED(status);
+
+  status = containerizer->status(containerId);
+  AWAIT_FAILED(status);
 }
 
 } // namespace tests {
