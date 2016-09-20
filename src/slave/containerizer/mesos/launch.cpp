@@ -578,6 +578,15 @@ int MesosContainerizerLaunch::execute()
   // use fork-exec directly (as opposed to `process::subprocess()`) to
   // avoid intializing libprocess for this simple helper binary.
   if (waitStatusFd.isSome()) {
+    // Use a pipe to synchronize between the parent and the child.
+    // We use this to ensure that some code is run in the parent
+    // before the child is allowed to continue past the fork.
+    //
+    // TODO(klueska): Once we move `subprocess` into stout, use
+    // `subprocess` and its `parentHooks` here instead.
+    std::array<int, 2> pipes;
+    CHECK_SOME(os::pipe(pipes.data()));
+
     pid_t pid = ::fork();
 
     if (pid == -1) {
@@ -586,12 +595,36 @@ int MesosContainerizerLaunch::execute()
       return EXIT_FAILURE;
     }
 
-    // If we are the parent...
+    // If we are the parent.
     if (pid > 0) {
       // Forward all incoming signals to the newly created process.
       Try<Nothing> signals = forwardSignals(pid);
       if (signals.isError()) {
         cerr << "Failed to forward signals: " << signals.error() << endl;
+        return EXIT_FAILURE;
+      }
+
+      // Unblock the newly created process.
+      Try<Nothing> close = os::close(pipes[0]);
+      if (close.isError()) {
+        cerr << "Failed to close pipe[0]: " << close.error() << endl;
+        return EXIT_FAILURE;
+      }
+
+      char dummy;
+      ssize_t length;
+      while ((length = os::write(pipes[1], &dummy, sizeof(dummy))) == -1 &&
+             errno == EINTR);
+
+      if (length != sizeof(dummy)) {
+        cerr << "Failed to synchronize child process:"
+             << " " << os::strerror(errno) << endl;
+        return EXIT_FAILURE;
+      }
+
+      close = os::close(pipes[1]);
+      if (close.isError()) {
+        cerr << "Failed to close pipe[1]: " << close.error() << endl;
         return EXIT_FAILURE;
       }
 
@@ -642,6 +675,30 @@ int MesosContainerizerLaunch::execute()
       }
 
       return EXIT_SUCCESS;
+    } else {
+      // If we are the child, block on the read end
+      // of the pipe until the parent signals us.
+      Try<Nothing> close = os::close(pipes[1]);
+      if (close.isError()) {
+        cerr << "Failed to close pipe[1]: " << close.error() << endl;
+        return EXIT_FAILURE;
+      }
+
+      char dummy;
+      ssize_t length;
+      while ((length = os::read(pipes[0], &dummy, sizeof(dummy))) == -1 &&
+             errno == EINTR);
+
+      if (length != sizeof(dummy)) {
+         cerr << "Failed to synchronize with parent" << endl;
+         return EXIT_FAILURE;
+      }
+
+      close = os::close(pipes[0]);
+      if (close.isError()) {
+        cerr << "Failed to close pipe[0]: " << close.error() << endl;
+        return EXIT_FAILURE;
+      }
     }
   }
 #endif // __linux__
