@@ -845,55 +845,111 @@ Future<Nothing> MesosContainerizerProcess::recover(
   hashset<ContainerID> orphans;
 
   // Recover the containers from the runtime directory.
-  Result<vector<RuntimeContainer>> containers = recover("containers");
-  if (containers.isError()) {
+  Result<vector<ContainerID>> containerIds =
+    containerizer::paths::getRuntimeContainerIds("containers");
+
+  if (containerIds.isError()) {
     return Failure(
-        "Failed to recover containers from runtime directory: " +
-        containers.error());
-  } else if (containers.isSome()) {
+        "Failed to get container ids from the runtime directory: " +
+        containerIds.error());
+  } else if (containerIds.isSome()) {
     // Reconcile the runtime containers with the containers from
     // `recoverable`. Treat discovered orphans as "known orphans"
     // that we aggregate with any orphans that get returned from
     // calling `launcher->recover`.
-    foreach (const RuntimeContainer& container, containers.get()) {
-      const ContainerID& containerId = container.id;
-
+    foreach (const ContainerID& containerId, containerIds.get()) {
       if (alive.contains(containerId) && !containerId.has_parent()) {
         continue;
       }
 
-      if (containerId.has_parent() &&
-          alive.contains(getRootContainerId(containerId))) {
-        Owned<Container> _container(new Container());
-        _container->status = reap(flags, containerId, container.pid);
-        _container->status->onAny(defer(self(), &Self::reaped, containerId));
-        _container->state = RUNNING;
-        _container->pid = container.pid;
+      // Read the pid from the container runtime directory. If the
+      // pid file does not exist, clean up the directory immediately.
+      pid_t pid;
+      const string runtimePath = getRuntimePathForContainer(flags, containerId);
+      const string pidFile = path::join(runtimeDir, "pid");
 
+      if (!os::exists(pidFile)) {
+        // This is possible because we don't atomically create the
+        // directory and write the 'pid' file and thus we might
+        // terminate/restart after we've created the directory but
+        // before we've written the file.
+        LOG(WARNING) << "Found a container without a 'pid' file";
+
+        Try<Nothing> rmdir = os::rmdir(runtimePath);
+        if (rmdir.isError()) {
+          return Failure(
+              "Failed to remove the container runtime directory '" +
+              runtimePath + "': " + rmdir.error());
+        }
+
+        continue;
+      } else {
+        Try<string> read = os::read(pidFile);
+        if (read.isError()) {
+          return Failure("Failed to recover pid of container: " + read.error());
+        }
+
+        Try<pid_t> _pid = numify<pid_t>(read.get());
+        if (_pid.isError()) {
+          return Failure("Failed to numify pid '" + read.get() +
+                         "'of container at '" + path + "': " + _pid.error());
+        }
+
+        pid = _pid.get();
+      }
+
+      Option<string> directory;
+      if (containerId.has_parent()) {
         const ContainerID& parentContainerId = containerId.parent();
+
         CHECK(containers_.contains(parentContainerId));
         containers_[parentContainerId]->containers.insert(containerId);
 
-        _container->directory = path::join(
-            containers_[parentContainerId]->directory,
-            "containers",
-            containerId.value());
+        // Only set the directory for recoverable containers.
+        if (containers_[parentContainerId]->directory.isSome()) {
+          directory = path::join(
+              containers_[parentContainerId]->directory.get(),
+              "containers",
+              containerId.value());
+        }
+      }
 
-        containers_[containerId] = _container;
+      Owned<Container> container(new Container());
+      container->state = RUNNING;
+      container->pid = pid;
+      container->directory = directory;
 
-        // Added the recoverable nested container to 'recoverable' list.
+      // Invoke 'reap' on each 'Container'. However, It's possible
+      // that 'pid' for a container is unknown (e.g., agent crashes
+      // after fork before checkpoint the pid). In that case, simply
+      // assume the child process will exit because of the pipe,
+      // and remove the runtime directory immediately and skip it
+      // (handled above).
+      container->status = reap(flags, containerId, pid.get());
+      container->status->onAny(defer(self(), &Self::reaped, containerId));
+
+      containers_[containerId] = container;
+
+      // Add recoverable nested containers to the list of 'ContainerState'.
+      if (containerId.has_parent() &&
+          alive.contains(getRootContainerId(containerId))) {
+        if (directory.isNone()) {
+          return Failure(
+              "Failed to get the sandbox for a recoverable nested container");
+        }
+
         ContainerState state =
           protobuf::slave::createContainerState(
               None(),
               containerId,
-              _container->pid,
-              _container->directory);
+              container->pid,
+              container->directory.get());
 
         recoverable.push_back(state);
+
         continue;
       }
 
-      // The known orphans.
       orphans.insert(containerId);
     }
   }

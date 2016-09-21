@@ -49,18 +49,6 @@ namespace slave {
 // Forward declaration.
 class MesosContainerizerProcess;
 
-// Helper struct for recovering container information from the
-// runtime checkpoint directory.
-struct RuntimeContainer
-{
-  ContainerID id;
-
-  // NOTE: this represents the "init" of the container that we
-  // created (it may be for an executor, or any arbitrary process
-  // that has been launched in the event of nested containers).
-  pid_t pid;
-};
-
 
 class MesosContainerizer : public Containerizer
 {
@@ -316,7 +304,7 @@ private:
     // container that we created (it may be for an executor, or any
     // arbitrary process that has been launched in the event of nested
     // containers).
-    Option<pid_t> pid;
+    pid_t pid;
 
     // This is the sandbox directory for the container. We keep this
     // information because it is included in 'ContainerState', and
