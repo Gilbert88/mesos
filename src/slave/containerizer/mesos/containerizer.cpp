@@ -723,7 +723,6 @@ Future<Nothing> MesosContainerizerProcess::recover(
     // Contruct the structure for containers from the 'SlaveState'
     // first, to maintain the children list in the container.
     Owned<Container> container(new Container());
-
     container->status = reap(flags, containerId, state.pid());
     container->status->onAny(defer(self(), &Self::reaped, containerId));
 
@@ -731,10 +730,8 @@ Future<Nothing> MesosContainerizerProcess::recover(
     // successfully launched, therefore we can assume checkpointed
     // containers should be running after recover.
     container->state = RUNNING;
-
     container->pid = state.pid();
     container->directory = state.directory();
-
     containers_[containerId] = container;
   }
 
@@ -858,6 +855,12 @@ Future<Nothing> MesosContainerizerProcess::recover(
           Owned<Container> container(new Container());
           container->state = RUNNING;
           containers_[containerId] = container;
+
+          if (containerId.has_parent() &&
+              containers_.contains(containerId.parent())) {
+            containers_[containerId.parent()]->containers.insert(containerId);
+          }
+
           _orphans.insert(containerId);
         }
       }
