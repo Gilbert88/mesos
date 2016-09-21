@@ -816,6 +816,8 @@ Future<Nothing> MesosContainerizerProcess::recover(
       if (pid.isSome()) {
         container->status = reap(flags, containerId, pid.get());
         container->status->onAny(defer(self(), &Self::reaped, containerId));
+      } else {
+        container->status = 1;
       }
 
       containers_[containerId] = container;
@@ -865,6 +867,7 @@ Future<Nothing> MesosContainerizerProcess::recover(
         if (!orphans.contains(containerId)) {
           Owned<Container> container(new Container());
           container->state = RUNNING;
+          container->status = 1;
           containers_[containerId] = container;
 
           if (containerId.has_parent() &&
