@@ -761,7 +761,7 @@ Future<Nothing> MesosContainerizerProcess::recover(
 
       // Read the pid from the container runtime directory. If the
       // pid file does not exist, clean up the directory immediately.
-      pid_t pid;
+      Option<pid_t> pid;
       const string runtimePath = getRuntimePathForContainer(flags, containerId);
       const string pidFile = path::join(runtimeDir, "pid");
 
@@ -771,15 +771,6 @@ Future<Nothing> MesosContainerizerProcess::recover(
         // terminate/restart after we've created the directory but
         // before we've written the file.
         LOG(WARNING) << "Found a container without a 'pid' file";
-
-        Try<Nothing> rmdir = os::rmdir(runtimePath);
-        if (rmdir.isError()) {
-          return Failure(
-              "Failed to remove the container runtime directory '" +
-              runtimePath + "': " + rmdir.error());
-        }
-
-        continue;
       } else {
         Try<string> read = os::read(pidFile);
         if (read.isError()) {
@@ -820,16 +811,18 @@ Future<Nothing> MesosContainerizerProcess::recover(
       // that 'pid' for a container is unknown (e.g., agent crashes
       // after fork before checkpoint the pid). In that case, simply
       // assume the child process will exit because of the pipe,
-      // and remove the runtime directory immediately and skip it
-      // (handled above).
-      container->status = reap(flags, containerId, pid.get());
-      container->status->onAny(defer(self(), &Self::reaped, containerId));
+      // and do not call 'reap' on it.
+      if (pid.isSome()) {
+        container->status = reap(flags, containerId, pid.get());
+        container->status->onAny(defer(self(), &Self::reaped, containerId));
+      }
 
       containers_[containerId] = container;
 
       // Add recoverable nested containers to the list of 'ContainerState'.
       if (containerId.has_parent() &&
-          alive.contains(getRootContainerId(containerId))) {
+          alive.contains(getRootContainerId(containerId)) &&
+          pid.isSome()) {
         if (directory.isNone()) {
           return Failure(
               "Failed to get the sandbox for a recoverable nested container");
@@ -839,7 +832,7 @@ Future<Nothing> MesosContainerizerProcess::recover(
           protobuf::slave::createContainerState(
               None(),
               containerId,
-              container->pid,
+              container->pid.get(),
               container->directory.get());
 
         recoverable.push_back(state);
@@ -856,7 +849,14 @@ Future<Nothing> MesosContainerizerProcess::recover(
     .then(defer(self(), [=](
         const hashset<ContainerID>& launchedOrphans) -> Future<Nothing> {
       hashset<ContainerID> _orphans = orphans;
-      _orphans.insert(launchedOrphans.begin(), launchedOrphans.end());
+      foreach (const ContainerID& containerId, launchedOrphans) {
+        if (!orphans.contains(containerId)) {
+          Owned<Container> container(new Container());
+          container->state = RUNNING;
+          containers_[containerId] = container;
+          _orphans.insert(containerId);
+        }
+      }
       return _recover(recoverable, _orphans);
     }));
 }

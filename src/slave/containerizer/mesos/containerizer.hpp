@@ -300,7 +300,7 @@ private:
     // container that we created (it may be for an executor, or any
     // arbitrary process that has been launched in the event of nested
     // containers).
-    pid_t pid;
+    Option<pid_t> pid;
 
     // This is the sandbox directory for the container. We keep this
     // information because it is included in 'ContainerState', and
