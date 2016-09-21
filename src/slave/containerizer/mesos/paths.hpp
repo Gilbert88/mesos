@@ -75,6 +75,12 @@ Result<int> getContainerStatus(
     const std::string& runtime_dir,
     const ContainerID& containerId);
 
+
+// The helper method to list all-level container ids from the container
+// runtime directory.
+Result<std::vector<ContainerID>> getContainerIds(
+    const std::string& runtimeDir);
+
 } // namespace paths {
 } // namespace containerizer {
 } // namespace slave {
