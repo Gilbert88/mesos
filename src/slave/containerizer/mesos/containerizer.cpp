@@ -845,10 +845,21 @@ Future<Nothing> MesosContainerizerProcess::recover(
     }
   }
 
+  foreach (const ContainerState& state, recoverable) {
+    ContainerID containerId = state.container_id();
+    std::cout << "555: " << containerId << std::endl;
+  }
+
   // Try to recover the launcher first.
   return launcher->recover(recoverable)
     .then(defer(self(), [=](
         const hashset<ContainerID>& launchedOrphans) -> Future<Nothing> {
+      foreach (const ContainerID& containerId, launchedOrphans) {
+        std::cout << "111: " << containerId << std::endl;
+      }
+      foreach (const ContainerID& containerId, orphans) {
+        std::cout << "222: " << containerId << std::endl;
+      }
       hashset<ContainerID> _orphans = orphans;
       foreach (const ContainerID& containerId, launchedOrphans) {
         if (!orphans.contains(containerId)) {
@@ -863,6 +874,9 @@ Future<Nothing> MesosContainerizerProcess::recover(
 
           _orphans.insert(containerId);
         }
+      }
+      foreach (const ContainerID& containerId, _orphans) {
+        std::cout << "333: " << containerId << std::endl;
       }
       return _recover(recoverable, _orphans);
     }));
@@ -944,9 +958,8 @@ Future<Nothing> MesosContainerizerProcess::__recover(
       }));
   }
 
-  // Destroy all the orphan containers. First determine the set of
-  // orphans that are children of other orphans because we need to
-  // destroy the children first.
+  // Destroy all the orphan containers.
+
   hashmap<ContainerID, hashset<ContainerID>> children = {};
 
   foreach (const ContainerID& orphan, orphans) {
