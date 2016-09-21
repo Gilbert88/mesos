@@ -189,10 +189,6 @@ public:
       const process::Future<std::list<process::Future<Nothing>>>& future);
 
 private:
-  // Helper for recovering containers at some relative `directory`
-  // within the launcher runtime directory.
-  Result<std::vector<RuntimeContainer>> recover(const std::string& directory);
-
   process::Future<Nothing> _recover(
       const std::list<mesos::slave::ContainerState>& recoverable,
       const hashset<ContainerID>& orphans);
