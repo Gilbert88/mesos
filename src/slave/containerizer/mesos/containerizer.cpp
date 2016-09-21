@@ -743,7 +743,8 @@ Future<Nothing> MesosContainerizerProcess::recover(
 
   // Recover the containers from the runtime directory.
   Result<vector<ContainerID>> containerIds =
-    containerizer::paths::getRuntimeContainerIds("containers");
+    containerizer::paths::getRuntimeContainerIds(
+        flags.runtime_dir, "containers");
 
   if (containerIds.isError()) {
     return Failure(
@@ -762,8 +763,10 @@ Future<Nothing> MesosContainerizerProcess::recover(
       // Read the pid from the container runtime directory. If the
       // pid file does not exist, clean up the directory immediately.
       Option<pid_t> pid;
-      const string runtimePath = getRuntimePathForContainer(flags, containerId);
-      const string pidFile = path::join(runtimeDir, "pid");
+      const string runtimePath =
+        containerizer::paths::getRuntimePathForContainer(flags, containerId);
+
+      const string pidFile = path::join(runtimePath, "pid");
 
       if (!os::exists(pidFile)) {
         // This is possible because we don't atomically create the
@@ -779,8 +782,9 @@ Future<Nothing> MesosContainerizerProcess::recover(
 
         Try<pid_t> _pid = numify<pid_t>(read.get());
         if (_pid.isError()) {
-          return Failure("Failed to numify pid '" + read.get() +
-                         "'of container at '" + path + "': " + _pid.error());
+          return Failure(
+              "Failed to numify pid '" + read.get() +
+              "' of container at '" + pidFile + "': " + _pid.error());
         }
 
         pid = _pid.get();
