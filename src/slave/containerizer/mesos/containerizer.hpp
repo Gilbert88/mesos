@@ -316,13 +316,13 @@ private:
     // container that we created (it may be for an executor, or any
     // arbitrary process that has been launched in the event of nested
     // containers).
-    pid_t pid;
+    Option<pid_t> pid;
 
     // This is the sandbox directory for the container. We keep this
     // information because it is included in 'ContainerState', and
     // isolator recover may need the sandbox directory for recover
     // containers.
-    std::string directory;
+    Option<std::string> directory;
 
     // We keep track of the future exit status for the container if it
     // has been launched. If the container has not been launched yet,
