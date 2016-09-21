@@ -847,40 +847,46 @@ Future<Nothing> MesosContainerizerProcess::recover(
     }
   }
 
-  foreach (const ContainerState& state, recoverable) {
-    ContainerID containerId = state.container_id();
-    std::cout << "555: " << containerId << std::endl;
-  }
-
   // Try to recover the launcher first.
   return launcher->recover(recoverable)
     .then(defer(self(), [=](
         const hashset<ContainerID>& launchedOrphans) -> Future<Nothing> {
+      // For the extra part of launcher orphans, which are not included
+      // in the constructed orphan list, the parent-child relationship
+      // has to be distringuished and make sure the children list in the
+      // parent's `Container` struct is correctly maintained, because it
+      // is necessary for cleaning up containers recursively.
+      hashset<ContainerID> extra;
       foreach (const ContainerID& containerId, launchedOrphans) {
-        std::cout << "111: " << containerId << std::endl;
-      }
-      foreach (const ContainerID& containerId, orphans) {
-        std::cout << "222: " << containerId << std::endl;
-      }
-      hashset<ContainerID> _orphans = orphans;
-      foreach (const ContainerID& containerId, launchedOrphans) {
-        if (!orphans.contains(containerId)) {
-          Owned<Container> container(new Container());
-          container->state = RUNNING;
-          container->status = 1;
-          containers_[containerId] = container;
-
-          if (containerId.has_parent() &&
-              containers_.contains(containerId.parent())) {
-            containers_[containerId.parent()]->containers.insert(containerId);
-          }
-
-          _orphans.insert(containerId);
+        if (orphans.contains(containerId)) {
+          continue;
         }
+
+        Owned<Container> container(new Container());
+        container->state = RUNNING;
+        container->status = 1;
+        containers_[containerId] = container;
+
+        extra.insert(containerId);
       }
-      foreach (const ContainerID& containerId, _orphans) {
-        std::cout << "333: " << containerId << std::endl;
+
+      // Maintain the children list in the `Container` struct.
+      foreach (const ContainerID& containerId, extra) {
+        if (!containerId.has_parent()) {
+          continue;
+        }
+
+        if (!containers_.contains(containerId.parent())) {
+          return Failure(
+              "Unexpected zombie nested container " + stringify(containerId));
+        }
+
+        containers_[containerId.parent()]->containers.insert(containerId);
       }
+
+      hashset<ContainerID> _orphans = orphans;
+      _orphans.insert(extra.begin(), extra.end());
+
       return _recover(recoverable, _orphans);
     }));
 }
