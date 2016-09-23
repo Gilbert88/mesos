@@ -6114,18 +6114,19 @@ Executor* Framework::launchExecutor(
     executor->checkpointExecutor();
   }
 
-  CHECK(!executors.contains(executorInfo.executor_id()))
-    << "Unknown executor '" << executorInfo.executor_id() << "'";
+  const ExecutorID& executorId = executorInfo.executor_id();
+  const FrameworkID frameworkId = id();
 
-  executors[executorInfo.executor_id()] = executor;
+  CHECK(!executors.contains(executorId))
+    << "Unknown executor '" << executorId << "'";
 
-  LOG(INFO) << "Launching executor '" << executorInfo.executor_id()
+  executors[executorId] = executor;
+  executorContainers[containerId] = executorId;
+
+  LOG(INFO) << "Launching executor '" << executorId
             << "' of framework " << id()
             << " with resources " << executorInfo.resources()
             << " in work directory '" << directory << "'";
-
-  ExecutorID executorId = executorInfo.executor_id();
-  FrameworkID frameworkId = id();
 
   const PID<Slave> slavePid = slave->self();
 
@@ -6237,6 +6238,7 @@ void Framework::destroyExecutor(const ExecutorID& executorId)
   if (executors.contains(executorId)) {
     Executor* executor = executors[executorId];
     executors.erase(executorId);
+    executorContainers.erase(executor->containerId);
 
     // Pass ownership of the executor pointer.
     completedExecutors.push_back(Owned<Executor>(executor));
@@ -6375,6 +6377,7 @@ void Framework::recoverExecutor(const ExecutorState& state)
 
   // Add the executor to the framework.
   executors[executor->id] = executor;
+  executorContainers[latest] = executor->id;
 
   // If the latest run of the executor was completed (i.e., terminated
   // and all updates are acknowledged) in the previous run, we
