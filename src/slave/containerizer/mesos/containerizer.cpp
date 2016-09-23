@@ -895,7 +895,7 @@ Future<Nothing> MesosContainerizerProcess::__recover(
   }
 
   // Destroy all the orphan containers.
-  list<Future<ContainerTermination>> cleanup = {};
+  list<Future<Option<ContainerTermination>>> cleanup = {};
   foreach (const ContainerID& containerId, orphans) {
     LOG(INFO) << "Cleaning up orphan container " << containerId;
 
