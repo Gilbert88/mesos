@@ -1008,6 +1008,9 @@ struct Framework
   // Current running executors.
   hashmap<ExecutorID, Executor*> executors;
 
+  // Top level executor containers.
+  hashmap<ContainerID, ExecutorID> executorContainers;
+
   // Up to MAX_COMPLETED_EXECUTORS_PER_FRAMEWORK completed executors.
   boost::circular_buffer<process::Owned<Executor>> completedExecutors;
 private:
