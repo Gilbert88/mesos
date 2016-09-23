@@ -228,7 +228,7 @@ private:
       pid_t _pid);
 
   // Continuss 'destroy()' once nested containers are handled.
-  void _destroy(const ContainerID& containerId);
+  process::Future<bool> _destroy(const ContainerID& containerId);
 
   // Continues '_destroy()' once isolators has completed.
   void __destroy(const ContainerID& containerId);

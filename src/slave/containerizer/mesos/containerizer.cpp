@@ -1809,7 +1809,7 @@ Future<bool> MesosContainerizerProcess::destroy(
 
   const Owned<Container>& container = containers_.at(containerId);
 
-  list<Future<ContainerTermination>> cleanup = {};
+  list<Future<Option<ContainerTermination>>> cleanup = {};
   foreach (const ContainerID& child, container->containers) {
     LOG(INFO) << "Destroying nested container " << child;
 
@@ -1819,22 +1819,22 @@ Future<bool> MesosContainerizerProcess::destroy(
     cleanup.push_back(wait(child));
   }
 
-  await(cleanup)
+  return await(cleanup)
     // TODO(benh): Doesn't this have to be a `.then` otherwise if the
     // launcher failed to destroy the child container we'll still try
     // to destroy the parent container which the launcher, isolator,
     // or provisioner is not expecting because a nested container
     // still exists?
-    .onAny(defer(self(), &Self::_destroy, containerId));
+    .then(defer(self(), &Self::_destroy, containerId));
 }
 
 
-void MesosContainerizerProcess::_destroy(
+Future<bool> MesosContainerizerProcess::_destroy(
     const ContainerID& containerId)
 {
   if (!containers_.contains(containerId)) {
-    VLOG(1) << "Ignoring destroy of unknown container " << containerId;
-    return;
+    LOG(WARNING) << "Attempted to destroy unknown container " << containerId;
+    return false;
   }
 
   const Owned<Container>& container = containers_[containerId];
@@ -1913,6 +1913,9 @@ void MesosContainerizerProcess::_destroy(
 
   container->state = DESTROYING;
   __destroy(containerId);
+
+  return container->termination.future()
+    .then([]() { return true; });
 }
 
 
@@ -2066,11 +2069,11 @@ void MesosContainerizerProcess::______destroy(
           termination_.set_status(status->get());
         }
 
-        container->promise.set(termination_);
+        container->termination.set(termination_);
         containers_.erase(containerId);
       }));
   } else {
-    container->promise.set(termination);
+    container->termination.set(termination);
     containers_.erase(containerId);
   }
 
