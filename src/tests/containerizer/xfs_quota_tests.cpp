@@ -562,16 +562,9 @@ TEST_F(ROOT_XFS_QuotaTest, NoCheckpointRecovery)
   Future<SlaveReregisteredMessage> slaveReregisteredMessage =
     FUTURE_PROTOBUF(SlaveReregisteredMessage(), _, _);
 
-  // Following the example of the filesystem isolator tests, wait
-  // until the containerizer cleans up the orphans. Only after that
-  // should we expect to find the project IDs removed.
-  Future<Nothing> _recover =
-    FUTURE_DISPATCH(_, &MesosContainerizerProcess::___recover);
-
   slave = StartSlave(detector.get(), flags);
   ASSERT_SOME(slave);
 
-  AWAIT_READY(_recover);
   AWAIT_READY(slaveReregisteredMessage);
 
   Future<ResourceUsage> usage2 =
