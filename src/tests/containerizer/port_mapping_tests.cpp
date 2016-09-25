@@ -2084,16 +2084,11 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_CleanUpOrphan)
   Future<SlaveRegisteredMessage> slaveRegisteredMessage =
     FUTURE_PROTOBUF(SlaveRegisteredMessage(), _, _);
 
-  Future<Nothing> orphansDestroyed =
-    FUTURE_DISPATCH(_, &MesosContainerizerProcess::___recover);
-
   // Restart the slave.
   slave = StartSlave(detector.get(), flags);
   ASSERT_SOME(slave);
 
   AWAIT_READY(slaveRegisteredMessage);
-
-  AWAIT_READY(orphansDestroyed);
 
   // Expect that qdiscs still exist on eth0 and lo but with no filters.
   Try<bool> hostEth0ExistsQdisc = ingress::exists(eth0);
@@ -2311,15 +2306,11 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_RecoverMixedKnownAndUnKnownOrphans)
   Future<SlaveRegisteredMessage> slaveRegisteredMessage =
     FUTURE_PROTOBUF(SlaveRegisteredMessage(), _, _);
 
-  Future<Nothing> knownOrphansDestroyed =
-    FUTURE_DISPATCH(_, &MesosContainerizerProcess::___recover);
-
   // Restart the slave.
   slave = StartSlave(detector.get(), flags);
   ASSERT_SOME(slave);
 
   AWAIT_READY(slaveRegisteredMessage);
-  AWAIT_READY(knownOrphansDestroyed);
 
   // We settle the clock here to ensure that the processing of
   // 'MesosContainerizerProcess::___destroy()' is complete and the
