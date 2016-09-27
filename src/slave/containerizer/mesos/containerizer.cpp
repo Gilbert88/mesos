@@ -867,7 +867,7 @@ Future<Nothing> MesosContainerizerProcess::__recover(
   foreachkey (const ContainerID& containerId, containers_) {
     if (containerId.has_parent()) {
       CHECK(containers_.contains(containerId.parent()));
-      containers_[containerId.parent()]->containers.insert(containerId);
+      containers_[containerId.parent()]->children.insert(containerId);
     }
   }
 
@@ -1014,7 +1014,7 @@ Future<bool> MesosContainerizerProcess::launch(
           " does not exist");
     }
 
-    containers_[parentContainerId]->containers.insert(containerId);
+    containers_[parentContainerId]->children.insert(containerId);
   }
 
   containers_.put(containerId, container);
@@ -1788,7 +1788,7 @@ Future<bool> MesosContainerizerProcess::destroy(
   const Owned<Container>& container = containers_.at(containerId);
 
   list<Future<bool>> destroys;
-  foreach (const ContainerID& child, container->containers) {
+  foreach (const ContainerID& child, container->children) {
     LOG(INFO) << "Destroying nested container " << child;
     destroys.push_back(destroy(child));
   }
