@@ -32,6 +32,15 @@ constexpr char STATUS_FILE[] = "status";
 constexpr char CONTAINER_DIRECTORY[] = "containers";
 
 
+struct SandboxPath
+{
+  SlaveID slaveId;
+  FrameworkID frameworkId;
+  ExecutorID executorId;
+  ContainerID containerId;
+};
+
+
 // Returns a path representation of a ContainerID that can be used for
 // creating cgroups or writing to the filesystem. A ContainerID can
 // represent a nested container (i.e, it has a parent ContainerID) and
@@ -87,6 +96,11 @@ Try<std::vector<ContainerID>> getContainerIds(
 std::string getSandboxPath(
     const std::string& rootSandboxPath,
     const ContainerID& containerId);
+
+
+Try<SandboxPath> parseSandboxPath(
+    const std::string& rootDir,
+    const std::string& directory);
 
 } // namespace paths {
 } // namespace containerizer {

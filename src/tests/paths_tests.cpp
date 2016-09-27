@@ -28,6 +28,8 @@
 #include "slave/paths.hpp"
 #include "slave/state.hpp"
 
+#include "slave/containerizer/mesos/paths.hpp"
+
 #include "tests/mesos.hpp"
 
 namespace mesos {
@@ -48,6 +50,8 @@ public:
     executorId.set_value("executor1");
     taskId.set_value("task1");
     containerId.set_value(UUID::random().toString());
+    nestedContainerId.set_value(UUID::random().toString());
+    nestedContainerId.mutable_parent()->CopyFrom(containerId);
     role = "role1";
     persistenceId = "persistenceId1";
 
@@ -74,6 +78,7 @@ protected:
   ExecutorID executorId;
   TaskID taskId;
   ContainerID containerId;
+  ContainerID nestedContainerId;
   string role;
   string persistenceId;
   string rootDir;
@@ -151,6 +156,31 @@ TEST_F(PathsTest, ParseExecutorRunPath)
 
   path = paths::parseExecutorRunPath(rootDir, badDir3);
   ASSERT_ERROR(path);
+}
+
+
+TEST_F(PathsTest, ParseSandboxPath)
+{
+  const string rootSandboxPath = paths::getExecutorRunPath(
+      rootDir,
+      slaveId,
+      frameworkId,
+      executorId,
+      containerId);
+
+  const string sandboxPath = containerizer::paths::getSandboxPath(
+      rootSandboxPath,
+      nestedContainerId);
+
+  Try<containerizer::paths::SandboxPath> path =
+    containerizer::paths::parseSandboxPath(rootDir, sandboxPath);
+
+  ASSERT_SOME(path);
+
+  EXPECT_EQ(slaveId, path->slaveId);
+  EXPECT_EQ(frameworkId, path->frameworkId);
+  EXPECT_EQ(executorId, path->executorId);
+  EXPECT_EQ(nestedContainerId, path->containerId);
 }
 
 

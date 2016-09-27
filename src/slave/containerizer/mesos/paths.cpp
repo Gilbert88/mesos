@@ -30,6 +30,12 @@ namespace slave {
 namespace containerizer {
 namespace paths {
 
+const char SLAVES_DIR[] = "slaves";
+const char FRAMEWORKS_DIR[] = "frameworks";
+const char EXECUTORS_DIR[] = "executors";
+const char EXECUTOR_RUNS_DIR[] = "runs";
+
+
 string buildPath(
     const ContainerID& containerId,
     const string& prefix)
@@ -191,6 +197,68 @@ string getSandboxPath(
         "containers",
         containerId.value())
     : rootSandboxPath;
+}
+
+
+Try<SandboxPath> parseSandboxPath(
+    const string& _rootDir,
+    const string& directory)
+{
+  // Make sure there's a separator at the end of the `rootdir` so that
+  // we don't accidentally slice off part of a directory.
+  const string rootDir = path::join(_rootDir, "");
+
+  if (!strings::startsWith(directory, rootDir)) {
+    return Error(
+        "Directory '" + directory + "' does not fall under "
+        "the root directory: " + rootDir);
+  }
+
+  vector<string> tokens =
+    strings::tokenize(directory.substr(rootDir.size()), "/");
+
+  // A complete executor run path consists of at least 8 tokens, which
+  // includes the four named directories and the four IDs.
+  if (tokens.size() < 8) {
+    return Error(
+        "Path after root directory is not long enough to be an "
+        "executor run path: " + path::join(tokens));
+  }
+
+  // All four named directories much match.
+  if (tokens[0] == SLAVES_DIR &&
+      tokens[2] == FRAMEWORKS_DIR &&
+      tokens[4] == EXECUTORS_DIR &&
+      tokens[6] == EXECUTOR_RUNS_DIR) {
+    SandboxPath path;
+
+    path.slaveId.set_value(tokens[1]);
+    path.frameworkId.set_value(tokens[3]);
+    path.executorId.set_value(tokens[5]);
+    path.containerId.set_value(tokens[7]);
+
+    // For a nested container x.y.z, the sandbox layout is the following:
+    // .../runs/x/containers/y/containers/z
+    if (tokens.size() > 8 && tokens[8] == CONTAINER_DIRECTORY) {
+      for (size_t i = 8; i < tokens.size(); i++) {
+        if (i % 2 == 0) {
+          if (tokens[i] != CONTAINER_DIRECTORY) {
+            break;
+          }
+        } else {
+          ContainerID id;
+          id.set_value(tokens[i]);
+          id.mutable_parent()->CopyFrom(path.containerId);
+          path.containerId = id;
+        }
+      }
+    }
+
+    return path;
+  }
+
+  return Error(
+      "Could not parse executor run path from directory: " + directory);
 }
 
 } // namespace paths {
