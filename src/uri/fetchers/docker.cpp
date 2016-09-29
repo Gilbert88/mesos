@@ -342,10 +342,12 @@ Try<Owned<Fetcher::Plugin>> DockerFetcherPlugin::create(const Flags& flags)
       spec::parseAuthConfig(flags.docker_config.get());
 
     if (cachedAuths.isError()) {
-      return Error("Failed to parse docker config: " + cachedAuths.error());
+      LOG(WARNING) << "Skipping the docker config file specified by "
+                      "the agent flag '--docker_config': "
+                   << cachedAuths.error();
+    } else {
+      auths = cachedAuths.get();
     }
-
-    auths = cachedAuths.get();
   }
 
   Owned<DockerFetcherPluginProcess> process(new DockerFetcherPluginProcess(
