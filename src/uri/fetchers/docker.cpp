@@ -20,6 +20,8 @@
 #include <tuple>
 #include <vector>
 
+#include <glog/logging.h>
+
 #include <process/collect.hpp>
 #include <process/dispatch.hpp>
 #include <process/http.hpp>
@@ -342,7 +344,7 @@ Try<Owned<Fetcher::Plugin>> DockerFetcherPlugin::create(const Flags& flags)
       spec::parseAuthConfig(flags.docker_config.get());
 
     if (cachedAuths.isError()) {
-      LOG(WARNING) << "Skipping the docker config file specified by "
+      LOG(INFO) << "Skipping the docker config file specified by "
                       "the agent flag '--docker_config': "
                    << cachedAuths.error();
     } else {
