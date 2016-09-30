@@ -192,6 +192,19 @@ private:
     DESTROYING
   };
 
+  friend std::ostream& operator<<(std::ostream& stream, const State& state)
+  {
+    switch (state) {
+      case PROVISIONING: return stream << "PROVISIONING";
+      case PREPARING: return stream << "PREPARING";
+      case ISOLATING: return stream << "ISOLATING";
+      case FETCHING: return stream << "FETCHING";
+      case RUNNING: return stream << "RUNNING";
+      case DESTROYING: return stream << "DESTROYING";
+      default: return stream << "Invalid State";
+    }
+  };
+
   process::Future<Nothing> _recover(
       const std::list<mesos::slave::ContainerState>& recoverable,
       const hashset<ContainerID>& orphans);

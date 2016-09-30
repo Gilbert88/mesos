@@ -1953,13 +1953,16 @@ Future<bool> MesosContainerizerProcess::destroy(
 
   container->state = DESTROYING;
 
+  LOG(INFO) << "Changed the state of container " << containerId
+            << " from previous state '" << previousState
+            << "' to 'DESTROYING' state";
+
   list<Future<bool>> destroys;
   foreach (const ContainerID& child, container->children) {
-    LOG(INFO) << "Destroying nested container " << child;
     destroys.push_back(destroy(child));
   }
 
-  return collect(destroys)
+  return await(destroys)
     .then(defer(self(), &Self::_destroy, containerId, previousState));
 }
 
@@ -2199,6 +2202,12 @@ void MesosContainerizerProcess::______destroy(
   }
 
   container->termination.set(termination);
+
+  if (containerId.has_parent()) {
+    CHECK(containers_.contains(containerId.parent()));
+    CHECK(containers_[containerId.parent()]->children.contains(containerId));
+    containers_[containerId.parent()]->children.erase(containerId);
+  }
 
   containers_.erase(containerId);
 }
