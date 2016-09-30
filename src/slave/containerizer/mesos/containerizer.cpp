@@ -858,6 +858,15 @@ Future<Nothing> MesosContainerizerProcess::__recover(
     const list<ContainerState>& recovered,
     const hashset<ContainerID>& orphans)
 {
+  // Maintain a hashmap for root container 'ContainerState' lookup,
+  // because 'ExecutorInfo' is needed for the logger to recover
+  // nested containers. The logger recovers a nested container by
+  // using the 'ExecutorInfo' from its root parent container. This
+  // lookup table relies on the order of the list of 'ContainerState'
+  // recovered. We have to guarantee a parent container always
+  // locates before its child containers.
+  hashmap<ContainerID, ContainerState> states;
+
   foreach (const ContainerState& run, recovered) {
     const ContainerID& containerId = run.container_id();
 
@@ -872,18 +881,37 @@ Future<Nothing> MesosContainerizerProcess::__recover(
         .onAny(defer(self(), &Self::limited, containerId, lambda::_1));
     }
 
-    // TODO(gilbert): Make logger nesting aware.
+    // The 'ExecutorID' is a required field in 'ExecutorInfo', we have to
+    // set it properly for nested containers, in case any logger modules
+    // rely on those information.
+    ExecutorInfo executorInfo;
+    if (run.has_executor_info()) {
+      // The executor container case. The 'ExecutorInfo' will alwasy be
+      // set in 'ContainerConfig'.
+      executorInfo = run.executor_info();
+    } else {
+      // The nested container case. Use the 'ExecutorInfo' from its root
+      // parent container.
+      CHECK(containerId.has_parent());
+      const ContainerID& rootContainerId = getRootContainerId(containerId);
+      CHECK(states.contains(rootContainerId));
+      CHECK(states[rootContainerId].has_executor_info());
+      executorInfo = states[rootContainerId].executor_info();
+    }
+
+    // Pass recovered containers to the container logger.
+    // NOTE: The current implementation of the container logger only
+    // outputs a warning and does not have any other consequences.
+    // See `ContainerLogger::recover` for more information.
+    logger->recover(executorInfo, run.directory())
+      .onFailed(defer(self(), [run](const string& message) {
+        LOG(WARNING) << "Container logger failed to recover executor '"
+                     << run.executor_info().executor_id() << "': "
+                     << message;
+      }));
+
     if (!containerId.has_parent()) {
-      // Pass recovered containers to the container logger.
-      // NOTE: The current implementation of the container logger only
-      // outputs a warning and does not have any other consequences.
-      // See `ContainerLogger::recover` for more information.
-      logger->recover(run.executor_info(), run.directory())
-        .onFailed(defer(self(), [run](const string& message) {
-          LOG(WARNING) << "Container logger failed to recover executor '"
-                       << run.executor_info().executor_id() << "': "
-                       << message;
-        }));
+      states[containerId] = run;
     }
   }
 
@@ -1325,8 +1353,31 @@ Future<bool> MesosContainerizerProcess::_launch(
     environment[name] = value;
   }
 
+  // The 'ExecutorID' is a required field in 'ExecutorInfo', we have to
+  // set it properly for nested containers, in case any logger modules
+  // rely on those information.
+  ExecutorInfo executorInfo;
+  if (container->config.has_executor_info()) {
+    // The executor container case. The 'ExecutorInfo' will alwasy be
+    // set in 'ContainerConfig'.
+    executorInfo = container->config.executor_info();
+  } else {
+    // The nested container case. Use the 'ExecutorInfo' from its root
+    // parent container.
+    CHECK(containerId.has_parent());
+    const ContainerID& rootContainerId = getRootContainerId(containerId);
+    CHECK(containers_.contains(rootContainerId));
+    CHECK(containers_[rootContainerId]->config.has_executor_info());
+    executorInfo = containers_[rootContainerId]->config.executor_info();
+  }
+
+  // TODO(gilbert): Update the interface for logger prepare and recover.
+  // Because of the support for nested containers, 'ExecutorInfo' no
+  // longer covers all information that is needed for the logger to
+  // prepare and recover. We should use 'ContainerInfo' instead, with
+  // 'Label' included for custom metadata.
   return logger->prepare(
-      container->config.executor_info(),
+      executorInfo,
       container->config.directory())
     .then(defer(
         self(),
