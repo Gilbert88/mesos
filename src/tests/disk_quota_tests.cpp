@@ -22,6 +22,9 @@
 #include <mesos/mesos.hpp>
 #include <mesos/resources.hpp>
 
+#include <mesos/v1/executor.hpp>
+#include <mesos/v1/scheduler.hpp>
+
 #include <process/gtest.hpp>
 #include <process/owned.hpp>
 #include <process/pid.hpp>
@@ -49,12 +52,6 @@
 
 using namespace process;
 
-using std::string;
-using std::vector;
-
-using testing::_;
-using testing::Return;
-
 using mesos::internal::master::Master;
 
 using mesos::internal::slave::DiskUsageCollector;
@@ -63,6 +60,15 @@ using mesos::internal::slave::MesosContainerizer;
 using mesos::internal::slave::Slave;
 
 using mesos::master::detector::MasterDetector;
+
+using mesos::v1::scheduler::Call;
+using mesos::v1::scheduler::Mesos;
+
+using std::string;
+using std::vector;
+
+using testing::_;
+using testing::Return;
 
 namespace mesos {
 namespace internal {
@@ -534,6 +540,173 @@ TEST_F(DiskQuotaTest, ResourceStatistics)
 
   driver.stop();
   driver.join();
+}
+
+
+// This test verifies the resource can be reported correctly
+// on top level container if there exists nested containers
+// underneath.
+TEST_F(DiskQuotaTest, NestedResourceStatistics)
+{
+  Try<Owned<cluster::Master>> master = StartMaster();
+  ASSERT_SOME(master);
+
+  auto scheduler = std::make_shared<MockV1HTTPScheduler>();
+
+  Resources resources = Resources::parse("cpus:0.1;mem:32;disk:3").get();
+  FrameworkInfo frameworkInfo = DEFAULT_FRAMEWORK_INFO;
+
+  ExecutorInfo executorInfo;
+  executorInfo.set_type(ExecutorInfo::DEFAULT);
+
+  executorInfo.mutable_executor_id()->CopyFrom(DEFAULT_EXECUTOR_ID);
+  executorInfo.mutable_resources()->CopyFrom(resources);
+
+  // Disable AuthN on the agent.
+  slave::Flags flags = CreateSlaveFlags();
+  flags.authenticate_http_readwrite = false;
+  flags.isolation = "disk/du";
+
+  // NOTE: We can't pause the clock because we need the reaper to reap
+  // the 'du' subprocess.
+  flags.container_disk_watch_interval = Milliseconds(300);
+
+  Fetcher fetcher;
+
+  Try<MesosContainerizer*> _containerizer =
+    MesosContainerizer::create(flags, true, &fetcher);
+
+  ASSERT_SOME(_containerizer);
+
+  Owned<MesosContainerizer> containerizer(_containerizer.get());
+
+  Owned<MasterDetector> detector = master.get()->createDetector();
+  Try<Owned<cluster::Slave>> slave =
+    StartSlave(detector.get(), containerizer.get(), flags);
+
+  ASSERT_SOME(slave);
+
+  Future<Nothing> connected;
+  EXPECT_CALL(*scheduler, connected(_))
+    .WillOnce(FutureSatisfy(&connected));
+
+  scheduler::TestV1Mesos mesos(
+      master.get()->pid, ContentType::PROTOBUF, scheduler);
+
+  AWAIT_READY(connected);
+
+  Future<v1::scheduler::Event::Subscribed> subscribed;
+  EXPECT_CALL(*scheduler, subscribed(_, _))
+    .WillOnce(FutureArg<1>(&subscribed));
+
+  Future<v1::scheduler::Event::Offers> offers;
+  EXPECT_CALL(*scheduler, offers(_, _))
+    .WillOnce(FutureArg<1>(&offers))
+    .WillRepeatedly(Return());
+
+  EXPECT_CALL(*scheduler, heartbeat(_))
+    .WillRepeatedly(Return()); // Ignore heartbeats.
+
+  {
+    Call call;
+    call.set_type(Call::SUBSCRIBE);
+    Call::Subscribe* subscribe = call.mutable_subscribe();
+    subscribe->mutable_framework_info()->CopyFrom(evolve(frameworkInfo));
+
+    mesos.send(call);
+  }
+
+  AWAIT_READY(subscribed);
+
+  v1::FrameworkID frameworkId(subscribed->framework_id());
+
+  // Update `executorInfo` with the subscribed `frameworkId`.
+  executorInfo.mutable_framework_id()->CopyFrom(devolve(frameworkId));
+
+  AWAIT_READY(offers);
+  EXPECT_NE(0, offers->offers().size());
+
+  Future<v1::scheduler::Event::Update> update;
+  EXPECT_CALL(*scheduler, update(_, _))
+    .WillOnce(FutureArg<1>(&update));
+
+  const v1::Offer& offer = offers->offers(0);
+  const SlaveID slaveId = devolve(offer.agent_id());
+
+  // Create a task that uses 2MB disk.
+  v1::TaskInfo taskInfo = evolve(createTask(
+      slaveId,
+      resources,
+      "dd if=/dev/zero of=file bs=1048576 count=2 && sleep 1000"));
+
+  v1::TaskGroupInfo taskGroup;
+  taskGroup.add_tasks()->CopyFrom(taskInfo);
+
+  {
+    Call call;
+    call.mutable_framework_id()->CopyFrom(frameworkId);
+    call.set_type(Call::ACCEPT);
+
+    Call::Accept* accept = call.mutable_accept();
+    accept->add_offer_ids()->CopyFrom(offer.id());
+
+    v1::Offer::Operation* operation = accept->add_operations();
+    operation->set_type(v1::Offer::Operation::LAUNCH_GROUP);
+
+    v1::Offer::Operation::LaunchGroup* launchGroup =
+      operation->mutable_launch_group();
+
+    launchGroup->mutable_executor()->CopyFrom(evolve(executorInfo));
+    launchGroup->mutable_task_group()->CopyFrom(taskGroup);
+
+    mesos.send(call);
+  }
+
+  AWAIT_READY(update);
+
+  ASSERT_EQ(TASK_RUNNING, update->status().state());
+  EXPECT_EQ(taskInfo.task_id(), update->status().task_id());
+  EXPECT_TRUE(update->status().has_timestamp());
+
+  Future<hashset<ContainerID>> containers = containerizer->containers();
+
+  AWAIT_READY(containers);
+  ASSERT_EQ(2u, containers->size());
+
+  // Must exist only one top level container.
+  Option<ContainerID> containerId;
+  foreach (const ContainerID& id, containers.get()) {
+    if (!id.has_parent()) {
+      containerId = id;
+      break;
+    }
+  }
+
+  ASSERT_SOME(containerId);
+
+  // Wait until disk usage can be retrieved.
+  Duration elapsed = Duration::zero();
+  while (true) {
+    // TODO(gilbert): Currently, the disk space check is only
+    // available for top level containers. Disk usage check for
+    // nested containers should be separated once the resource
+    // statustics are supported for nested containers.
+    Future<ResourceStatistics> usage = containerizer->usage(containerId.get());
+    AWAIT_READY(usage);
+
+    ASSERT_TRUE(usage->has_disk_limit_bytes());
+    EXPECT_EQ(Megabytes(6), Bytes(usage->disk_limit_bytes()));
+
+    if (usage->has_disk_used_bytes()) {
+      EXPECT_LE(usage->disk_used_bytes(), usage->disk_limit_bytes());
+      break;
+    }
+
+    ASSERT_LT(elapsed, Seconds(5));
+
+    os::sleep(Milliseconds(1));
+    elapsed += Milliseconds(1);
+  }
 }
 
 
