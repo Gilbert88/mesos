@@ -14,7 +14,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <string>
+#include <vector>
+
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include <mesos/v1/executor.hpp>
+#include <mesos/v1/scheduler.hpp>
 
 #include <stout/os.hpp>
 #include <stout/path.hpp>
@@ -41,6 +48,10 @@ using process::PID;
 using master::Master;
 
 using mesos::master::detector::MasterDetector;
+
+using mesos::v1::scheduler::Call;
+using mesos::v1::scheduler::Event;
+using mesos::v1::scheduler::Mesos;
 
 using slave::Slave;
 
@@ -244,7 +255,7 @@ TEST_F(DockerRuntimeIsolatorTest, ROOT_DockerDefaultEntryptLocalPuller)
 // correctly using registry puller. This corresponds to the case in runtime
 // isolator logic table: sh=0, value=0, argv=1, entrypoint=1, cmd=0.
 TEST_F(DockerRuntimeIsolatorTest,
-       ROOT_CURL_INTERNET_DockerDefaultEntryptRegistryPuller)
+       ROOT_INTERNET_CURL_DockerDefaultEntryptRegistryPuller)
 {
   Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
@@ -314,6 +325,112 @@ TEST_F(DockerRuntimeIsolatorTest,
 
   driver.stop();
   driver.join();
+}
+
+
+// This test verifies a simple task with container image can be
+// launched in a nested container using v1 TASK_GROUP API.
+TEST_F(DockerRuntimeIsolatorTest, ROOT_INTERNET_CURL_NestedSimpleCommand)
+{
+  Try<Owned<cluster::Master>> master = StartMaster();
+  ASSERT_SOME(master);
+
+  // Disable AuthN on the agent.
+  slave::Flags flags = CreateSlaveFlags();
+  flags.isolation = "filesystem/linux,docker/runtime";
+  flags.image_providers = "docker";
+  flags.authenticate_http_readwrite = false;
+
+  Owned<MasterDetector> detector = master.get()->createDetector();
+
+  Try<Owned<cluster::Slave>> slave = StartSlave(detector.get(), flags);
+  ASSERT_SOME(slave);
+
+  auto scheduler = std::make_shared<MockV1HTTPScheduler>();
+
+  Future<Nothing> connected;
+  EXPECT_CALL(*scheduler, connected(_))
+    .WillOnce(FutureSatisfy(&connected));
+
+  scheduler::TestV1Mesos mesos(
+      master.get()->pid, ContentType::PROTOBUF, scheduler);
+
+  AWAIT_READY(connected);
+
+  Future<Event::Subscribed> subscribed;
+  EXPECT_CALL(*scheduler, subscribed(_, _))
+    .WillOnce(FutureArg<1>(&subscribed));
+
+  Future<Event::Offers> offers;
+  EXPECT_CALL(*scheduler, offers(_, _))
+    .WillOnce(FutureArg<1>(&offers))
+    .WillRepeatedly(Return());
+
+  EXPECT_CALL(*scheduler, heartbeat(_))
+    .WillRepeatedly(Return()); // Ignore heartbeats.
+
+  v1::FrameworkInfo frameworkInfo = DEFAULT_V1_FRAMEWORK_INFO;
+  mesos.send(createCallSubscribe(frameworkInfo));
+
+  AWAIT_READY(subscribed);
+
+  v1::FrameworkID frameworkId(subscribed->framework_id());
+  v1::ExecutorInfo executorInfo = createV1ExecutorInfo(
+      "test_default_executor",
+      None(),
+      "cpus:0.1;mem:32;disk:32",
+      v1::ExecutorInfo::DEFAULT);
+
+  // Update `executorInfo` with the subscribed `frameworkId`.
+  executorInfo.mutable_framework_id()->CopyFrom(frameworkId);
+
+  AWAIT_READY(offers);
+  EXPECT_NE(0, offers->offers().size());
+
+  const v1::Offer& offer = offers->offers(0);
+
+  // NOTE: We use a non-shell command here because 'sh' might not be
+  // in the PATH. 'alpine' does not specify env PATH in the image. On
+  // some linux distribution, '/bin' is not in the PATH by default.
+  v1::TaskInfo taskInfo = createV1Task(
+      offer.agent_id(),
+      "cpus:0.1;mem:32;disk:32",
+      createV1CommandInfo("/bin/ls", {"ls", "-al", "/"}));
+
+  taskInfo.mutable_container()->CopyFrom(
+      createV1ContainerInfo("library/alpine"));
+
+  Future<Event::Update> updateRunning;
+  EXPECT_CALL(*scheduler, update(_, _))
+    .WillOnce(FutureArg<1>(&updateRunning));
+
+  mesos.send(createCallAccept(
+      frameworkId,
+      offer.id(),
+      createOfferOperationLaunchGroup(
+          executorInfo,
+          createTaskGroupInfo({taskInfo}))));
+
+  AWAIT_READY(updateRunning);
+  ASSERT_EQ(TASK_RUNNING, updateRunning->status().state());
+  EXPECT_EQ(taskInfo.task_id(), updateRunning->status().task_id());
+  EXPECT_TRUE(updateRunning->status().has_timestamp());
+
+  // Acknowledge the TASK_RUNNING updates to receive the next updates.
+  mesos.send(createCallAcknowledge(
+      frameworkId,
+      taskInfo.task_id(),
+      offer.agent_id(),
+      updateRunning->status().uuid()));
+
+  Future<Event::Update> updateFinished;
+  EXPECT_CALL(*scheduler, update(_, _))
+    .WillOnce(FutureArg<1>(&updateFinished));
+
+  AWAIT_READY(updateFinished);
+  ASSERT_EQ(TASK_FINISHED, updateFinished->status().state());
+  EXPECT_EQ(taskInfo.task_id(), updateFinished->status().task_id());
+  EXPECT_TRUE(updateFinished->status().has_timestamp());
 }
 
 } // namespace tests {
