@@ -429,10 +429,20 @@ inline ExecutorInfo createExecutorInfo(
 }
 
 
-inline CommandInfo createCommandInfo(const std::string& command)
+inline CommandInfo createCommandInfo(
+    const std::string& value,
+    const std::vector<std::string>& arguments)
 {
   CommandInfo commandInfo;
-  commandInfo.set_value(command);
+  commandInfo.set_value(value);
+
+  if (!arguments.empty()) {
+    commandInfo.set_shell(false);
+    foreach (const std::string& arg, arguments) {
+      commandInfo.add_arguments(arg);
+    }
+  }
+
   return commandInfo;
 }
 
