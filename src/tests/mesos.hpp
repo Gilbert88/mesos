@@ -950,6 +950,77 @@ inline Parameters parameterize(const ACLs& acls)
 }
 
 
+inline v1::TaskGroupInfo createTaskGroupInfo(
+    const std::vector<v1::TaskInfo>& tasks)
+{
+  v1::TaskGroupInfo taskGroup;
+  foreach (const v1::TaskInfo& task, tasks) {
+    taskGroup.add_tasks()->CopyFrom(task);
+  }
+  return taskGroup;
+}
+
+
+// TODO(gilbert): Add other offer operation helpers.
+inline v1::Offer::Operation createOfferOperationLaunchGroup(
+    const v1::ExecutorInfo& executorInfo,
+    const v1::TaskGroupInfo& taskGroup)
+{
+  v1::Offer::Operation operation;
+  operation.set_type(v1::Offer::Operation::LAUNCH_GROUP);
+  operation.mutable_launch_group()->mutable_executor()->CopyFrom(executorInfo);
+  operation.mutable_launch_group()->mutable_task_group()->CopyFrom(taskGroup);
+  return operation;
+}
+
+
+// TODO(gilbert): Add other call type helpers.
+inline v1::scheduler::Call createCallSubscribe(
+    const v1::FrameworkInfo& frameworkInfo)
+{
+  v1::scheduler::Call call;
+  call.set_type(v1::scheduler::Call::SUBSCRIBE);
+  call.mutable_subscribe()->mutable_framework_info()->CopyFrom(frameworkInfo);
+  return call;
+}
+
+
+inline v1::scheduler::Call createCallAccept(
+    const v1::FrameworkID& frameworkId,
+    const v1::OfferID& offerId,
+    const v1::Offer::Operation& operation)
+{
+  v1::scheduler::Call call;
+  call.set_type(v1::scheduler::Call::ACCEPT);
+  call.mutable_framework_id()->CopyFrom(frameworkId);
+
+  v1::scheduler::Call::Accept* accept = call.mutable_accept();
+  accept->add_offer_ids()->CopyFrom(offerId);
+  accept->add_operations()->CopyFrom(operation);
+
+  return call;
+}
+
+
+inline v1::scheduler::Call createCallAcknowledge(
+    const v1::FrameworkID& frameworkId,
+    const v1::TaskID& taskId,
+    const v1::AgentID& agentId,
+    const std::string& uuid)
+{
+  v1::scheduler::Call call;
+  call.set_type(v1::scheduler::Call::ACKNOWLEDGE);
+  call.mutable_framework_id()->CopyFrom(frameworkId);
+
+  v1::scheduler::Call::Acknowledge* acknowledge = call.mutable_acknowledge();
+  acknowledge->mutable_task_id()->CopyFrom(taskId);
+  acknowledge->mutable_agent_id()->CopyFrom(agentId);
+  acknowledge->set_uuid(uuid);
+
+  return call;
+}
+
+
 // Definition of a mock Scheduler to be used in tests with gmock.
 class MockScheduler : public Scheduler
 {
