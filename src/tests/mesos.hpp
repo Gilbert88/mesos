@@ -582,6 +582,24 @@ inline TaskInfo createTask(
 }
 
 
+inline v1::TaskInfo createV1Task(
+    const v1::AgentID& agentId,
+    const std::string& resources,
+    const v1::CommandInfo& command,
+    const Option<mesos::v1::ExecutorID>& executorId = None(),
+    const std::string& name = "test-task",
+    const std::string& id = UUID::random().toString())
+{
+  return evolve(createTask(
+      devolve(agentId),
+      Resources::parse(resources).get(),
+      devolve(command),
+      executorId.isSome() ? devolve(executorId.get()) : None(),
+      name,
+      id));
+}
+
+
 inline TaskInfo createTask(
     const SlaveID& slaveId,
     const Resources& resources,
