@@ -399,32 +399,52 @@ protected:
 
 inline ExecutorInfo createExecutorInfo(
     const std::string& executorId,
-    const std::string& command,
-    const Option<std::string>& resources = None())
+    const Option<std::string>& command = None(),
+    const Option<std::string>& resources = None(),
+    const Option<ExecutorInfo::Type>& type = None())
 {
   ExecutorInfo executor;
   executor.mutable_executor_id()->set_value(executorId);
-  executor.mutable_command()->set_value(command);
+
+  if (command.isSome()) {
+    executor.mutable_command()->set_value(command.get());
+  }
+
   if (resources.isSome()) {
     executor.mutable_resources()->CopyFrom(
         Resources::parse(resources.get()).get());
   }
+
+  if (type.isSome()) {
+    executor.set_type(type.get());
+  }
+
   return executor;
 }
 
 
 inline ExecutorInfo createExecutorInfo(
     const std::string& executorId,
-    const CommandInfo& command,
-    const Option<std::string>& resources = None())
+    const Option<CommandInfo>& command = None(),
+    const Option<std::string>& resources = None(),
+    const Option<ExecutorInfo::Type>& type = None())
 {
   ExecutorInfo executor;
   executor.mutable_executor_id()->set_value(executorId);
-  executor.mutable_command()->CopyFrom(command);
+
+  if (command.isSome()) {
+    executor.mutable_command()->CopyFrom(command.get());
+  }
+
   if (resources.isSome()) {
     executor.mutable_resources()->CopyFrom(
         Resources::parse(resources.get()).get());
   }
+
+  if (type.isSome()) {
+    executor.set_type(type.get());
+  }
+
   return executor;
 }
 
