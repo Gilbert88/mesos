@@ -554,6 +554,18 @@ inline ContainerInfo createContainerInfo(
 }
 
 
+inline v1::ContainerInfo createV1ContainerInfo(
+    const Option<std::string> imageName = None(),
+    const std::vector<v1::Volume>& _volumes = {})
+{
+  std::vector<Volume> volumes;
+  foreach (const v1::Volume& volume, _volumes) {
+    volumes.push_back(devolve(volume));
+  }
+  return evolve(createContainerInfo(imageName, volumes));
+}
+
+
 // TODO(bmahler): Refactor this to make the distinction between
 // command tasks and executor tasks clearer.
 inline TaskInfo createTask(
