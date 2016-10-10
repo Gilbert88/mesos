@@ -57,6 +57,7 @@
 #include <stout/option.hpp>
 #include <stout/stringify.hpp>
 #include <stout/try.hpp>
+#include <stout/unreachable.hpp>
 #include <stout/uuid.hpp>
 
 #include "common/http.hpp"
@@ -446,6 +447,29 @@ inline ExecutorInfo createExecutorInfo(
   }
 
   return executor;
+}
+
+
+inline v1::ExecutorInfo createV1ExecutorInfo(
+    const std::string& executorId,
+    const Option<std::string>& command = None(),
+    const Option<std::string>& resources = None(),
+    const Option<v1::ExecutorInfo::Type>& _type = None())
+{
+  Option<ExecutorInfo::Type> type;
+  if (_type.isSome()) {
+    switch (_type.get()) {
+      case v1::ExecutorInfo::UNKNOWN: type = ExecutorInfo::UNKNOWN; break;
+      case v1::ExecutorInfo::DEFAULT: type = ExecutorInfo::DEFAULT; break;
+      case v1::ExecutorInfo::CUSTOM: type = ExecutorInfo::CUSTOM; break;
+      default: UNREACHABLE();
+    }
+  }
+  return evolve(createExecutorInfo(
+      executorId,
+      command,
+      resources,
+      type));
 }
 
 
