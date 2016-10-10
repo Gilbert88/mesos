@@ -133,6 +133,12 @@ CommandInfo devolve(const v1::CommandInfo& command)
 }
 
 
+Volume devolve(const v1::Volume& volume)
+{
+  return devolve<Volume>(volume);
+}
+
+
 executor::Call devolve(const v1::executor::Call& call)
 {
   return devolve<executor::Call>(call);

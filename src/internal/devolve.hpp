@@ -57,6 +57,7 @@ Credential devolve(const v1::Credential& credential);
 TaskID devolve(const v1::TaskID& taskId);
 TaskStatus devolve(const v1::TaskStatus& status);
 CommandInfo devolve(const v1::CommandInfo& command);
+Volume devolve(const v1::Volume& volume);
 
 scheduler::Call devolve(const v1::scheduler::Call& call);
 scheduler::Event devolve(const v1::scheduler::Event& event);

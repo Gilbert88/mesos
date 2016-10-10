@@ -102,6 +102,18 @@ v1::KillPolicy evolve(const KillPolicy& killPolicy)
 }
 
 
+v1::CommandInfo evolve(const CommandInfo& commandInfo)
+{
+  return evolve<v1::CommandInfo>(commandInfo);
+}
+
+
+v1::ContainerInfo evolve(const ContainerInfo& containerInfo)
+{
+  return evolve<v1::ContainerInfo>(containerInfo);
+}
+
+
 v1::ExecutorID evolve(const ExecutorID& executorId)
 {
   return evolve<v1::ExecutorID>(executorId);
