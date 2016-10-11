@@ -1328,8 +1328,30 @@ Future<bool> MesosContainerizerProcess::_launch(
     environment[name] = value;
   }
 
+  // The 'ExecutorID' is a required field in 'ExecutorInfo', we have to
+  // set it properly for nested containers, in case any logger modules
+  // rely on those information.
+  ExecutorInfo executorInfo;
+  if (container->config.has_executor_info()) {
+    // The executor container case. The 'ExecutorInfo' will alwasy be
+    // set in 'ContainerConfig'.
+    executorInfo = container->config.executor_info();
+  } else {
+    // The nested container case. Use the 'ExecutorInfo' from its root
+    // parent container.
+    CHECK(containerId.has_parent());
+    const ContainerID& rootContainerId = getRootContainerId(containerId);
+    CHECK(containers_.contains(rootContainerId));
+    CHECK(containers_[rootContainerId]->config.has_executor_info());
+    executorInfo = containers_[rootContainerId]->config.executor_info();
+  }
+
+  // TODO(gilbert): Consider to add 'ContainerInfo' to the logger
+  // 'prepare' interface, so that nested containers can receive
+  // different custom metadata (e.g., delivered by 'Label') from
+  // its top level parent container.
   return logger->prepare(
-      container->config.executor_info(),
+      executorInfo,
       container->config.directory())
     .then(defer(
         self(),
