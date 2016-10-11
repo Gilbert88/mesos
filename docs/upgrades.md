@@ -43,6 +43,24 @@ We categorize the changes as follows:
   </thead>
 <tr>
   <td style="word-wrap: break-word; overflow-wrap: break-word;"><!--Version-->
+  1.1.x
+  </td>
+  <td style="word-wrap: break-word; overflow-wrap: break-word;"><!--Mesos Core-->
+  </td>
+  <td style="word-wrap: break-word; overflow-wrap: break-word;"><!--Flags-->
+  </td>
+  <td style="word-wrap: break-word; overflow-wrap: break-word;"><!--Framework API-->
+  </td>
+  <td style="word-wrap: break-word; overflow-wrap: break-word;"><!--Module API-->
+    <ul style="padding-left:10px;">
+      <li>R <a href="#1-1-x-container-logger-interface">Container Logger Interface</a></li>
+    </ul>
+  </td>
+  <td style="word-wrap: break-word; overflow-wrap: break-word;"><!--Endpoints-->
+  </td>
+</tr>
+<tr>
+  <td style="word-wrap: break-word; overflow-wrap: break-word;"><!--Version-->
   1.0.x
   </td>
   <td style="word-wrap: break-word; overflow-wrap: break-word;"><!--Mesos Core-->
@@ -183,6 +201,12 @@ We categorize the changes as follows:
 </tr>
 </table>
 
+
+## Upgrading from 1.0.x to 1.1.x ##
+
+<a name="1-1-x-container-logger-interface"></a>
+
+* The container logger interface `recover` is removed, to avoid adding tech debt in the containerizer for nested container support. Please see [MESOS-6371](https://issues.apache.org/jira/browse/MESOS-6371) for more information.
 
 ## Upgrading from 0.28.x to 1.0.x ##
 
