@@ -606,7 +606,9 @@ inline v1::TaskInfo createV1Task(
       devolve(agentId),
       Resources::parse(resources).get(),
       devolve(command),
-      executorId.isSome() ? devolve(executorId.get()) : None(),
+      executorId.isSome()
+        ? devolve(executorId.get())
+        : Option<mesos::ExecutorID>(),
       name,
       id));
 }
