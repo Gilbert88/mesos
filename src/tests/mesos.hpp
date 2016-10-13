@@ -467,6 +467,14 @@ inline CommandInfo createCommandInfo(
 }
 
 
+inline v1::CommandInfo createV1CommandInfo(
+    const std::string& value,
+    const std::vector<std::string>& arguments = {})
+{
+  return evolve(createCommandInfo(value, arguments));
+}
+
+
 inline Image createDockerImage(const std::string& imageName)
 {
   Image image;
