@@ -475,7 +475,7 @@ inline v1::ExecutorInfo createV1ExecutorInfo(
 
 inline CommandInfo createCommandInfo(
     const std::string& value,
-    const std::vector<std::string>& arguments)
+    const std::vector<std::string>& arguments = {})
 {
   CommandInfo commandInfo;
   commandInfo.set_value(value);
