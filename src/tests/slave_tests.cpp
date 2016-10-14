@@ -1092,6 +1092,7 @@ TEST_F(SlaveTest, ROOT_RunTaskWithCommandInfoWithUser)
   CommandInfo command;
   command.set_user("nobody");
   command.set_value(strings::format(
+      "#!/bin/sh\n"
       "touch $MESOS_SANDBOX/file\n"
       "FILE_UID=`stat --format %%u $MESOS_SANDBOX/file`\n"
       "test $FILE_UID = %d\n",
