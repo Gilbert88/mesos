@@ -249,10 +249,10 @@ TEST_F(DockerSpecTest, DecodeHttpResponses)
     )~";
 
   // Decode HTTP responses.
-  Try<vector<http::Response>> responses =
-    http::decodeResponses(output);
+  Try<std::vector<process::http::Response>> responses =
+    process::http::decodeResponses(output);
 
-  std::cout << "!!!!!!\n" << output.get() << std::endl;
+  std::cout << "!!!!!!\n" << output << std::endl;
 
   EXPECT_SOME(responses);
 }
