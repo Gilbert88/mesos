@@ -267,7 +267,7 @@ TEST_F(DockerSpecTest, DecodeHttpResponses)
 "{\"errors\":[{\"code\":\"UNAUTHORIZED\",\"message\":\"authentication required\",\"detail\":[{\"Type\":\"repository\",\"Name\":\"mesosphere/inky\",\"Action\":\"pull\"}]}]}\n"; // NOLINT(whitespace/line_length)
 
   // Decode HTTP responses.
-  Try<std::vector<process::http::Response>> responses =
+  responses =
     process::http::decodeResponses(output);
 
   std::cout << "!!!!!!\n" << output << std::endl;
