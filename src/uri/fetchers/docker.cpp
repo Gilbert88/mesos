@@ -165,6 +165,8 @@ static Future<http::Response> curl(
       Try<vector<http::Response>> responses =
         http::decodeResponses(output.get());
 
+      std::cout << "!!!!!!\n" << output.get() << endl;
+
       if (responses.isError()) {
         return Failure(
             "Failed to decode HTTP responses: " + responses.error() +
