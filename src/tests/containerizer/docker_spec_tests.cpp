@@ -246,7 +246,7 @@ Date: Fri, 14 Oct 2016 19:04:35 GMT
 Content-Length: 147
 Strict-Transport-Security: max-age=31536000
 {"errors":[{"code":"UNAUTHORIZED","message":"authentication required","detail":[{"Type":"repository","Name":"mesosphere/inky","Action":"pull"}]}]}
-    )~";
+)~";
 
   // Decode HTTP responses.
   Try<std::vector<process::http::Response>> responses =
