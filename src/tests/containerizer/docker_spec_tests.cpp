@@ -273,6 +273,17 @@ TEST_F(DockerSpecTest, DecodeHttpResponses)
   std::cout << "!!!!!!\n" << output << std::endl;
 
   EXPECT_SOME(responses);
+
+  output =
+"HTTP/1.1 200 Connection established\n";
+
+  // Decode HTTP responses.
+  responses =
+    process::http::decodeResponses(output);
+
+  std::cout << "!!!!!!\n" << output << std::endl;
+
+  EXPECT_SOME(responses);
 }
 
 
