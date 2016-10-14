@@ -255,7 +255,7 @@ TEST_F(DockerSpecTest, DecodeHttpResponses)
 
   EXPECT_SOME(responses);
 
-  string output =
+  output =
 "HTTP/1.1 200 Connection established\n"
 "HTTP/1.1 401 Unauthorized\n"
 "Content-Type: application/json; charset=utf-8\n"
