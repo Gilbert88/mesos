@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <process/http.hpp>
+
 #include <stout/gtest.hpp>
 #include <stout/json.hpp>
 
@@ -230,6 +232,29 @@ TEST_F(DockerSpecTest, ParseDockerConfig)
 
   EXPECT_EQ("dW5pZmllZDpjb250YWluZXJpemVy", map.get()["localhost:5000"].auth());
   EXPECT_EQ("user@example.com", map.get()["localhost:5000"].email());
+}
+
+
+TEST_F(DockerSpecTest, DecodeHttpResponses)
+{
+  string output = R"~(
+      HTTP/1.1 401 Unauthorized
+      Content-Type: application/json; charset=utf-8
+      Docker-Distribution-Api-Version: registry/2.0
+      Www-Authenticate: Bearer realm="https://auth.docker.io/token",service="registry.docker.io",scope="repository:mesosphere/inky:pull"
+      Date: Fri, 14 Oct 2016 19:04:35 GMT
+      Content-Length: 147
+      Strict-Transport-Security: max-age=31536000
+      {"errors":[{"code":"UNAUTHORIZED","message":"authentication required","detail":[{"Type":"repository","Name":"mesosphere/inky","Action":"pull"}]}]}
+    )~";
+
+  // Decode HTTP responses.
+  Try<vector<http::Response>> responses =
+    http::decodeResponses(output);
+
+  std::cout << "!!!!!!\n" << output.get() << std::endl;
+
+  EXPECT_SOME(responses);
 }
 
 
