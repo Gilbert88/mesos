@@ -257,7 +257,7 @@ TEST_F(DockerSpecTest, DecodeHttpResponses)
 
   output =
 "HTTP/1.1 200 Connection established\n"
-"HTTP/1.1 401 Unauthorized\n"
+"\nHTTP/1.1 401 Unauthorized\n"
 "Content-Type: application/json; charset=utf-8\n"
 "Docker-Distribution-Api-Version: registry/2.0\n"
 "Www-Authenticate: Bearer realm=\"https://auth.docker.io/token\",service=\"registry.docker.io\",scope=\"repository:mesosphere/inky:pull\"\n" // NOLINT(whitespace/line_length)
