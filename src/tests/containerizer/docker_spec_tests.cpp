@@ -257,6 +257,7 @@ TEST_F(DockerSpecTest, DecodeHttpResponses)
 
   output =
 "HTTP/1.1 200 Connection established\n"
+"{}"
 "\nHTTP/1.1 401 Unauthorized\n"
 "Content-Type: application/json; charset=utf-8\n"
 "Docker-Distribution-Api-Version: registry/2.0\n"
@@ -275,7 +276,8 @@ TEST_F(DockerSpecTest, DecodeHttpResponses)
   EXPECT_SOME(responses);
 
   output =
-"HTTP/1.1 200 Connection established\n";
+"HTTP/1.1 200 Connection established\n"
+"{}";
 
   // Decode HTTP responses.
   responses =
