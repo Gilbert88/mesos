@@ -256,14 +256,13 @@ TEST_F(DockerSpecTest, DecodeHttpResponses)
   EXPECT_SOME(responses);
 
   output =
-"\nHTTP/1.1 401 Unauthorized\n"
+"HTTP/1.1 200 Connection established\n"
 "Content-Type: application/json; charset=utf-8\n"
 "Docker-Distribution-Api-Version: registry/2.0\n"
 "Www-Authenticate: Bearer realm=\"https://auth.docker.io/token\",service=\"registry.docker.io\",scope=\"repository:mesosphere/inky:pull\"\n" // NOLINT(whitespace/line_length)
 "Date: Fri, 14 Oct 2016 19:04:35 GMT\n"
 "Content-Length: 147\n"
-"Strict-Transport-Security: max-age=31536000\n\n"
-"{\"errors\":[{\"code\":\"UNAUTHORIZED\",\"message\":\"authentication required\",\"detail\":[{\"Type\":\"repository\",\"Name\":\"mesosphere/inky\",\"Action\":\"pull\"}]}]}\n"; // NOLINT(whitespace/line_length)
+"Strict-Transport-Security: max-age=31536000\n\n";
 
   // Decode HTTP responses.
   responses =
