@@ -251,7 +251,7 @@ TEST_F(DockerSpecTest, DecodeHttpResponses)
   Try<std::vector<process::http::Response>> responses =
     process::http::decodeResponses(output);
 
-  std::cout << "!!!!!!\n" << output << std::endl;
+  std::cout << "1111111\n" << output << std::endl;
 
   EXPECT_SOME(responses);
 
@@ -269,7 +269,7 @@ TEST_F(DockerSpecTest, DecodeHttpResponses)
   responses =
     process::http::decodeResponses(output);
 
-  std::cout << "!!!!!!\n" << output << std::endl;
+  std::cout << "2222222\n" << output << std::endl;
 
   EXPECT_SOME(responses);
 
@@ -287,7 +287,7 @@ TEST_F(DockerSpecTest, DecodeHttpResponses)
   responses =
     process::http::decodeResponses(output);
 
-  std::cout << "!!!!!!\n" << output << std::endl;
+  std::cout << "333333\n" << output << std::endl;
 
   EXPECT_SOME(responses);
 }
