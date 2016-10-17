@@ -258,7 +258,7 @@ TEST_F(DockerSpecTest, DecodeHttpResponses)
   output =
 "HTTP/1.1 200 Connection established\n"
 "Content-Length: 147\n\n"
-"{\"errors\":[{\"code\":\"UNAUTHORIZED\",\"message\":\"authentication required\",\"detail\":[{\"Type\":\"repository\",\"Name\":\"mesosphere/inky\",\"Action\":\"pull\"}]}]}\n"; // NOLINT(whitespace/line_length)
+"{\"errors\":[{\"code\":\"UNAUTHORIZED\"}]}\n"; // NOLINT(whitespace/line_length)
 
   // Decode HTTP responses.
   responses =
