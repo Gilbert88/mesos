@@ -258,7 +258,7 @@ TEST_F(DockerSpecTest, DecodeHttpResponses)
   output =
 "HTTP/1.1 200 Connection established\n"
 "Content-Length: 3\n\n"
-"{}\n"
+"{}\n";
 
   // Decode HTTP responses.
   responses =
