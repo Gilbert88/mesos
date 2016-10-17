@@ -331,6 +331,7 @@ private:
     decoder->value.clear();
 
     CHECK(decoder->response == nullptr);
+    std::cout << "7777" << std::endl;
 
     decoder->response = new http::Response();
     decoder->response->status.clear();
@@ -361,6 +362,7 @@ private:
   {
     ResponseDecoder* decoder = (ResponseDecoder*) p->data;
     CHECK_NOTNULL(decoder->response);
+    std::cout << "8888" << std::endl;
 
     if (decoder->header != HEADER_FIELD) {
       decoder->response->headers[decoder->field] = decoder->value;
@@ -376,6 +378,7 @@ private:
 
   static int on_header_value(http_parser* p, const char* data, size_t length)
   {
+        std::cout << "9999" << std::endl;
     ResponseDecoder* decoder = (ResponseDecoder*) p->data;
     CHECK_NOTNULL(decoder->response);
     decoder->value.append(data, length);
@@ -388,6 +391,7 @@ private:
     ResponseDecoder* decoder = (ResponseDecoder*) p->data;
 
     CHECK_NOTNULL(decoder->response);
+    std::cout << "10101010" << std::endl;
 
     // Add final header.
     decoder->response->headers[decoder->field] = decoder->value;
@@ -399,6 +403,7 @@ private:
 
   static int on_body(http_parser* p, const char* data, size_t length)
   {
+    std::cout << "6666" << std::endl;
     ResponseDecoder* decoder = (ResponseDecoder*) p->data;
     CHECK_NOTNULL(decoder->response);
     decoder->response->body.append(data, length);
