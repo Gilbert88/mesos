@@ -257,8 +257,7 @@ TEST_F(DockerSpecTest, DecodeHttpResponses)
 
   output =
 "HTTP/1.1 200 Connection established\n"
-"Content-Length: 2\n\n"
-"{}\n"
+
 "HTTP/1.1 401 Unauthorized\n"
 "Content-Type: application/json; charset=utf-8\n"
 "Docker-Distribution-Api-Version: registry/2.0\n"
