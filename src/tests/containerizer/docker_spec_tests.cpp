@@ -263,6 +263,7 @@ TEST_F(DockerSpecTest, DecodeHttpResponses)
 "Date: Fri, 14 Oct 2016 19:04:35 GMT\n"
 "Content-Length: 147\n"
 "Strict-Transport-Security: max-age=31536000\n\n";
+"{\"errors\":[{\"code\":\"UNAUTHORIZED\",\"message\":\"authentication required\",\"detail\":[{\"Type\":\"repository\",\"Name\":\"mesosphere/inky\",\"Action\":\"pull\"}]}]}\n"; // NOLINT(whitespace/line_length)
 
   // Decode HTTP responses.
   responses =
