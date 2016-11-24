@@ -304,3 +304,226 @@ This is described in a [separate document](linux_capabilities.md).
 ### The `posix/rlimits` Isolator
 
 This is described in a [separate document](posix_rlimits.md).
+
+
+### The `volume/sandbox_path` Isolator
+
+The volume/sandbox_path isolator allows containers in a task group to
+share a temporary volume from their parent's sandbox. To specify a
+shared volume for nested containers, users have to enable this isolator
+and define `Volume::Source::SandboxPath`:
+
+    message Volume {
+      ...
+      required string container_path = 1;
+      ...
+
+      message Source {
+        enum Type {
+          ...
+          SANDBOX_PATH = 2;
+        }
+
+        ...
+
+        message SandboxPath {
+          enum Type {
+            UNKNOWN = 0;
+            SELF = 1;
+            PARENT = 2;
+          }
+
+          optional Type type = 1;
+          required string path = 2;
+        }
+
+        ...
+
+        optional SandboxPath sandbox_path = 3;
+      }
+
+      optional Source source = 5;
+    }
+
+Currently only `PARENT` sandbox path is supported. If the current
+container is a top level container, the isolator will return an error.
+Please note that `SandboxPath::path` describes a relative path
+to the corresponding container's sandbox. Upward traversal
+(e.g., ../../abc) is not supported.
+
+
+## Isolator Nested Aware
+
+Starting from Mesos 1.1.0, [nested container](nested-container-and-task-group.md) is supported.
+A nested aware isolator means that an isolator supports nested
+containers. Depending on the funtionality of an isolator, the
+complexity of make an isolator nested aware is different. In
+this section, we will firstly introduce the current semantics
+of isolators in Mesos. Then, there is a guidance on how to
+make a custom isolator module nested aware.
+
+### Current Semantics
+
+To support nested containers, most of the current isolators in
+Mesos are changed to be nested aware. Please see the following
+table for current isolators semantics:
+
+<table class="table table-striped">
+  <tr>
+    <th>Isolator</th>
+    <th>Nested Aware</th>
+    <th>Isolator Semantics</th>
+  </tr>
+  <tr>
+    <td>filesystem/posix</td>
+    <td>no</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>filesystem/linux</td>
+    <td>yes</td>
+    <td>The nested container can either has its own mount namespace or share the mount namespace from its parent container.</td>
+  </tr>
+  <tr>
+    <td>disk/du</td>
+    <td>yes</td>
+    <td>The disk space check is only supported for the top level container. All nested containers do not have separate disk check yet. The disk check and limitation reporting should be supported for nested containers in the future.</td>
+  </tr>
+  <tr>
+    <td>posix/rlimit</td>
+    <td>no</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>volume/sandbox_path</td>
+    <td>yes</td>
+    <td>Volume sharing for nested containers.</td>
+  </tr>
+  <tr>
+    <td>disk/xfs</td>
+    <td>no</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>cgroups</td>
+    <td>yes</td>
+    <td>The cgroup isolator only supports creating cgroups for top level containers. All nested containers share the cgroup resources from its top level executor container. The nested container should have its own cgroup. This is the post-MVP goal.</td>
+  </tr>
+  <tr>
+    <td>appc/runtime</td>
+    <td>yes</td>
+    <td>Supports runtime isolation for nested containers with an appc image specified.</td>
+  </tr>
+  <tr>
+    <td>docker/runtime</td>
+    <td>yes</td>
+    <td>Supports runtime isolation for nested containers with an docker image specified.</td>
+  </tr>
+  <tr>
+    <td>docker/volume</td>
+    <td>no</td>
+    <td>(coming soon).</td>
+  </tr>
+  <tr>
+    <td>linux/capabilities</td>
+    <td>no</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>volume/image</td>
+    <td>yes</td>
+    <td>Supports image volumes for nested containers.</td>
+  </tr>
+  <tr>
+    <td>volume/sandbox_path</td>
+    <td>yes</td>
+    <td>Supports shared volumes for nested containers.</td>
+  </tr>
+  <tr>
+    <td>gpu/nvidia</td>
+    <td>yes</td>
+    <td>GPUs are only allocated for the top level container. All nested containers share the GPUs from it top level container. The necessary Nvidia libraries are still mounted into the nested container.</td>
+  </tr>
+  <tr>
+    <td>namespace/pid</td>
+    <td>yes</td>
+    <td>Each nested container has its own PID namespace, which is nested under its parent container’s PID namespace. The structure is nested hierarchy in Kernel.</td>
+  </tr>
+  <tr>
+    <td>network/cni</td>
+    <td>yes</td>
+    <td>A nested container always shares it parent’s network and UTS namespace.</td>
+  </tr>
+  <tr>
+    <td>network/port_mapping</td>
+    <td>no</td>
+    <td></td>
+  </tr>
+</table>
+
+### How to Make a Custom Isolator Module Nested Aware
+
+To support nested containers, the API for isolator interface is
+not necessary to be changed. The containerizer does not pass any
+nested containers to the isolator methods if the isolator is not
+nested aware.
+
+1. To mark an isolator as nested aware, a new virtual function
+   `supportsNesting()` is introduced to the isolator interface:
+
+        // Returns true if this isolator supports nested containers. This
+        // method is designed to allow isolators to opt-in to support nested
+        // containers.
+        virtual bool supportsNesting()
+        {
+          return false;
+        }
+
+   A nested aware isolator should overwrite this virtual function
+   and returns `true`, which tells the containerizer that it
+   supports nested containers.
+
+2. For isolator recover(), if the isolator does not support nesting,
+   only top level containers will be passed to the isolator. If the
+   isolator is nested aware, both top level containers and nested
+   containers will be passed to the isolator in the list of
+   `ContainerState` and the hashset of orphaned `ContainerID`. Please
+   note that the order of `ContainerState` is a result of pre-order
+   traversal (i.e., parent is inserted before its children).
+
+3. The following isolator methods will be skipped for nested
+   containers if the isolator does not support nesting:
+
+   * prepare()
+   * watch()
+   * isolate()
+   * status()
+   * cleanup()
+
+4. Please note that new protobuf fields are added to `ContainerConfig`,
+   which is a parameter for the isolator prepare() interface. No matter
+   the isolator is preparing a top level container or a nested
+   container, the following information should be already set properly
+   in `ContainerConfig`:
+
+   * CommandInfo
+   * ContainerInfo
+   * Resource
+
+## Nested Container Sandbox Layout
+
+The nested container’s sandbox will be nested under its parent
+container’s sandbox in filesystem hierarchy.
+
+    .../executors/<executorId>/runs/<containerId>/
+          |--- stdout
+          |--- stderr
+          |--- volume/
+          |--- containers/
+                 |--- <containerId>/
+                         |--- stdout
+                         |--- stderr
+                         |--- volume/
+                         |--- containers/
+                                 |--- ...
+                 |--- ...
