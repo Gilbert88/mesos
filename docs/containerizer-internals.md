@@ -114,6 +114,47 @@ Launcher is responsible for forking/destroying containers.
 * Signals the child process to continue (exec’ing) by writing a
   character to the write end of the pipe in the parent process.
 
+Starting from Mesos 1.1.0, [nested container](nested-container-and-task-group.md) is supported.
+The Linux Launcher is responsible to fork the subprocess for
+the nested container with appropriate Linux namespaces being
+cloned. The following is the table for Linux namespaces that
+are supported for nested containers.
+
+<table class="table table-striped">
+  <tr>
+    <th>Namespace</th>
+    <th>Nested Container Support</th>
+  </tr>
+  <tr>
+    <th>Cgroup</th>
+    <td>Not supported yet (coming soon)</td>
+  </tr>
+  <tr>
+    <th>IPC</th>
+    <td>Not supported yet</td>
+  </tr>
+  <tr>
+    <th>Network</th>
+    <td>Always enabled; shares the same network namespace from its parent</td>
+  </tr>
+  <tr>
+    <th>Mount</th>
+    <td>Optional to have its own Mount namespace (flattened structure in Kernel)</td>
+  </tr>
+  <tr>
+    <th>PID</th>
+    <td>Always enabled; has own PID namespace nested under its parent’s PID namespace (nested hierarchy structure in Kernel)</td>
+  </tr>
+  <tr>
+    <th>User</th>
+    <td>Not supported yet (coming soon)</td>
+  </tr>
+  <tr>
+    <th>UTS</th>
+    <td>Always enabled; shares the same UTS namespace from its parent</td>
+  </tr>
+</table>
+
 ###### Posix launcher (TBD)
 
 <a name="Isolators"></a>
