@@ -63,12 +63,12 @@ are delivered `atomically` to an executor.
 
 The concept of Nested Container describes containers nested under an
 executor container. They share the network namespace and volumes while
-they may have their own container images and resource limits. By
-introducing the new agent API for nested container in the following
-section, executors no longer need to implement their own containerization.
-Instead, executors can reuse the containerizer (in the agent) to launch
-nested container. Both authorized operators or executors will be allowed
-to create nested containers.
+they can have their own container images and may have have their own
+resource limits (coming soon). By introducing the new agent API for
+nested container in the following section, executors no longer need to
+implement their own containerization. Instead, executors can reuse the
+containerizer (in the agent) to launch nested container. Both authorized
+operators or executors will be allowed to create nested containers.
 
 
 # Task Group API
@@ -122,7 +122,7 @@ To allow containers to share a network namespace:
 * Set `ExecutorInfo.container.network`.
 
 To allow containers to share an ephemeral volume:
-Specify the `volume/sandbox_path` isolator.
+Specify the [`volume/sandbox_path`](mesos-containerizer.md/#the-volumesandbox_path-isolator) isolator.
 * Set `TaskGroupInfo.tasks.container.volumes.source.type` as `SANDBOX_PATH`.
 * Set `TaskGroupInfo.tasks.container.volumes.source.sandbox_path.type` as `PARENT` and the path relative to the parent container’s sandbox.
 
@@ -206,8 +206,9 @@ are delivered to the executor atomically.
 
 By adding the new Agent API, any authorized entity, including the
 executor itself, its tasks, or the operator can use this API to
-launch/wait/kill nested containers. Multi-level nesting is supported
-by using this API. Technically, the nested level is up to 32 since
+launch/wait/kill nested containers. As of Mesos 1.1.0, only 2 levels
+of nesting are supported by using this API. Multi-level nesting will
+be supported soon. Technically, the nested level can be up to 32 since
 it is limited by the maximum depth of [pid namespace](https://github.com/torvalds/linux/commit/f2302505775fd13ba93f034206f1e2a587017929) and
 [user namespace](http://man7.org/linux/man-pages/man7/user_namespaces.7.html) from the Linux Kernel.
 
