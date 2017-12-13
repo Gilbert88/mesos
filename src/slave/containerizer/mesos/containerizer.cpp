@@ -1713,15 +1713,23 @@ Future<Containerizer::LaunchResult> MesosContainerizerProcess::_launch(
     if (containers_[containerId.parent()]->launchInfo.isSome()) {
       // TODO(alexr): Remove this once we no longer support executorless
       // command tasks in favor of default executor.
-      if (containers_[containerId.parent()]->config->has_task_info()) {
+      //
+      // The `ContainerConfig` may not exist for the parent container.
+      // The check is necessary because before MESOS-6894, containers
+      // do not have `ContainerConfig` checkpointed. For the upgrade
+      // scenario, if any nested container is launched under an existing
+      // legacy container, the agent would fail due to an unguarded access
+      // to the parent legacy container's ContainerConfig. We need to add
+      // this check. Please see MESOS-8325 for details.
+      if (containers_[containerId.parent()]->config.isSome() &&
+          containers_[containerId.parent()]->config->has_task_info()) {
         // For the command executor case, even if the task itself has a root
         // filesystem, the executor container still uses the host filesystem,
         // hence `ContainerLaunchInfo.working_directory`, which points to the
         // executor working directory in the host filesystem, may be different
         // from the task working directory when task defines an image. Fall back
         // to the sandbox directory if task working directory is not present.
-        if (containers_[containerId.parent()]->config.isSome() &&
-            containers_[containerId.parent()]->config->has_rootfs()) {
+        if (containers_[containerId.parent()]->config->has_rootfs()) {
           // We can extract the task working directory from the flag being
           // passed to the command executor.
           foreach (
