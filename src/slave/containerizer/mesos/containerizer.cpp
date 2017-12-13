@@ -1720,7 +1720,8 @@ Future<Containerizer::LaunchResult> MesosContainerizerProcess::_launch(
         // executor working directory in the host filesystem, may be different
         // from the task working directory when task defines an image. Fall back
         // to the sandbox directory if task working directory is not present.
-        if (containers_[containerId.parent()]->config->has_rootfs()) {
+        if (containers_[containerId.parent()]->config.isSome() &&
+            containers_[containerId.parent()]->config->has_rootfs()) {
           // We can extract the task working directory from the flag being
           // passed to the command executor.
           foreach (
