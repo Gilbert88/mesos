@@ -6465,6 +6465,18 @@ void Slave::registerExecutorTimeout(
       // Ignore the registration timeout.
       break;
     case Executor::REGISTERING: {
+      // Containerizer launch may hang for a long time due to the 3rd
+      // party software (e.g., docker daemon, curl etc.). While the
+      // container is destroyed after the executor registration timeout,
+      // the executor terminated status should be updated to the master
+      // correspondingly.
+      containerizer->wait(containerId)
+        .onAny(defer(self(),
+                     &Self::executorTerminated,
+                     frameworkId,
+                     executorId,
+                     lambda::_1));
+
       LOG(INFO) << "Terminating executor " << *executor
                 << " because it did not register within "
                 << flags.executor_registration_timeout;
