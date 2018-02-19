@@ -56,6 +56,7 @@ using namespace process;
 
 using mesos::internal::master::Master;
 
+using mesos::internal::slave::Containerizer;
 using mesos::internal::slave::DockerContainerizer;
 using mesos::internal::slave::DockerContainerizerProcess;
 using mesos::internal::slave::Fetcher;
@@ -579,6 +580,114 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Launch)
 
   ASSERT_FALSE(
     exists(docker, containerId.get(), ContainerState::RUNNING));
+}
+
+
+// This test verifies that if the containerizer launch is hanging
+// (e.g., due to docker daemon issues), after the executor
+// registration timeout the executor is cleaned up correctly and
+// the executor terminated status is updated to the scheduler
+// properly. This is a regression test(Please see MESOS-8572 for
+// details).
+TEST_F(DockerContainerizerTest, ROOT_DOCKER_Launch_Hanging)
+{
+  Try<Owned<cluster::Master>> master = StartMaster();
+  ASSERT_SOME(master);
+
+  MockDocker* mockDocker =
+    new MockDocker(tests::flags.docker, tests::flags.docker_socket);
+
+  Shared<Docker> docker(mockDocker);
+
+  slave::Flags flags = CreateSlaveFlags();
+  flags.executor_registration_timeout = Milliseconds(100);
+
+  Fetcher fetcher(flags);
+
+  Try<ContainerLogger*> logger =
+    ContainerLogger::create(flags.container_logger);
+
+  ASSERT_SOME(logger);
+
+  MockDockerContainerizer dockerContainerizer(
+      flags,
+      &fetcher,
+      Owned<ContainerLogger>(logger.get()),
+      docker);
+
+  Owned<MasterDetector> detector = master.get()->createDetector();
+
+  Try<Owned<cluster::Slave>> slave =
+    StartSlave(detector.get(), &dockerContainerizer, flags);
+  ASSERT_SOME(slave);
+
+  MockScheduler sched;
+  MesosSchedulerDriver driver(
+      &sched, DEFAULT_FRAMEWORK_INFO, master.get()->pid, DEFAULT_CREDENTIAL);
+
+  Future<FrameworkID> frameworkId;
+  EXPECT_CALL(sched, registered(&driver, _, _))
+    .WillOnce(FutureArg<1>(&frameworkId));
+
+  Future<vector<Offer>> offers;
+  EXPECT_CALL(sched, resourceOffers(&driver, _))
+    .WillOnce(FutureArg<1>(&offers))
+    .WillRepeatedly(Return()); // Ignore subsequent offers.
+
+  driver.start();
+
+  AWAIT_READY(frameworkId);
+
+  AWAIT_READY(offers);
+  ASSERT_FALSE(offers->empty());
+
+  const Offer& offer = offers.get()[0];
+
+  TaskInfo task = createTask(
+      offer.slave_id(),
+      offer.resources(),
+      SLEEP_COMMAND(1000));
+
+  ContainerInfo containerInfo;
+  containerInfo.set_type(ContainerInfo::DOCKER);
+
+  ContainerInfo::DockerInfo dockerInfo;
+  dockerInfo.set_image("alpine");
+  containerInfo.mutable_docker()->CopyFrom(dockerInfo);
+
+  task.mutable_container()->CopyFrom(containerInfo);
+
+  Future<Nothing> launch;
+  Promise<Containerizer::LaunchResult> promise;
+
+  EXPECT_CALL(dockerContainerizer, launch(_, _, _, _))
+    .WillOnce(DoAll(FutureSatisfy(&launch),
+                    Return(promise.future())));
+
+  Future<Nothing> destroy;
+  EXPECT_CALL(dockerContainerizer, destroy(_))
+    .WillOnce(DoAll(FutureSatisfy(&destroy),
+                    Return(true)));
+
+  Future<TaskStatus> statusFailed;
+  EXPECT_CALL(sched, statusUpdate(&driver, _))
+    .WillOnce(FutureArg<1>(&statusFailed))
+    .WillRepeatedly(DoDefault());
+
+  driver.launchTasks(offers.get()[0].id(), {task});
+
+  AWAIT_READY(launch);
+  AWAIT_READY(destroy);
+  AWAIT_READY(statusFailed);
+
+  driver.stop();
+  driver.join();
+
+  EXPECT_EQ(TASK_FAILED, statusFailed->state());
+  ASSERT_TRUE(statusFailed->has_reason());
+  EXPECT_EQ(
+      TaskStatus::REASON_EXECUTOR_REGISTRATION_TIMEOUT,
+      statusFailed->reason());
 }
 
 

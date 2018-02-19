@@ -158,6 +158,9 @@ public:
 
     EXPECT_CALL(*this, update(_, _))
       .WillRepeatedly(Invoke(this, &MockDockerContainerizer::_update));
+
+    EXPECT_CALL(*this, destroy(_))
+      .WillRepeatedly(Invoke(this, &MockDockerContainerizer::_destroy));
   }
 
   MOCK_METHOD4(
@@ -173,6 +176,11 @@ public:
       process::Future<Nothing>(
           const ContainerID&,
           const Resources&));
+
+  MOCK_METHOD1(
+      destroy,
+      process::Future<bool>(
+          const ContainerID&));
 
   // Default 'launch' implementation (necessary because we can't just
   // use &slave::DockerContainerizer::launch with 'Invoke').
@@ -196,6 +204,13 @@ public:
     return slave::DockerContainerizer::update(
         containerId,
         resources);
+  }
+
+  process::Future<bool> _destroy(
+      const ContainerID& containerId)
+  {
+    return slave::DockerContainerizer::destroy(
+        containerId);
   }
 };
 
