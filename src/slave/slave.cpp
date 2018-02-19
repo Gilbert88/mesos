@@ -2845,8 +2845,7 @@ void Slave::___run(
           (future.isFailed() ? future.failure() : "discarded"));
 
       executor->pendingTermination = termination;
-
-      // TODO(jieyu): Set executor->state to be TERMINATING.
+      executor->state = Executor::TERMINATING;
     }
 
     return;
@@ -4875,8 +4874,7 @@ void Slave::_reregisterExecutor(
           (future.isFailed() ? future.failure() : "discarded"));
 
       executor->pendingTermination = termination;
-
-      // TODO(jieyu): Set executor->state to be TERMINATING.
+      executor->state = Executor::TERMINATING;
     }
   }
 }
@@ -5318,8 +5316,7 @@ void Slave::__statusUpdate(
           (future->isFailed() ? future->failure() : "discarded"));
 
       executor->pendingTermination = termination;
-
-      // TODO(jieyu): Set executor->state to be TERMINATING.
+      executor->state = Executor::TERMINATING;
     }
   }
 
@@ -5871,8 +5868,7 @@ void Slave::executorLaunched(
           (future.isFailed() ? future.failure() : "discarded"));
 
       executor->pendingTermination = termination;
-
-      // TODO(jieyu): Set executor->state to be TERMINATING.
+      executor->state = Executor::TERMINATING;
     }
 
     return;
