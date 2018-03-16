@@ -333,17 +333,10 @@ const mode_t S_ISUID = 0x08000000;        // No-op.
 const mode_t S_ISGID = 0x04000000;        // No-op.
 const mode_t S_ISVTX = 0x02000000;        // No-op.
 
-
-// Flags not supported by Windows.
-const mode_t O_SYNC     = 0x00000000;     // No-op.
-const mode_t O_NONBLOCK = 0x00000000;     // No-op.
-
-// Linux signal flags not used in Windows. We define them per
-// `Linux sys/signal.h` to branch properly for Windows
-//  processes' stop, resume and kill.
-const mode_t SIGCONT = 0x00000009;     // Signal Cont.
-const mode_t SIGSTOP = 0x00000011;     // Signal Stop.
-const mode_t SIGKILL = 0x00000013;     // Signal Kill.
+// Even though SIGKILL doesn't exist on Windows, we define
+// it here, because Docker defines it. So, the docker
+// executor needs this signal value to properly kill containers.
+const mode_t SIGKILL = 0x00000009;     // Signal Kill.
 
 inline auto strerror_r(int errnum, char* buffer, size_t length) ->
 decltype(strerror_s(buffer, length, errnum))

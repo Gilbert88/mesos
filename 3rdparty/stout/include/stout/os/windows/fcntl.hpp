@@ -22,6 +22,8 @@
 #include <stout/os/int_fd.hpp>
 #include <stout/os/socket.hpp>
 
+#include <stout/os/windows/fd.hpp>
+
 namespace os {
 
 inline Try<Nothing> cloexec(const int_fd& fd)
