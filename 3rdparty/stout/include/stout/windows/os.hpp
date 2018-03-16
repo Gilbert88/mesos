@@ -44,7 +44,6 @@
 #include <stout/os/read.hpp>
 
 #include <stout/os/raw/environment.hpp>
-#include <stout/os/windows/fd.hpp>
 
 namespace os {
 namespace internal {

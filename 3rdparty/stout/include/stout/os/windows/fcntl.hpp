@@ -19,35 +19,33 @@
 #include <stout/try.hpp>
 #include <stout/windows.hpp>
 
+#include <stout/os/int_fd.hpp>
 #include <stout/os/socket.hpp>
-#include <stout/os/windows/fd.hpp>
 
 namespace os {
 
-// NOTE: This is not supported on Windows.
-inline Try<Nothing> cloexec(const WindowsFD& fd)
+inline Try<Nothing> cloexec(const int_fd& fd)
 {
   VLOG(2) << "`os::cloexec` has been called, but is a no-op on Windows";
   return Nothing();
 }
 
 
-// NOTE: This is not supported on Windows.
-inline Try<Nothing> unsetCloexec(const WindowsFD& fd)
+inline Try<Nothing> unsetCloexec(const int_fd& fd)
 {
   VLOG(2) << "`os::unsetCloexec` has been called, but is a no-op on Windows";
   return Nothing();
 }
 
 
-inline Try<bool> isCloexec(const WindowsFD& fd)
+inline Try<bool> isCloexec(const int_fd& fd)
 {
   VLOG(2) << "`os::isCloexec` has been called, but is a stub on Windows";
   return true;
 }
 
 
-inline Try<Nothing> nonblock(const WindowsFD& fd)
+inline Try<Nothing> nonblock(const int_fd& fd)
 {
   switch (fd.type()) {
     case WindowsFD::FD_CRT:
@@ -71,7 +69,7 @@ inline Try<Nothing> nonblock(const WindowsFD& fd)
 
 
 // NOTE: This is not supported on Windows.
-inline Try<bool> isNonblock(const WindowsFD& fd)
+inline Try<bool> isNonblock(const int_fd& fd)
 {
   VLOG(2) << "`os::isNonblock` has been called, but is a stub on Windows";
   return true;

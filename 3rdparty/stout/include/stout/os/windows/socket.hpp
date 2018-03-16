@@ -18,7 +18,12 @@
 #include <glog/logging.h>
 
 #include <stout/abort.hpp>
-#include <stout/os/windows/fd.hpp>
+
+#include <stout/try.hpp>
+#include <stout/error.hpp>
+#include <stout/windows.hpp> // For `WinSock2.h`.
+
+#include <stout/os/int_fd.hpp>
 
 namespace net {
 
@@ -109,15 +114,15 @@ inline bool is_inprogress_error(int error) { return (error == WSAEWOULDBLOCK); }
 // NOTE: The below wrappers are used to silence some implicit
 // type-casting warnings.
 
-inline os::WindowsFD accept(
-    const os::WindowsFD& fd, sockaddr* addr, socklen_t* addrlen)
+inline int_fd accept(
+    const int_fd& fd, sockaddr* addr, socklen_t* addrlen)
 {
   return ::accept(fd, addr, reinterpret_cast<int*>(addrlen));
 }
 
 
 inline int bind(
-    const os::WindowsFD& fd, const sockaddr* addr, socklen_t addrlen)
+    const int_fd& fd, const sockaddr* addr, socklen_t addrlen)
 {
   CHECK_LE(addrlen, INT32_MAX);
   return ::bind(fd, addr, static_cast<int>(addrlen));
@@ -125,7 +130,7 @@ inline int bind(
 
 
 inline int connect(
-    const os::WindowsFD& fd, const sockaddr* address, socklen_t addrlen)
+    const int_fd& fd, const sockaddr* address, socklen_t addrlen)
 {
   CHECK_LE(addrlen, INT32_MAX);
   return ::connect(fd, address, static_cast<int>(addrlen));
@@ -133,7 +138,7 @@ inline int connect(
 
 
 inline ssize_t send(
-    const os::WindowsFD& fd, const void* buf, size_t len, int flags)
+    const int_fd& fd, const void* buf, size_t len, int flags)
 {
   CHECK_LE(len, INT32_MAX);
   return ::send(
@@ -141,7 +146,7 @@ inline ssize_t send(
 }
 
 
-inline ssize_t recv(const os::WindowsFD& fd, void* buf, size_t len, int flags)
+inline ssize_t recv(const int_fd& fd, void* buf, size_t len, int flags)
 {
   CHECK_LE(len, INT32_MAX);
   return ::recv(fd, static_cast<char*>(buf), static_cast<int>(len), flags);
