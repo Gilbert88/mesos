@@ -29,11 +29,23 @@ inline ssize_t read(const int_fd& fd, void* data, size_t size)
   CHECK_LE(size, UINT_MAX);
 
   switch (fd.type()) {
-    case WindowsFD::FD_CRT:
-    case WindowsFD::FD_HANDLE: {
-      return ::_read(fd.crt(), data, static_cast<unsigned int>(size));
+    case WindowsFD::Type::HANDLE: {
+      DWORD bytes;
+      // TODO(andschwa): Handle overlapped I/O.
+      const BOOL result =
+        ::ReadFile(fd, data, static_cast<DWORD>(size), &bytes, nullptr);
+      if (result == FALSE) {
+        // The pipe "breaks" when the other process closes its handle, but we
+        // still have the data and therefore do not want to return an error.
+        if (::GetLastError() != ERROR_BROKEN_PIPE) {
+          // Indicates an error, but we can't return a `WindowsError`.
+          return -1;
+        }
+      }
+
+      return static_cast<ssize_t>(bytes);
     }
-    case WindowsFD::FD_SOCKET: {
+    case WindowsFD::Type::SOCKET: {
       return ::recv(fd, (char*)data, static_cast<unsigned int>(size), 0);
     }
   }

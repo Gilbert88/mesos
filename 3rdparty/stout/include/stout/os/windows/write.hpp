@@ -30,11 +30,18 @@ inline ssize_t write(const int_fd& fd, const void* data, size_t size)
   CHECK_LE(size, INT_MAX);
 
   switch (fd.type()) {
-    case WindowsFD::FD_CRT:
-    case WindowsFD::FD_HANDLE: {
-      return ::_write(fd.crt(), data, static_cast<unsigned int>(size));
+    case WindowsFD::Type::HANDLE: {
+      DWORD bytes;
+      // TODO(andschwa): Handle overlapped I/O.
+      const BOOL result =
+        ::WriteFile(fd, data, static_cast<DWORD>(size), &bytes, nullptr);
+      if (result == FALSE) {
+        return -1; // Indicates an error, but we can't return a `WindowsError`.
+      }
+
+      return static_cast<ssize_t>(bytes);
     }
-    case WindowsFD::FD_SOCKET: {
+    case WindowsFD::Type::SOCKET: {
       return ::send(fd, (const char*)data, static_cast<int>(size), 0);
     }
   }

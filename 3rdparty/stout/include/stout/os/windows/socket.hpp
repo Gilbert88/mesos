@@ -117,7 +117,7 @@ inline bool is_inprogress_error(int error) { return (error == WSAEWOULDBLOCK); }
 inline int_fd accept(
     const int_fd& fd, sockaddr* addr, socklen_t* addrlen)
 {
-  return ::accept(fd, addr, reinterpret_cast<int*>(addrlen));
+  return int_fd(::accept(fd, addr, reinterpret_cast<int*>(addrlen)));
 }
 
 
