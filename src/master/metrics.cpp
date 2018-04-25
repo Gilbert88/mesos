@@ -549,15 +549,46 @@ void Metrics::incrementTasksStates(
 FrameworkMetrics::FrameworkMetrics(const FrameworkInfo& _frameworkInfo)
   : frameworkInfo(_frameworkInfo),
     subscribed(
-        getFrameworkMetricPrefix(frameworkInfo) + "subscribed")
+        getFrameworkMetricPrefix(frameworkInfo) + "subscribed"),
+    calls(
+        getFrameworkMetricPrefix(frameworkInfo) + "calls")
 {
   process::metrics::add(subscribed);
+  process::metrics::add(calls);
+
+  // Skip index 0 which is 'UNKNOWN' enum.
+  for (int index = 1;
+       index < scheduler::Call::Type_descriptor()->value_count();
+       index++) {
+    const string typeName =
+      scheduler::Call::Type_descriptor()->value(index)->name();
+
+    Counter counter = Counter(
+        getFrameworkMetricPrefix(frameworkInfo) + "calls/" +
+        strings::lower(typeName));
+
+    call_types.put(typeName, counter);
+    process::metrics::add(counter);
+  }
 }
 
 
 FrameworkMetrics::~FrameworkMetrics()
 {
   process::metrics::remove(subscribed);
+
+  process::metrics::remove(calls);
+  foreachvalue (const Counter& counter, call_types) {
+    process::metrics::remove(counter);
+  }
+}
+
+
+void FrameworkMetrics::incrementCall(const scheduler::Call::Type& callType)
+{
+  Counter counter = call_types.get(scheduler::Call::Type_Name(callType)).get();
+  counter++;
+  calls++;
 }
 
 

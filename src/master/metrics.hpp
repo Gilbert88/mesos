@@ -222,9 +222,14 @@ struct FrameworkMetrics
 
   ~FrameworkMetrics();
 
+  void incrementCall(const scheduler::Call::Type& callType);
+
   const FrameworkInfo frameworkInfo;
 
   process::metrics::PushGauge subscribed;
+
+  process::metrics::Counter calls;
+  hashmap<std::string, process::metrics::Counter> call_types;
 };
 
 
