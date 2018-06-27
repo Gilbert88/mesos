@@ -574,7 +574,7 @@ FrameworkMetrics::FrameworkMetrics(const FrameworkInfo& _frameworkInfo)
        index++) {
     const string typeName =
       scheduler::Call::Type_descriptor()->value(index)->name();
-
+    std::cout << "@@@@: " << typeName << std::endl;
     Counter counter = Counter(
         getFrameworkMetricPrefix(frameworkInfo) + "calls/" +
         strings::lower(typeName));
@@ -663,6 +663,7 @@ FrameworkMetrics::~FrameworkMetrics()
 
 void FrameworkMetrics::incrementCall(const scheduler::Call::Type& callType)
 {
+  std::cout << "!!!!: " << scheduler::Call::Type_Name(callType) << std::endl;
   Counter counter = call_types.get(scheduler::Call::Type_Name(callType)).get();
   counter++;
   calls++;
