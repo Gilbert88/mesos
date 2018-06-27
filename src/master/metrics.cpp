@@ -584,6 +584,32 @@ FrameworkMetrics::FrameworkMetrics(const FrameworkInfo& _frameworkInfo)
   }
 
   process::metrics::add(events);
+
+  // Skip index 0 which is 'UNKNOWN' enum.
+  for (int index = 1;
+       index < scheduler::Event::Type_descriptor()->value_count();
+       index++) {
+    const string typeName =
+      scheduler::Event::Type_descriptor()->value(index)->name();
+
+    Counter counter = Counter(
+        getFrameworkMetricPrefix(frameworkInfo) + "events/" +
+        strings::lower(typeName));
+
+    call_types.put(typeName, counter);
+    process::metrics::add(counter);
+  }
+
+  for (int index = 0; index < TaskState_descriptor()->value_count(); index++) {
+    const string stateName = TaskState_descriptor()->value(index)->name();
+    Counter counter = Counter(
+        getFrameworkMetricPrefix(frameworkInfo) + "events/update/" +
+        strings::lower(stateName));
+
+    event_update_types.put(stateName, counter);
+    process::metrics::add(counter);
+  }
+
   process::metrics::add(operations);
 
   process::metrics::add(offers_sent);
@@ -604,6 +630,10 @@ FrameworkMetrics::~FrameworkMetrics()
 
   process::metrics::remove(events);
   foreachvalue (const Counter& counter, event_types) {
+    process::metrics::remove(counter);
+  }
+
+  foreachvalue (const Counter& counter, event_update_types) {
     process::metrics::remove(counter);
   }
 
@@ -643,29 +673,13 @@ void FrameworkMetrics::incrementEvent(const scheduler::Event& event)
 {
   if (event.type() == scheduler::Event::UPDATE) {
     const TaskState& taskState = event.update().status().state();
-    if (!event_update_types.contains(taskState)) {
-      Counter counter = Counter(
-          getFrameworkMetricPrefix(frameworkInfo) + "events/update/" +
-          strings::lower(TaskState_Name(taskState)));
-
-      event_update_types.put(taskState, counter);
-      process::metrics::add(counter);
-    }
-
-    Counter counter = event_update_types.get(taskState).get();
+    Counter counter = event_update_types.get(TaskState_Name(taskState)).get();
     counter++;
   }
 
-  if (!event_types.contains(event.type())) {
-    Counter counter = Counter(
-        getFrameworkMetricPrefix(frameworkInfo) + "events/" +
-        strings::lower(scheduler::Event::Type_Name(event.type())));
+  Counter counter = event_types.get(
+      scheduler::Event::Type_Name(event.type())).get();
 
-    event_types.put(event.type(), counter);
-    process::metrics::add(counter);
-  }
-
-  Counter counter = event_types.get(event.type()).get();
   counter++;
   events++;
 }
