@@ -213,12 +213,12 @@ public:
     if (pipefd.isError()) {
       os::close(outfds.write.get());
       os::killtree(outProcess.get().pid(), SIGKILL);
-      return Failure("Failed to create pipe: " + (pipefd.error());
+      return Failure("Failed to create pipe: " + pipefd.error());
     }
 
     Subprocess::IO::InputFileDescriptors errfds;
-    errfds.read = pipefd->(0);
-    errfds.write = pipefd->(1);
+    errfds.read = pipefd->at(0);
+    errfds.write = pipefd->at(1);
 
     // NOTE: We need to `cloexec` this FD so that it will be closed when
     // the child subprocess is spawned.
