@@ -690,10 +690,10 @@ Future<Nothing> CgroupsIsolatorProcess::isolate(
     // assigning the pid to this cgroup subsystem.
     if (containerId.has_parent() && !cgroups::exists(hierarchy, cgroup)) {
       LOG(INFO) << "Skipping assigning pid " << stringify(pid)
-              << " to cgroup at '" << path::join(hierarchy, cgroup)
-              << "' for container " << containerId
-              << " because its parent container " << containerId.parent()
-              << " does not have this cgroup hierarchy";
+                << " to cgroup at '" << path::join(hierarchy, cgroup)
+                << "' for container " << containerId
+                << " because its parent container " << containerId.parent()
+                << " does not have this cgroup hierarchy";
       continue;
     }
 
@@ -704,9 +704,9 @@ Future<Nothing> CgroupsIsolatorProcess::isolate(
 
     if (assign.isError()) {
       string message =
-        "Failed to assign pid " + stringify(pid) + " to cgroup at "
-        "'" + path::join(hierarchy, cgroup) + "'"
-        ": " + assign.error();
+        "Failed to assign container " + stringify(containerId) +
+        " pid " + stringify(pid) + " to cgroup at '" +
+        path::join(hierarchy, cgroup) + "': " + assign.error();
 
       LOG(ERROR) << message;
 
