@@ -903,7 +903,10 @@ void Master::initialize()
         [this](const process::http::Request& request,
                const Option<Principal>& principal) {
           logRequest(request);
-          return http.frameworks(request, principal);
+          return http.frameworks(request, principal)
+            .onReady([request](const process::http::Response& response) {
+              logResponse(request, response);
+            });
         });
   route("/flags",
         READONLY_HTTP_AUTHENTICATION_REALM,
@@ -963,7 +966,10 @@ void Master::initialize()
         [this](const process::http::Request& request,
                const Option<Principal>& principal) {
           logRequest(request);
-          return http.slaves(request, principal);
+          return http.slaves(request, principal)
+            .onReady([request](const process::http::Response& response) {
+              logResponse(request, response);
+            });
         });
   // TODO(ijimenez): Remove this endpoint at the end of the
   // deprecation cycle on 0.26.
@@ -981,7 +987,10 @@ void Master::initialize()
         [this](const process::http::Request& request,
                const Option<Principal>& principal) {
           logRequest(request);
-          return http.state(request, principal);
+          return http.state(request, principal)
+            .onReady([request](const process::http::Response& response) {
+              logResponse(request, response);
+            });
         });
   route("/state-summary",
         READONLY_HTTP_AUTHENTICATION_REALM,
@@ -989,7 +998,10 @@ void Master::initialize()
         [this](const process::http::Request& request,
                const Option<Principal>& principal) {
           logRequest(request);
-          return http.stateSummary(request, principal);
+          return http.stateSummary(request, principal)
+            .onReady([request](const process::http::Response& response) {
+              logResponse(request, response);
+            });
         });
   // TODO(ijimenez): Remove this endpoint at the end of the
   // deprecation cycle.
@@ -1007,7 +1019,10 @@ void Master::initialize()
         [this](const process::http::Request& request,
                const Option<Principal>& principal) {
           logRequest(request);
-          return http.tasks(request, principal);
+          return http.tasks(request, principal)
+            .onReady([request](const process::http::Response& response) {
+              logResponse(request, response);
+            });
         });
   route("/maintenance/schedule",
         READWRITE_HTTP_AUTHENTICATION_REALM,
