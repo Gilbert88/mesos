@@ -1250,7 +1250,9 @@ void Master::finalize()
 }
 
 
-void Master::exited(const FrameworkID& frameworkId, const HttpConnection& http)
+void Master::exited(
+    const FrameworkID& frameworkId,
+    const StreamingHttpConnection<v1::scheduler::Event>& http)
 {
   foreachvalue (Framework* framework, frameworks.registered) {
     if (framework->http.isSome() && framework->http->writer == http.writer) {
@@ -2529,7 +2531,7 @@ void Master::reregisterFramework(
 
 
 void Master::subscribe(
-    HttpConnection http,
+    StreamingHttpConnection<v1::scheduler::Event> http,
     const scheduler::Call::Subscribe& subscribe)
 {
   // TODO(anand): Authenticate the framework.
@@ -2629,7 +2631,7 @@ void Master::subscribe(
 
   // Need to disambiguate for the compiler.
   void (Master::*_subscribe)(
-      HttpConnection,
+      StreamingHttpConnection<v1::scheduler::Event>,
       const FrameworkInfo&,
       bool,
       const set<string>&,
@@ -2647,7 +2649,7 @@ void Master::subscribe(
 
 
 void Master::_subscribe(
-    HttpConnection http,
+    StreamingHttpConnection<v1::scheduler::Event> http,
     const FrameworkInfo& frameworkInfo,
     bool force,
     const set<string>& suppressedRoles,
@@ -9971,7 +9973,8 @@ void Master::addFramework(
     } else {
       CHECK_SOME(framework->http);
 
-      const HttpConnection& http = framework->http.get();
+      const StreamingHttpConnection<v1::scheduler::Event>& http =
+        framework->http.get();
 
       http.closed()
         .onAny(defer(self(), &Self::exited, framework->id(), http));
@@ -10061,7 +10064,7 @@ Try<Nothing> Master::activateRecoveredFramework(
     Framework* framework,
     const FrameworkInfo& frameworkInfo,
     const Option<UPID>& pid,
-    const Option<HttpConnection>& http,
+    const Option<StreamingHttpConnection<v1::scheduler::Event>>& http,
     const set<string>& suppressedRoles)
 {
   // Exactly one of `pid` or `http` must be provided.
@@ -10139,7 +10142,9 @@ Try<Nothing> Master::activateRecoveredFramework(
 }
 
 
-void Master::failoverFramework(Framework* framework, const HttpConnection& http)
+void Master::failoverFramework(
+    Framework* framework,
+    const StreamingHttpConnection<v1::scheduler::Event>& http)
 {
   CHECK_NOTNULL(framework);
 
@@ -12023,7 +12028,7 @@ void Master::Subscribers::Subscriber::send(
       if (approvers->approved<VIEW_TASK>(
               event->task_added().task(), *frameworkInfo) &&
           approvers->approved<VIEW_FRAMEWORK>(*frameworkInfo)) {
-        http.send<mesos::master::Event, v1::master::Event>(*event);
+        http.send(*event);
       }
       break;
     }
@@ -12033,7 +12038,7 @@ void Master::Subscribers::Subscriber::send(
 
       if (approvers->approved<VIEW_TASK>(*task, *frameworkInfo) &&
           approvers->approved<VIEW_FRAMEWORK>(*frameworkInfo)) {
-        http.send<mesos::master::Event, v1::master::Event>(*event);
+        http.send(*event);
       }
       break;
     }
@@ -12064,7 +12069,7 @@ void Master::Subscribers::Subscriber::send(
           }
         }
 
-        http.send<mesos::master::Event, v1::master::Event>(event_);
+        http.send(event_);
       }
       break;
     }
@@ -12095,14 +12100,14 @@ void Master::Subscribers::Subscriber::send(
           }
         }
 
-        http.send<mesos::master::Event, v1::master::Event>(event_);
+        http.send(event_);
       }
       break;
     }
     case mesos::master::Event::FRAMEWORK_REMOVED: {
       if (approvers->approved<VIEW_FRAMEWORK>(
               event->framework_removed().framework_info())) {
-        http.send<mesos::master::Event, v1::master::Event>(*event);
+        http.send(*event);
       }
       break;
     }
@@ -12120,14 +12125,14 @@ void Master::Subscribers::Subscriber::send(
         }
       }
 
-      http.send<mesos::master::Event, v1::master::Event>(event_);
+      http.send(event_);
       break;
     }
     case mesos::master::Event::AGENT_REMOVED:
     case mesos::master::Event::SUBSCRIBED:
     case mesos::master::Event::HEARTBEAT:
     case mesos::master::Event::UNKNOWN:
-      http.send<mesos::master::Event, v1::master::Event>(*event);
+      http.send(*event);
       break;
   }
 }
@@ -12148,7 +12153,7 @@ void Master::exited(const id::UUID& id)
 
 
 void Master::subscribe(
-    const HttpConnection& http,
+    const StreamingHttpConnection<v1::master::Event>& http,
     const Option<Principal>& principal)
 {
   LOG(INFO) << "Added subscriber " << http.streamId

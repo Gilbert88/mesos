@@ -989,6 +989,7 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   checks/health_checker.cpp						\
   common/attributes.cpp							\
   common/command_utils.cpp						\
+  common/heartbeater.hpp						\
   common/http.cpp							\
   common/protobuf_utils.cpp						\
   common/resources.cpp							\
