@@ -1999,7 +1999,9 @@ private:
 
   struct Subscribers
   {
-    Subscribers(Master* _master) : master(_master) {};
+    Subscribers(Master* _master, size_t maxSubscribers)
+      : master(_master),
+        subscribed(maxSubscribers) {};
 
     // Represents a client subscribed to the 'api/vX' endpoint.
     //
@@ -2059,7 +2061,7 @@ private:
 
     // Active subscribers to the 'api/vX' endpoint keyed by the stream
     // identifier.
-    hashmap<id::UUID, process::Owned<Subscriber>> subscribed;
+    BoundedHashMap<id::UUID, process::Owned<Subscriber>> subscribed;
   };
 
   Subscribers subscribers;
