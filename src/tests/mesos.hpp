@@ -2780,6 +2780,8 @@ public:
         case Event::ERROR:
           error(mesos, event.error());
           break;
+        case Event::HEARTBEAT:
+          break;
         case Event::UNKNOWN:
           LOG(FATAL) << "Received unexpected UNKNOWN event";
           break;
