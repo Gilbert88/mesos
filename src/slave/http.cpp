@@ -865,6 +865,10 @@ Future<Response> Http::executor(
       return Accepted();
     }
 
+    case executor::Call::HEARTBEAT: {
+      return Accepted();
+    }
+
     case executor::Call::UNKNOWN: {
       LOG(WARNING) << "Received 'UNKNOWN' call";
       return NotImplemented();
