@@ -1990,21 +1990,22 @@ Future<Containerizer::LaunchResult> MesosContainerizerProcess::_launch(
 
   vector<int_fd> whitelistFds{pipes[0], pipes[1]};
 
-  // Seal the executor binary if needed.
-  if (container->config->has_task_info()) {
-    if (commandExecutorMemFd.isSome()) {
-      launchInfo.mutable_command()->set_value(
-          "/proc/self/fd/" + stringify(commandExecutorMemFd.get()));
+  // Seal the command executor binary if needed.
+  if (container->config->has_task_info() && commandExecutorMemFd.isSome()) {
+    launchInfo.mutable_command()->set_value(
+        "/proc/self/fd/" + stringify(commandExecutorMemFd.get()));
 
-      whitelistFds.push_back(commandExecutorMemFd.get());
-    }
+    whitelistFds.push_back(commandExecutorMemFd.get());
+  }
 
-    if (defaultExecutorMemfd.isSome()) {
-      launchInfo.mutable_command()->set_value(
-          "/proc/self/fd/" + stringify(defaultExecutorMemfd.get()));
+  // Seal the command executor binary if needed.
+  if (container->config->has_executor_info() &&
+      container->config->executor_info().has_type() &&
+      container->config->executor_info().type() == ExecutorInfo::DEFAULT) {
+    launchInfo.mutable_command()->set_value(
+        "/proc/self/fd/" + stringify(defaultExecutorMemfd.get()));
 
-      whitelistFds.push_back(defaultExecutorMemfd.get());
-    }
+    whitelistFds.push_back(defaultExecutorMemfd.get());
   }
 
   // Prepare the flags to pass to the launch process.
