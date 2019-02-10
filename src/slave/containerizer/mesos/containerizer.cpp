@@ -593,6 +593,7 @@ Try<MesosContainerizer*> MesosContainerizer::create(
 
   Option<int_fd> initMemFd;
   Option<int_fd> commandExecutorMemFd;
+  Option<int_fd> defaultExecutorMemfd;
 
 #ifdef ENABLE_LAUNCHER_SEALING
   // Clone the launcher binary in memory for security concerns.
@@ -620,6 +621,19 @@ Try<MesosContainerizer*> MesosContainerizer::create(
   }
 
   commandExecutorMemFd = memFd.get();
+
+  // Clone the default executor binary in memory for security.
+  memFd = memfd::cloneSealedFile(
+      path::join(flags.launcher_dir, MESOS_DEFAULT_EXECUTOR));
+
+  if (memFd.isError()) {
+    return Error(
+        "Failed to clone a sealed file '" +
+        path::join(flags.launcher_dir, MESOS_DEFAULT_EXECUTOR) +
+        "' in memory: " + memFd.error());
+  }
+
+  defaultExecutorMemfd = memFd.get();
 #endif // ENABLE_LAUNCHER_SEALING
 
   return new MesosContainerizer(Owned<MesosContainerizerProcess>(
@@ -632,7 +646,8 @@ Try<MesosContainerizer*> MesosContainerizer::create(
           provisioner,
           _isolators,
           initMemFd,
-          commandExecutorMemFd)));
+          commandExecutorMemFd,
+          defaultExecutorMemfd)));
 }
 
 
@@ -1975,12 +1990,21 @@ Future<Containerizer::LaunchResult> MesosContainerizerProcess::_launch(
 
   vector<int_fd> whitelistFds{pipes[0], pipes[1]};
 
-  // Seal the command executor binary if needed.
-  if (container->config->has_task_info() && commandExecutorMemFd.isSome()) {
-    launchInfo.mutable_command()->set_value(
-        "/proc/self/fd/" + stringify(commandExecutorMemFd.get()));
+  // Seal the executor binary if needed.
+  if (container->config->has_task_info()) {
+    if (commandExecutorMemFd.isSome()) {
+      launchInfo.mutable_command()->set_value(
+          "/proc/self/fd/" + stringify(commandExecutorMemFd.get()));
 
-    whitelistFds.push_back(commandExecutorMemFd.get());
+      whitelistFds.push_back(commandExecutorMemFd.get());
+    }
+
+    if (defaultExecutorMemfd.isSome()) {
+      launchInfo.mutable_command()->set_value(
+          "/proc/self/fd/" + stringify(defaultExecutorMemfd.get()));
+
+      whitelistFds.push_back(defaultExecutorMemfd.get());
+    }
   }
 
   // Prepare the flags to pass to the launch process.

@@ -144,7 +144,8 @@ public:
       const process::Shared<Provisioner>& _provisioner,
       const std::vector<process::Owned<mesos::slave::Isolator>>& _isolators,
       const Option<int_fd>& _initMemFd,
-      const Option<int_fd>& _commandExecutorMemFd)
+      const Option<int_fd>& _commandExecutorMemFd,
+      const Option<int_fd>& _defaultExecutorMemfd)
     : ProcessBase(process::ID::generate("mesos-containerizer")),
       flags(_flags),
       fetcher(_fetcher),
@@ -154,7 +155,8 @@ public:
       provisioner(_provisioner),
       isolators(_isolators),
       initMemFd(_initMemFd),
-      commandExecutorMemFd(_commandExecutorMemFd) {}
+      commandExecutorMemFd(_commandExecutorMemFd),
+      defaultExecutorMemfd(_defaultExecutorMemfd) {}
 
   ~MesosContainerizerProcess() override
   {
@@ -171,6 +173,15 @@ public:
       if (close.isError()) {
         LOG(WARNING) << "Failed to close memfd '"
                      << stringify(commandExecutorMemFd.get())
+                     << "': " << close.error();
+      }
+    }
+
+    if (defaultExecutorMemfd.isSome()) {
+      Try<Nothing> close = os::close(defaultExecutorMemfd.get());
+      if (close.isError()) {
+        LOG(WARNING) << "Failed to close memfd '"
+                     << stringify(defaultExecutorMemfd.get())
                      << "': " << close.error();
       }
     }
@@ -341,6 +352,7 @@ private:
   const std::vector<process::Owned<mesos::slave::Isolator>> isolators;
   const Option<int_fd> initMemFd;
   const Option<int_fd> commandExecutorMemFd;
+  const Option<int_fd> defaultExecutorMemfd;
 
   struct Container
   {
