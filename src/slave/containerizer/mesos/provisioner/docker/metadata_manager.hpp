@@ -71,7 +71,7 @@ public:
    * Put the image in metadata manager and persist the reference
    * store state to disk.
    */
-  process::Future<Nothing> put(const Image& image);
+  process::Future<Image> put(const Image& image);
 
   /**
    * Retrieve Image based on image reference if it is among the Images
