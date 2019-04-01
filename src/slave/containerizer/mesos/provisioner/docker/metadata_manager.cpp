@@ -152,7 +152,7 @@ Future<Image> MetadataManagerProcess::put(const Image& image)
 
   VLOG(1) << "Successfully cached image '" << imageReference << "'";
 
-  return dockerImage;
+  return image;
 }
 
 
