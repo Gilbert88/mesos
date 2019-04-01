@@ -294,7 +294,7 @@ Future<Image> ImageTarPullerProcess::_pull(
   }
 
   return extractLayers(directory, layerIds, backend)
-    .then([reference, layerIds]() -> vector<string> {
+    .then([reference, layerIds]() -> Image {
       Image dockerImage;
       dockerImage.mutable_reference()->CopyFrom(reference);
       foreach (const string& layerId, layerIds) {

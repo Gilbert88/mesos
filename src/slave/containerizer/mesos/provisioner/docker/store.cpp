@@ -357,7 +357,7 @@ Future<Image> StoreProcess::_get(
                   lambda::_1,
                   backend))
       .then(defer(self(), [=](const Image& image) {
-        return metadataManager->put(reference, layerIds);
+        return metadataManager->put(image);
       }))
       .onAny(defer(self(), [=](const Future<Image>&) {
         pulling.erase(name);
@@ -430,7 +430,7 @@ Future<Image> StoreProcess::moveLayers(
   }
 
   return collect(futures)
-    .then([image]() -> vector<string> { return image; });
+    .then([image]() -> Image { return image; });
 }
 
 
