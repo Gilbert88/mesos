@@ -314,13 +314,13 @@ public:
 
   MOCK_METHOD4(
       pull,
-      Future<Image>(
+      Future<slave::docker::Image>(
           const spec::ImageReference&,
           const string&,
           const string&,
           const Option<Secret>&));
 
-  Future<Image> unmocked_pull(
+  Future<slave::docker::Image> unmocked_pull(
       const spec::ImageReference& reference,
       const string& directory,
       const string& backend,
@@ -390,7 +390,7 @@ TEST_F(ProvisionerDockerLocalStoreTest, PullingSameImageSimutanuously)
 
   ASSERT_SOME(reference);
 
-  Image image;
+  slave::docker::Image image;
   image.mutable_reference()->CopyFrom(reference);
   image.add_layer_ids("456");
 
