@@ -327,7 +327,7 @@ public:
       const Option<Secret>& config)
   {
     // TODO(gilbert): Allow return list to be overridden.
-    return Image();
+    return slave::docker::Image();
   }
 };
 
