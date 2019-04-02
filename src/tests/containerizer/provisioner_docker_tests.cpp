@@ -344,7 +344,7 @@ TEST_F(ProvisionerDockerLocalStoreTest, PullingSameImageSimutanuously)
   MockPuller* puller = new MockPuller();
   Future<Nothing> pull;
   Future<string> directory;
-  Promise<Image> promise;
+  Promise<slave::docker::Image> promise;
 
   EXPECT_CALL(*puller, pull(_, _, _, _))
     .WillOnce(testing::DoAll(FutureSatisfy(&pull),
@@ -390,9 +390,9 @@ TEST_F(ProvisionerDockerLocalStoreTest, PullingSameImageSimutanuously)
 
   ASSERT_SOME(reference);
 
-  slave::docker::Image image;
-  image.mutable_reference()->CopyFrom(reference);
-  image.add_layer_ids("456");
+  slave::docker::Image result;
+  result.mutable_reference()->CopyFrom(reference.get());
+  result.add_layer_ids("456");
 
   ASSERT_TRUE(imageInfo2.isPending());
   promise.set(result);
