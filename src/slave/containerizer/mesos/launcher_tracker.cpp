@@ -70,7 +70,7 @@ Try<pid_t> LauncherTracker::fork(
       environment,
       enterNamespaces,
       cloneNamespaces,
-      whitelistFds))
+      whitelistFds));
 
   return tracker->track(
       promise.future(),
