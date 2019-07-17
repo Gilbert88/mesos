@@ -27,6 +27,7 @@ using std::string;
 using std::vector;
 
 using process::Future;
+using process::Promise;
 
 namespace mesos {
 namespace internal {
@@ -59,21 +60,20 @@ Try<pid_t> LauncherTracker::fork(
     const Option<int>& cloneNamespaces,
     const vector<int_fd>& whitelistFds)
 {
-  Future<Try<pid_t>> fork = process::async([=]() {
-    return launcher->fork(
-        containerId,
-        path,
-        argv,
-        containerIO,
-        flags,
-        environment,
-        enterNamespaces,
-        cloneNamespaces,
-        whitelistFds);
-  });
+  Promise<pid_t> promise;
+  promise.associate(launcher->fork(
+      containerId,
+      path,
+      argv,
+      containerIO,
+      flags,
+      environment,
+      enterNamespaces,
+      cloneNamespaces,
+      whitelistFds))
 
   return tracker->track(
-      fork,
+      promise.future(),
       "launcher::fork",
       COMPONENT_NAME_CONTAINERIZER,
       {{"containerId", stringify(containerId)},
