@@ -624,6 +624,7 @@ Try<process::Owned<Slave>> Slave::create(
         qosController.getOrElse(slave->qosController.get()),
         secretGenerator.getOrElse(slave->secretGenerator.get()),
         volumeGidManager,
+        slave->futureTracker.get(),
         authorizer));
   } else {
     slave->slave.reset(new slave::Slave(
@@ -638,6 +639,7 @@ Try<process::Owned<Slave>> Slave::create(
         qosController.getOrElse(slave->qosController.get()),
         secretGenerator.getOrElse(slave->secretGenerator.get()),
         volumeGidManager,
+        slave->futureTracker.get(),
         authorizer));
   }
 
