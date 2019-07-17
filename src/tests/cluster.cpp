@@ -446,6 +446,16 @@ Try<process::Owned<Slave>> Slave::create(
   }
 #endif // __WINDOWS__
 
+  Try<process::Owned<PendingFutureTracker>> _futureTracker =
+    PendingFutureTracker::create();
+
+  if (_futureTracker.isError()) {
+    return Error(
+        "Failed to create pending future tracker: " + _futureTracker.error());
+  }
+
+  slave->futureTracker = _futureTracker.get();
+
   // If the containerizer is not provided, create a default one.
   if (containerizer.isSome()) {
     slave->containerizer = containerizer.get();
@@ -460,7 +470,8 @@ Try<process::Owned<Slave>> Slave::create(
           slave->fetcher.get(),
           gc.getOrElse(slave->gc.get()),
           nullptr,
-          volumeGidManager);
+          volumeGidManager,
+          slave->futureTracker.get());
 
     if (_containerizer.isError()) {
       return Error("Failed to create containerizer: " + _containerizer.error());

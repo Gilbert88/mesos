@@ -50,6 +50,8 @@
 
 #include "authorizer/local/authorizer.hpp"
 
+#include "common/future_tracker.hpp"
+
 #include "files/files.hpp"
 
 #include "master/constants.hpp"
@@ -231,6 +233,7 @@ private:
   process::Owned<Authorizer> authorizer;
   process::Owned<slave::Containerizer> ownedContainerizer;
   process::Owned<slave::Fetcher> fetcher;
+  process::Owned<PendingFutureTracker> futureTracker;
   process::Owned<slave::GarbageCollector> gc;
   process::Owned<mesos::slave::QoSController> qosController;
   process::Owned<mesos::slave::ResourceEstimator> resourceEstimator;
