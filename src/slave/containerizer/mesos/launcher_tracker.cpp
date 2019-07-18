@@ -61,7 +61,14 @@ Try<pid_t> LauncherTracker::fork(
     const vector<int_fd>& whitelistFds)
 {
   Promise<pid_t> promise;
-  promise.associate(launcher->fork(
+  tracker->track(
+      promise.future(),
+      "launcher::fork",
+      COMPONENT_NAME_CONTAINERIZER,
+      {{"containerId", stringify(containerId)},
+       {"path", path}});
+
+  Try<pid_t> forked = launcher->fork(
       containerId,
       path,
       argv,
@@ -70,14 +77,10 @@ Try<pid_t> LauncherTracker::fork(
       environment,
       enterNamespaces,
       cloneNamespaces,
-      whitelistFds));
+      whitelistFds);
 
-  return tracker->track(
-      promise.future(),
-      "launcher::fork",
-      COMPONENT_NAME_CONTAINERIZER,
-      {{"containerId", stringify(containerId)},
-       {"path", path}}).get();
+  promise.associate(forked);
+  return forked;
 }
 
 
